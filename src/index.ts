@@ -8,6 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { z } from "zod";
+import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 
 // -----------------------------------------------------------------------------
 // Project bootstrap
@@ -166,26 +167,69 @@ const qbitClient = axios.create({
 function registerMovieTools() {
   server.tool(
     "check_movie_status",
-    "Checks if a specific movie exists in the Radarr library and returns its monitoring status.",
+    "Checks if a specific movie exists in the Radarr library on the Ubuntu cluster and returns its monitoring status with artwork.",
     {
       title: z.string().describe("The exact title of the movie to search for."),
     },
-    async ({ title }) => {
+    async ({ title }): Promise<CallToolResult> => {
       try {
-        const response = await radarrClient.get(`/api/v3/movie/lookup?term=${encodeURIComponent(title)}`);
-        const movies = response.data as Array<any>;
+        const lookupResponse = await radarrClient.get(`/api/v3/movie/lookup?term=${encodeURIComponent(title)}`);
+        const lookupMovies = lookupResponse.data as Array<any>;
 
-        if (!movies || movies.length === 0) {
-          return textReply(`Movie "${title}" was not found in the Radarr library.`);
+        if (!lookupMovies || lookupMovies.length === 0) {
+          return textReply(`❌ Movie "${title}" was not found in the Radarr database.`);
         }
 
-        const primaryMatch = movies[0];
-        const summary = `Found: ${primaryMatch.title} (${primaryMatch.year})
-- Monitored: ${primaryMatch.monitored ? "Yes" : "No"}
-- Status: ${primaryMatch.status}
-- Path on Server: ${primaryMatch.path || "Not assigned"}`;
+        const libraryResponse = await radarrClient.get("/api/v3/movie");
+        const libraryMovies = libraryResponse.data as Array<any>;
+        const lookupMatch = lookupMovies[0];
+        const normalizedTitle = String(lookupMatch.title || title).trim().toLowerCase();
+        const primaryMatch = libraryMovies.find((movie: any) =>
+          (lookupMatch.tmdbId && movie.tmdbId === lookupMatch.tmdbId) ||
+          (String(movie.title || "").trim().toLowerCase() === normalizedTitle && movie.year === lookupMatch.year)
+        );
 
-        return textReply(summary);
+        if (!primaryMatch) {
+          return textReply(`❌ Movie "${title}" was found in Radarr search results but is not currently in the library.`);
+        }
+
+        let posterUrl = primaryMatch.images?.find((image: any) => image.coverType === "poster")?.remoteUrl;
+        if (!posterUrl && primaryMatch.tmdbId) {
+          const tmdbResponse = await tmdbClient.get(`/movie/${primaryMatch.tmdbId}`);
+          const posterPath = tmdbResponse.data?.poster_path;
+          if (posterPath) {
+            posterUrl = `https://image.tmdb.org/t/p/w500${posterPath}`;
+          }
+        }
+        posterUrl ||= `https://placehold.co/600x900?text=${encodeURIComponent(primaryMatch.title)}`;
+
+        let richLayout = `### 🎬 Media Asset Profile: ${primaryMatch.title} (${primaryMatch.year})\n\n`;
+        richLayout += `![${primaryMatch.title} poster](${posterUrl})\n\n`;
+        richLayout += `| Overview & File Specifications | Artwork Preview |\n`;
+        richLayout += `| :--- | :---: |\n`;
+        richLayout += `| **Database Tracking Status:** <br> ▪ Monitored: ${primaryMatch.monitored ? "🟢 Yes" : "⚪ No"} <br> ▪ Library Status: \`${primaryMatch.status}\` <br><br> **File System Allocation:** <br> ▪ Path: \`${primaryMatch.path || "No Path Assigned"}\` <br> ▪ Existing File: ${primaryMatch.hasFile ? "✅ Available" : "⏳ Missing / Wanted"} | Poster artwork above |\n\n`;
+
+        if (primaryMatch.overview) {
+          richLayout += `**Storyline Synopsis:**\n> *${primaryMatch.overview}*\n`;
+        }
+
+        try {
+          const posterResponse = await axios.get<ArrayBuffer>(posterUrl, { responseType: "arraybuffer" });
+          const mimeType = String(posterResponse.headers["content-type"] || "image/jpeg").split(";")[0] || "image/jpeg";
+
+          return {
+            content: [
+              { type: "text" as const, text: richLayout },
+              {
+                type: "image" as const,
+                data: Buffer.from(posterResponse.data).toString("base64"),
+                mimeType,
+              },
+            ],
+          };
+        } catch {
+          return textReply(richLayout);
+        }
       } catch (error: unknown) {
         return textReply(`Failed to connect to Radarr container: ${getErrorMessage(error)}`, true);
       }
@@ -307,27 +351,33 @@ function registerMonitoringTools() {
           return textReply("No analytics history currently tracked by Tautulli.");
         }
 
-        let readout = "🏆 Top Media Trends (All Time):\n\n";
+        let richDashboard = "## 🏆 Server Watch History Analytics Dashboard\n";
+        richDashboard += "Historical distribution patterns across media libraries and active profile streams.\n\n";
+
         stats.forEach((category: any) => {
           const categoryTitle = category.stat_title || category.stat_id || "Watch statistics";
           const categoryKey = String(category.stat_id || category.stat_title || "").toLowerCase();
           const isUserStats = categoryKey.includes("user");
           const isLibraryStats = categoryKey.includes("librar");
-          readout += `▪ ${categoryTitle}:\n`;
+          richDashboard += `### 📊 ${categoryTitle}\n`;
+          richDashboard += "| Rank | Title / Profile Identifier | Total Stream Count |\n";
+          richDashboard += "| :---: | :--- | :--- |\n";
+
           const items = category.rows || [];
           items.slice(0, 3).forEach((item: any, index: number) => {
+            const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
             const playCount = item.total_plays ?? item.play_count ?? 0;
             const label = isUserStats
               ? item.friendly_name || item.user || item.username
               : isLibraryStats
                 ? item.section_name || item.library_name || item.library
                 : item.title || item.user || item.friendly_name;
-            readout += `  ${index + 1}. ${label || "Unknown"} - Total Plays: ${playCount}\n`;
+            richDashboard += `| ${medal} | **${label || "Unknown"}** | \`${playCount} plays\` |\n`;
           });
-          readout += "\n";
+          richDashboard += "\n";
         });
 
-        return textReply(readout);
+        return textReply(richDashboard);
       } catch (error: unknown) {
         return textReply(`Failed to process analytics query: ${getErrorMessage(error)}`, true);
       }
