@@ -130,8 +130,12 @@ const sonarrClient = sonarrUrl && sonarrApiKey
     })
   : null;
 
+const tautulliApiUrl = /\/api\/v2\/?$/i.test(tautulliUrl)
+  ? tautulliUrl.replace(/\/+$/, "")
+  : `${tautulliUrl.replace(/\/+$/, "")}/api/v2`;
+
 const tautulliClient = axios.create({
-  baseURL: tautulliUrl,
+  baseURL: tautulliApiUrl,
   params: { apikey: tautulliApiKey, cmd: "" },
 });
 
@@ -305,10 +309,12 @@ function registerMonitoringTools() {
 
         let readout = "🏆 Top Media Trends (All Time):\n\n";
         stats.forEach((category: any) => {
-          readout += `▪ ${category.stat_title}:\n`;
+          const categoryTitle = category.stat_title || category.stat_id || "Watch statistics";
+          readout += `▪ ${categoryTitle}:\n`;
           const items = category.rows || [];
           items.slice(0, 3).forEach((item: any, index: number) => {
-            readout += `  ${index + 1}. ${item.title || item.user} - Total Plays: ${item.play_count}\n`;
+            const playCount = item.total_plays ?? item.play_count ?? 0;
+            readout += `  ${index + 1}. ${item.title || item.user || item.friendly_name} - Total Plays: ${playCount}\n`;
           });
           readout += "\n";
         });
