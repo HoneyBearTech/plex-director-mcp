@@ -1,8 +1,8 @@
 # plex-director-mcp
 
-A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack.
+A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it.
 
-This project gives Claude access to your Radarr, SABnzbd, Tautulli, TMDb, and Prowlarr setup so it can help diagnose missing media, monitor Plex activity, and coordinate safe queue-based media operations from inside Claude Desktop.
+This project gives Claude access to your Radarr, Sonarr, SABnzbd, qBittorrent, Tautulli, TMDb, Prowlarr, and remote Ubuntu host monitoring setup so it can diagnose missing media, watch queue health, evaluate cluster status, and coordinate safe operational tasks from inside Claude Desktop.
 
 ## What it does
 
@@ -16,8 +16,12 @@ This project gives Claude access to your Radarr, SABnzbd, Tautulli, TMDb, and Pr
 - resolving actor filmographies from TMDb
 - checking Prowlarr indexer health and failures
 - searching TMDb results when a title is ambiguous and confirming the user-selected choices
+- managing qBittorrent stalled or low-speed downloads
+- triggering cluster backup operations and verifying local backup directories
+- monitoring remote Ubuntu hosts over SSH for CPU, memory, and Docker health
+- sending optional Discord status notifications for completed batch jobs
 
-This is not a generic Plex wrapper. It is specifically a media-operations assistant for a home media stack.
+This is not a generic Plex wrapper. It is specifically an operations assistant for a home media stack and the systems that keep it healthy.
 
 ## Tools included
 
@@ -33,6 +37,10 @@ This is not a generic Plex wrapper. It is specifically a media-operations assist
 - `check_indexer_health`
 - `search_and_select_movies`
 - `confirm_selected_choices`
+- `run_cluster_backup`
+- `manage_stalled_downloads`
+- `get_cluster_infrastructure_health`
+- `get_cluster_hardware_analytics`
 
 ## Claude Desktop setup
 
@@ -51,6 +59,8 @@ Create a `.env` file in the repo root with your service URLs and API keys:
 ```env
 RADARR_URL=http://radarr:7878
 RADARR_API_KEY=your_radarr_api_key
+SONARR_URL=http://sonarr:8989
+SONARR_API_KEY=your_sonarr_api_key
 SABNZBD_URL=http://sabnzbd:8080
 SABNZBD_API_KEY=your_sabnzbd_api_key
 TAUTULLI_URL=http://tautulli:8181
@@ -58,7 +68,21 @@ TAUTULLI_API_KEY=your_tautulli_api_key
 TMDB_API_KEY=your_tmdb_api_key
 PROWLARR_URL=http://prowlarr:9696
 PROWLARR_API_KEY=your_prowlarr_api_key
+QBITTORRENT_URL=http://qbittorrent:8080
+QBITTORRENT_USER=your_qbittorrent_user
+QBITTORRENT_PASS=your_qbittorrent_password
+UBUNTU_HOSTS=192.168.1.10,192.168.1.11
+SSH_USER=your_ssh_username
+SSH_KEY_PATH=/path/to/id_ed25519
+DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
+BACKUP_DIR=./backups
 ```
+
+Notes:
+
+- `SONARR_*`, `QBITTORRENT_*`, and SSH/cluster variables are optional and only needed for the extra tooling you want enabled.
+- `DISCORD_WEBHOOK_URL` is optional and used for rich job notifications when configured.
+- `UBUNTU_HOSTS` should be a comma-separated list of remote hosts to monitor.
 
 ### 3) Add the server to Claude Desktop
 
@@ -103,10 +127,11 @@ The server runs via stdio and waits for MCP client connections.
 - Uses the official MCP SDK
 - Stores persistent job state and selection context in a local SQLite database: `plex_director.db`
 - Loads configuration from `.env`
-- Intended for local self-hosted media automation and troubleshooting
+- Supports optional Discord webhook alerts and remote SSH host monitoring
+- Intended for local self-hosted media automation, queue troubleshooting, and host-level observability
 
 ## Why this exists
 
-If your Plex library is missing content, your downloads are failing, your indexers are unhealthy, or you want Claude to help inspect your media stack, this MCP gives it the runtime context it needs to inspect the system and act on the most likely causes.
+If your Plex library is missing content, your downloads are failing, your indexers are unhealthy, your torrent queue is stalled, or you want Claude to inspect the broader media stack and infrastructure around it, this MCP gives it the runtime context it needs to assess the issue and act on the most likely causes.
 
-This project is designed specifically for a home-run Servarr ecosystem, with the goal of making the stack easier to diagnose and operate from within Claude Desktop.
+This project is designed specifically for a home-run Servarr ecosystem, with the goal of making both media operations and host-level troubleshooting easier to diagnose and execute from within Claude Desktop.
