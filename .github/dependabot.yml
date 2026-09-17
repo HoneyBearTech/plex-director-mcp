@@ -14,6 +14,14 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # The builder stage (node:*-slim) and runtime stage (a distroless
+      # image with its own independent Node version) have to move in
+      # lockstep, but Dependabot tracks each FROM line separately and can't
+      # know that - a major bump here needs to be coordinated by hand with
+      # whatever distroless nodejs variant is available.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
