@@ -125,7 +125,9 @@ export function registerDiscoveryTools() {
 
           insertStmt.run(choiceId, movie.id, movie.title, year);
 
-          const cleanOverview = movie.overview ? movie.overview.replace(/\|/g, "\\|") : "No overview available.";
+          const cleanOverview = movie.overview
+            ? movie.overview.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
+            : "No overview available.";
           const truncatedOverview = cleanOverview.length > 180 ? `${cleanOverview.slice(0, 180)}...` : cleanOverview;
 
           markdownOutput += `| **[ Choice ${choiceId} ]** | ![${movie.title}](${posterUrl}) | **${movie.title} (${year})**  <br> *TMDb ID: ${movie.id}* <br><br> ${truncatedOverview} |\n`;
