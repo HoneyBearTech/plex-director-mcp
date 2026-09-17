@@ -34,6 +34,7 @@ jobs:
     permissions:
       contents: read
       packages: write
+      id-token: write
     steps:
       - uses: actions/checkout@v7
 
@@ -139,6 +140,20 @@ jobs:
           platform: linux/amd64
           only-severities: critical,high
           exit-code: false
+
+      # Keyless signing via GitHub's OIDC token (no key management) - lets
+      # anyone verify an image genuinely came from this repo's workflow, e.g.
+      # `cosign verify --certificate-identity-regexp ... ghcr.io/.../plex-director-mcp@sha256:...`.
+      - uses: sigstore/cosign-installer@v3
+        if: github.event_name == 'push'
+
+      - name: Sign the published images
+        if: github.event_name == 'push'
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+        run: |
+          cosign sign --yes "${{ steps.image.outputs.name }}@${DIGEST}"
+          cosign sign --yes "docker.io/honeybeartech/plex-director-mcp@${DIGEST}"
 
   release:
     name: Create GitHub Release
