@@ -73,6 +73,41 @@ jobs:
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
+      # Loaded locally (not pushed) so a boot failure - e.g. the two Dockerfile
+      # stages drifting to incompatible Node ABIs, which Dependabot can't know
+      # not to do since it tracks each FROM line independently - is caught
+      # before anything reaches a public registry.
+      - uses: docker/build-push-action@v6
+        id: smoke-build
+        with:
+          context: .
+          load: true
+          tags: smoke-test:latest
+
+      - name: Smoke test - verify the image boots
+        run: |
+          docker run -d --name smoke-test \
+            -e RADARR_URL=http://smoke-test.invalid -e RADARR_API_KEY=dummy \
+            -e SABNZBD_URL=http://smoke-test.invalid -e SABNZBD_API_KEY=dummy \
+            -e TAUTULLI_URL=http://smoke-test.invalid -e TAUTULLI_API_KEY=dummy \
+            -e TMDB_API_KEY=dummy \
+            -e PROWLARR_URL=http://smoke-test.invalid -e PROWLARR_API_KEY=dummy \
+            smoke-test:latest
+
+          for i in $(seq 1 10); do
+            if docker logs smoke-test 2>&1 | grep -q "Plex Director MCP server running on Stdio"; then
+              echo "Smoke test passed"
+              docker rm -f smoke-test
+              exit 0
+            fi
+            sleep 1
+          done
+
+          echo "::error::Smoke test failed - server did not reach ready state within 10s"
+          docker logs smoke-test
+          docker rm -f smoke-test
+          exit 1
+
       - uses: docker/build-push-action@v6
         id: build
         with:
