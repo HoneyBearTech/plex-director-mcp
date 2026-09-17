@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { runRemoteCommand } from "../../ssh.js";
+import { getSetting } from "../../settings.js";
 
 export const nodesRouter = Router();
 
@@ -8,7 +9,7 @@ export const nodesRouter = Router();
 // placeholder numbers (see src/tools/infrastructure.ts). A dashboard tab
 // needs real data.
 nodesRouter.get("/health", async (_req, res) => {
-  const hosts = (process.env.UBUNTU_HOSTS || "")
+  const hosts = getSetting("UBUNTU_HOSTS")
     .split(",")
     .map((h) => h.trim())
     .filter(Boolean);

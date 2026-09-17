@@ -35,4 +35,13 @@ db.exec(`
   );
 `);
 
+// Service configuration set via the web UI's Settings page. Overrides .env
+// once saved; .env only seeds a key's initial value on first boot.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+  );
+`);
+
 console.error(`📦 SQLite database initialized safely at: ${dbPath}`);

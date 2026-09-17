@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { sabnzbdClient, qbitClient } from "../../clients.js";
 import { getErrorMessage } from "../../util.js";
+import { getSetting } from "../../settings.js";
 
 export const queuesRouter = Router();
 
@@ -28,7 +29,7 @@ queuesRouter.get("/qbittorrent", async (_req, res) => {
   try {
     const loginResponse = await qbitClient.post(
       "/api/v2/auth/login",
-      `username=${encodeURIComponent(process.env.QBITTORRENT_USER || "")}&password=${encodeURIComponent(process.env.QBITTORRENT_PASS || "")}`,
+      `username=${encodeURIComponent(getSetting("QBITTORRENT_USER"))}&password=${encodeURIComponent(getSetting("QBITTORRENT_PASS"))}`,
       { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
     );
 

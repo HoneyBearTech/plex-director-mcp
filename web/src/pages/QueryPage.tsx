@@ -1,5 +1,13 @@
 import { useState } from "react";
+import { Badge, Box, Button, Callout, Card, Flex, Grid, Heading, Text, TextField } from "@radix-ui/themes";
 import { api, type DiagnoseStep, type MovieStatus, type SearchResult } from "../api";
+
+const STEP_COLOR: Record<DiagnoseStep["status"], "green" | "amber" | "red" | "blue"> = {
+  ok: "green",
+  warn: "amber",
+  error: "red",
+  info: "blue",
+};
 
 export function QueryPage() {
   const [query, setQuery] = useState("");
@@ -44,83 +52,111 @@ export function QueryPage() {
   }
 
   return (
-    <div className="page">
-      <h2>Query</h2>
-      <form className="search-form" onSubmit={runSearch}>
-        <input
-          type="text"
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search for a movie..."
-        />
-        <button type="submit" disabled={loading}>
-          Search
-        </button>
+    <Flex direction="column" gap="4">
+      <Heading size="6">Query</Heading>
+
+      <form onSubmit={runSearch}>
+        <Flex gap="2">
+          <Box flexGrow="1">
+            <TextField.Root
+              placeholder="Search for a movie..."
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </Box>
+          <Button type="submit" loading={loading}>
+            Search
+          </Button>
+        </Flex>
       </form>
 
-      {loading && <p className="muted">Loading…</p>}
-      {error && <p className="error">{error}</p>}
+      {error && (
+        <Callout.Root color="red">
+          <Callout.Text>{error}</Callout.Text>
+        </Callout.Root>
+      )}
 
       {results && (
-        <div className="result-grid">
-          {results.length === 0 && <p className="muted">No results.</p>}
+        <Grid columns="1" gap="2">
+          {results.length === 0 && <Text color="gray">No results.</Text>}
           {results.map((movie) => (
-            <button key={movie.tmdbId} className="result-card" onClick={() => inspect(movie.title)}>
-              {movie.posterUrl && <img src={movie.posterUrl} alt={movie.title} />}
-              <div>
-                <strong>{movie.title}</strong> {movie.year && <span className="muted">({movie.year})</span>}
-                <p className="overview">{movie.overview}</p>
-              </div>
-            </button>
+            <Card key={movie.tmdbId} asChild>
+              <button onClick={() => inspect(movie.title)} style={{ textAlign: "left", cursor: "pointer" }}>
+                <Flex gap="3">
+                  {movie.posterUrl && (
+                    <img src={movie.posterUrl} alt={movie.title} width={60} style={{ borderRadius: 4 }} />
+                  )}
+                  <Box>
+                    <Text weight="bold">{movie.title}</Text>
+                    {movie.year && (
+                      <Text color="gray">
+                        {" "}
+                        ({movie.year})
+                      </Text>
+                    )}
+                    <Text as="p" size="2" color="gray">
+                      {movie.overview}
+                    </Text>
+                  </Box>
+                </Flex>
+              </button>
+            </Card>
           ))}
-        </div>
+        </Grid>
       )}
 
       {status && (
-        <div className="card">
-          <h3>Status</h3>
+        <Card>
+          <Heading size="4" mb="3">
+            Status
+          </Heading>
           {status.found ? (
-            <div className="status-detail">
-              {status.posterUrl && <img src={status.posterUrl} alt={status.title} />}
-              <dl>
-                <dt>Title</dt>
-                <dd>
+            <Flex gap="4">
+              {status.posterUrl && (
+                <img src={status.posterUrl} alt={status.title} width={120} style={{ borderRadius: 6 }} />
+              )}
+              <Grid columns="2" gap="2" width="100%">
+                <Text color="gray">Title</Text>
+                <Text>
                   {status.title} ({status.year})
-                </dd>
-                <dt>Monitored</dt>
-                <dd>{status.monitored ? "Yes" : "No"}</dd>
-                <dt>Has file</dt>
-                <dd>{status.hasFile ? "Yes" : "No"}</dd>
-                <dt>Library status</dt>
-                <dd>{status.status}</dd>
+                </Text>
+                <Text color="gray">Monitored</Text>
+                <Text>{status.monitored ? "Yes" : "No"}</Text>
+                <Text color="gray">Has file</Text>
+                <Text>{status.hasFile ? "Yes" : "No"}</Text>
+                <Text color="gray">Library status</Text>
+                <Text>{status.status}</Text>
                 {status.path && (
                   <>
-                    <dt>Path</dt>
-                    <dd>{status.path}</dd>
+                    <Text color="gray">Path</Text>
+                    <Text>{status.path}</Text>
                   </>
                 )}
-              </dl>
-            </div>
+              </Grid>
+            </Flex>
           ) : (
-            <p className="muted">
+            <Text color="gray">
               {status.inRadarrDatabase ? "In Radarr's search results but not in your library." : "Not found in Radarr."}
-            </p>
+            </Text>
           )}
-        </div>
+        </Card>
       )}
 
       {diagnosis && (
-        <div className="card">
-          <h3>Diagnosis</h3>
-          <ul className="steps">
+        <Card>
+          <Heading size="4" mb="3">
+            Diagnosis
+          </Heading>
+          <Flex direction="column" gap="2">
             {diagnosis.map((step, i) => (
-              <li key={i} className={`step step-${step.status}`}>
-                <strong>{step.step}:</strong> {step.detail}
-              </li>
+              <Flex key={i} gap="2" align="start">
+                <Badge color={STEP_COLOR[step.status]}>{step.step}</Badge>
+                <Text size="2">{step.detail}</Text>
+              </Flex>
             ))}
-          </ul>
-        </div>
+          </Flex>
+        </Card>
       )}
-    </div>
+    </Flex>
   );
 }

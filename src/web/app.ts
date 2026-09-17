@@ -5,9 +5,11 @@ import { moviesRouter } from "./routes/movies.js";
 import { statusRouter } from "./routes/status.js";
 import { nodesRouter } from "./routes/nodes.js";
 import { queuesRouter } from "./routes/queues.js";
+import { settingsRouter } from "./routes/settings.js";
 
 export function createWebApp() {
   const app = express();
+  app.use(express.json());
 
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true });
@@ -17,6 +19,7 @@ export function createWebApp() {
   app.use("/api/status", statusRouter);
   app.use("/api/nodes", nodesRouter);
   app.use("/api/queues", queuesRouter);
+  app.use("/api/settings", settingsRouter);
 
   const staticDir = path.join(projectRoot, "web", "dist");
   app.use(express.static(staticDir));

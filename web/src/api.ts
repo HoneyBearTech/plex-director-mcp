@@ -79,6 +79,21 @@ export interface QbittorrentItem {
   stalled: boolean;
 }
 
+export type SecretField = { configured: boolean };
+
+export interface SettingsResponse {
+  sonarr: { url: string; apiKey: SecretField };
+  radarr: { url: string; apiKey: SecretField };
+  prowlarr: { url: string; apiKey: SecretField };
+  sabnzbd: { url: string; apiKey: SecretField };
+  qbittorrent: { url: string; username: string; password: SecretField };
+  tautulli: { url: string; apiKey: SecretField };
+  tmdb: { apiKey: SecretField };
+  nodes: { hosts: string; sshUser: string };
+}
+
+export type SettingsService = keyof SettingsResponse;
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   const data = await response.json();
@@ -86,6 +101,18 @@ async function getJson<T>(url: string): Promise<T> {
     throw new Error(data?.error ?? `Request failed: ${response.status}`);
   }
   return data as T;
+}
+
+async function putJson(url: string, body: Record<string, string>): Promise<void> {
+  const response = await fetch(url, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    const data = await response.json().catch(() => null);
+    throw new Error(data?.error ?? `Request failed: ${response.status}`);
+  }
 }
 
 export const api = {
@@ -97,4 +124,7 @@ export const api = {
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
+  getSettings: () => getJson<SettingsResponse>("/api/settings"),
+  updateSettings: (service: SettingsService, body: Record<string, string>) =>
+    putJson(`/api/settings/${service}`, body),
 };

@@ -1,3 +1,4 @@
+import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
 
@@ -6,66 +7,83 @@ export function QueuesPage() {
   const qbittorrent = usePolling(api.qbittorrentQueue, 10_000);
 
   return (
-    <div className="page">
-      <h2>Downloader Queues</h2>
+    <Flex direction="column" gap="4">
+      <Heading size="6">Downloader Queues</Heading>
 
-      <div className="card">
-        <h3>SABnzbd</h3>
-        {sabnzbd.error && <p className="error">{sabnzbd.error}</p>}
-        {sabnzbd.data && sabnzbd.data.items.length === 0 && <p className="muted">Queue is empty.</p>}
+      <Card>
+        <Heading size="4" mb="3">
+          SABnzbd
+        </Heading>
+        {sabnzbd.error && (
+          <Callout.Root color="red" mb="2">
+            <Callout.Text>{sabnzbd.error}</Callout.Text>
+          </Callout.Root>
+        )}
+        {sabnzbd.data && sabnzbd.data.items.length === 0 && <Text color="gray">Queue is empty.</Text>}
         {sabnzbd.data && sabnzbd.data.items.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>File</th>
-                <th>Status</th>
-                <th>Progress</th>
-                <th>ETA</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>File</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Progress</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>ETA</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {sabnzbd.data.items.map((item, i) => (
-                <tr key={i}>
-                  <td>{item.filename}</td>
-                  <td>{item.status}</td>
-                  <td>{item.percentage}%</td>
-                  <td>{item.timeleft}</td>
-                </tr>
+                <Table.Row key={i}>
+                  <Table.Cell>{item.filename}</Table.Cell>
+                  <Table.Cell>{item.status}</Table.Cell>
+                  <Table.Cell>{item.percentage}%</Table.Cell>
+                  <Table.Cell>{item.timeleft}</Table.Cell>
+                </Table.Row>
               ))}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         )}
-      </div>
+      </Card>
 
-      <div className="card">
-        <h3>qBittorrent</h3>
-        {qbittorrent.error && <p className="error">{qbittorrent.error}</p>}
-        {qbittorrent.data && qbittorrent.data.items.length === 0 && <p className="muted">Queue is empty.</p>}
-        {qbittorrent.data && qbittorrent.data.items.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>State</th>
-                <th>Progress</th>
-                <th>Speed</th>
-                <th>Seeders</th>
-              </tr>
-            </thead>
-            <tbody>
-              {qbittorrent.data.items.map((item, i) => (
-                <tr key={i} className={item.stalled ? "error" : undefined}>
-                  <td>{item.name}</td>
-                  <td>{item.state}</td>
-                  <td>{(item.progress * 100).toFixed(1)}%</td>
-                  <td>{item.dlspeedKbps.toFixed(1)} KB/s</td>
-                  <td>{item.seeders}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <Card>
+        <Heading size="4" mb="3">
+          qBittorrent
+        </Heading>
+        {qbittorrent.error && (
+          <Callout.Root color="red" mb="2">
+            <Callout.Text>{qbittorrent.error}</Callout.Text>
+          </Callout.Root>
         )}
-      </div>
-    </div>
+        {qbittorrent.data && qbittorrent.data.items.length === 0 && <Text color="gray">Queue is empty.</Text>}
+        {qbittorrent.data && qbittorrent.data.items.length > 0 && (
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Name</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>State</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Progress</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Speed</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Seeders</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {qbittorrent.data.items.map((item, i) => (
+                <Table.Row key={i}>
+                  <Table.Cell>
+                    <Flex gap="2" align="center">
+                      <Text>{item.name}</Text>
+                      {item.stalled && <Badge color="red">stalled</Badge>}
+                    </Flex>
+                  </Table.Cell>
+                  <Table.Cell>{item.state}</Table.Cell>
+                  <Table.Cell>{(item.progress * 100).toFixed(1)}%</Table.Cell>
+                  <Table.Cell>{item.dlspeedKbps.toFixed(1)} KB/s</Table.Cell>
+                  <Table.Cell>{item.seeders}</Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
+          </Table.Root>
+        )}
+      </Card>
+    </Flex>
   );
 }

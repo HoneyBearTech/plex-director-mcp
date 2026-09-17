@@ -1,3 +1,4 @@
+import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
 
@@ -6,61 +7,79 @@ export function StatusPage() {
   const analytics = usePolling(api.libraryAnalytics, 60_000);
 
   return (
-    <div className="page">
-      <h2>Server Status</h2>
+    <Flex direction="column" gap="4">
+      <Heading size="6">Server Status</Heading>
 
-      <div className="card">
-        <h3>Plex Activity</h3>
-        {activity.error && <p className="error">{activity.error}</p>}
+      <Card>
+        <Heading size="4" mb="3">
+          Plex Activity
+        </Heading>
+        {activity.error && (
+          <Callout.Root color="red" mb="2">
+            <Callout.Text>{activity.error}</Callout.Text>
+          </Callout.Root>
+        )}
         {activity.data && (
           <>
-            <p>
+            <Text mb="3" as="p">
               {activity.data.streamCount} active stream{activity.data.streamCount === 1 ? "" : "s"}
               {activity.data.streamCount > 0 && (
-                <span className="muted">
+                <Text color="gray">
                   {" "}
                   ({activity.data.directPlayCount} direct play, {activity.data.transcodeCount} transcoding)
-                </span>
+                </Text>
               )}
-            </p>
-            <table>
-              <tbody>
+            </Text>
+            <Table.Root>
+              <Table.Body>
                 {activity.data.sessions.map((session, i) => (
-                  <tr key={i}>
-                    <td>{session.user}</td>
-                    <td>
+                  <Table.Row key={i}>
+                    <Table.Cell>{session.user}</Table.Cell>
+                    <Table.Cell>
                       {session.title} {session.year && `(${session.year})`}
-                    </td>
-                    <td>{session.resolution}</td>
-                    <td>{session.transcoding ? "Transcoding" : "Direct play"}</td>
-                    <td>{session.progress}%</td>
-                  </tr>
+                    </Table.Cell>
+                    <Table.Cell>{session.resolution}</Table.Cell>
+                    <Table.Cell>
+                      <Badge color={session.transcoding ? "amber" : "green"}>
+                        {session.transcoding ? "Transcoding" : "Direct play"}
+                      </Badge>
+                    </Table.Cell>
+                    <Table.Cell>{session.progress}%</Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
+              </Table.Body>
+            </Table.Root>
           </>
         )}
-      </div>
+      </Card>
 
-      <div className="card">
-        <h3>Library Analytics</h3>
-        {analytics.error && <p className="error">{analytics.error}</p>}
+      <Card>
+        <Heading size="4" mb="3">
+          Library Analytics
+        </Heading>
+        {analytics.error && (
+          <Callout.Root color="red" mb="2">
+            <Callout.Text>{analytics.error}</Callout.Text>
+          </Callout.Root>
+        )}
         {analytics.data?.categories.map((category) => (
-          <div key={category.title}>
-            <h4>{category.title}</h4>
-            <table>
-              <tbody>
+          <Flex direction="column" key={category.title} mb="4">
+            <Heading size="3" mb="2">
+              {category.title}
+            </Heading>
+            <Table.Root>
+              <Table.Body>
                 {category.rows.map((row, i) => (
-                  <tr key={i}>
-                    <td>{row.label}</td>
-                    <td>{row.plays} plays</td>
-                  </tr>
+                  <Table.Row key={i}>
+                    <Table.Cell>{row.label}</Table.Cell>
+                    <Table.Cell>{row.plays} plays</Table.Cell>
+                  </Table.Row>
                 ))}
-              </tbody>
-            </table>
-          </div>
+              </Table.Body>
+            </Table.Root>
+          </Flex>
         ))}
-      </div>
-    </div>
+      </Card>
+    </Flex>
   );
 }

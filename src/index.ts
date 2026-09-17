@@ -6,6 +6,14 @@ import { registerJobTools } from "./tools/jobs.js";
 import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerInfrastructureTools } from "./tools/infrastructure.js";
 import { createWebApp } from "./web/app.js";
+import { seedSettingsFromEnv } from "./settings.js";
+import { refreshClients } from "./clients.js";
+
+// First boot: copy any configured .env values into the settings store so
+// there's something to seed from. After that, whatever's saved via the
+// Settings page takes precedence over .env for that key.
+seedSettingsFromEnv();
+refreshClients();
 
 registerMovieTools();
 registerMonitoringTools();

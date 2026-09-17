@@ -1,3 +1,4 @@
+import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
 
@@ -5,53 +6,57 @@ export function NodesPage() {
   const nodes = usePolling(api.nodeHealth, 15_000);
 
   return (
-    <div className="page">
-      <h2>Node Utilization</h2>
-      <div className="card">
-        {nodes.error && <p className="error">{nodes.error}</p>}
+    <Flex direction="column" gap="4">
+      <Heading size="6">Node Utilization</Heading>
+      <Card>
+        {nodes.error && (
+          <Callout.Root color="red">
+            <Callout.Text>{nodes.error}</Callout.Text>
+          </Callout.Root>
+        )}
         {nodes.data && nodes.data.hosts.length === 0 && (
-          <p className="muted">No hosts configured (set UBUNTU_HOSTS).</p>
+          <Text color="gray">No hosts configured. Set this up on the Settings page.</Text>
         )}
         {nodes.data && nodes.data.hosts.length > 0 && (
-          <table>
-            <thead>
-              <tr>
-                <th>Host</th>
-                <th>CPU</th>
-                <th>RAM</th>
-                <th>Containers</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table.Root>
+            <Table.Header>
+              <Table.Row>
+                <Table.ColumnHeaderCell>Host</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>CPU</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>RAM</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Containers</Table.ColumnHeaderCell>
+                <Table.ColumnHeaderCell>Status</Table.ColumnHeaderCell>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
               {nodes.data.hosts.map((node) => (
-                <tr key={node.host}>
-                  <td>{node.host}</td>
-                  <td>{node.online ? `${node.cpuPercent?.toFixed(1)}%` : "—"}</td>
-                  <td>
-                    {node.online
-                      ? `${node.ramPercent?.toFixed(1)}% (${node.ramUsedMb}MB/${node.ramTotalMb}MB)`
-                      : "—"}
-                  </td>
-                  <td>
+                <Table.Row key={node.host}>
+                  <Table.Cell>{node.host}</Table.Cell>
+                  <Table.Cell>{node.online ? `${node.cpuPercent?.toFixed(1)}%` : "—"}</Table.Cell>
+                  <Table.Cell>
+                    {node.online ? `${node.ramPercent?.toFixed(1)}% (${node.ramUsedMb}MB/${node.ramTotalMb}MB)` : "—"}
+                  </Table.Cell>
+                  <Table.Cell>
                     {node.online ? (
-                      <>
-                        {node.containersRunning} running
+                      <Flex gap="2" align="center">
+                        <Text>{node.containersRunning} running</Text>
                         {node.deadContainers && node.deadContainers.length > 0 && (
-                          <span className="error"> ({node.deadContainers.length} stopped)</span>
+                          <Badge color="red">{node.deadContainers.length} stopped</Badge>
                         )}
-                      </>
+                      </Flex>
                     ) : (
                       "—"
                     )}
-                  </td>
-                  <td className={node.online ? "ok" : "error"}>{node.online ? "Online" : "Offline"}</td>
-                </tr>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <Badge color={node.online ? "green" : "red"}>{node.online ? "Online" : "Offline"}</Badge>
+                  </Table.Cell>
+                </Table.Row>
               ))}
-            </tbody>
-          </table>
+            </Table.Body>
+          </Table.Root>
         )}
-      </div>
-    </div>
+      </Card>
+    </Flex>
   );
 }

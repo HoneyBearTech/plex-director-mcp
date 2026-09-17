@@ -3,6 +3,7 @@ import { z } from "zod";
 import { server } from "../server.js";
 import { radarrClient, sonarrClient, qbitClient } from "../clients.js";
 import { runRemoteCommand } from "../ssh.js";
+import { getSetting, isConfigured } from "../settings.js";
 
 // Backups, download-client remediation, and remote host/cluster telemetry.
 export function registerInfrastructureTools() {
@@ -24,7 +25,7 @@ export function registerInfrastructureTools() {
         // These commands ask each configured Servarr application to create its
         // native database backup in that application's appdata directory.
         await radarrClient.post("/api/v3/command", { name: "Backup" });
-        if (sonarrClient) {
+        if (isConfigured("SONARR")) {
           await sonarrClient.post("/api/v3/command", { name: "Backup" });
         }
 
@@ -53,7 +54,7 @@ export function registerInfrastructureTools() {
       try {
         // Authenticate once and reuse the session cookie for queue operations.
         const loginResponse = await qbitClient.post("/api/v2/auth/login",
-          `username=${encodeURIComponent(process.env.QBITTORRENT_USER || "")}&password=${encodeURIComponent(process.env.QBITTORRENT_PASS || "")}`,
+          `username=${encodeURIComponent(getSetting("QBITTORRENT_USER"))}&password=${encodeURIComponent(getSetting("QBITTORRENT_PASS"))}`,
           { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
 
@@ -113,7 +114,7 @@ export function registerInfrastructureTools() {
     "Collects real-time CPU utilization, RAM usage, and active Docker container counts across all configured Ubuntu hosts.",
     {},
     async () => {
-      const hosts = (process.env.UBUNTU_HOSTS || "").split(",");
+      const hosts = getSetting("UBUNTU_HOSTS").split(",");
       if (hosts.length === 0 || !hosts[0]) {
         return { content: [{ type: "text", text: "No remote Ubuntu hosts defined in configuration metadata mappings." }], isError: true };
       }
