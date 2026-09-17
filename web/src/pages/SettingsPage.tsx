@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Badge, Box, Button, Callout, Card, Flex, Heading, Tabs, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, Flex, Heading, Select, Tabs, Text, TextField } from "@radix-ui/themes";
 import { api, type SecretField, type SettingsResponse, type SettingsService } from "../api";
+import { useAppearance, type Appearance } from "../theme";
 
 interface FieldConfig {
   name: string;
@@ -161,6 +162,28 @@ function ServiceSettingsForm({
   );
 }
 
+function UISettingsForm() {
+  const { appearance, setAppearance } = useAppearance();
+
+  return (
+    <Flex direction="column" gap="3" maxWidth="320px">
+      <Box>
+        <Text as="label" size="2" weight="medium" mb="1" style={{ display: "block" }}>
+          Appearance
+        </Text>
+        <Select.Root value={appearance} onValueChange={(value) => setAppearance(value as Appearance)}>
+          <Select.Trigger />
+          <Select.Content>
+            <Select.Item value="inherit">System</Select.Item>
+            <Select.Item value="light">Light</Select.Item>
+            <Select.Item value="dark">Dark</Select.Item>
+          </Select.Content>
+        </Select.Root>
+      </Box>
+    </Flex>
+  );
+}
+
 export function SettingsPage() {
   const [settings, setSettings] = useState<SettingsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -199,6 +222,7 @@ export function SettingsPage() {
                   {tab.label}
                 </Tabs.Trigger>
               ))}
+              <Tabs.Trigger value="ui">UI</Tabs.Trigger>
             </Tabs.List>
             {SERVICE_TABS.map((tab) => (
               <Tabs.Content key={tab.value} value={tab.value}>
@@ -211,6 +235,11 @@ export function SettingsPage() {
                 </Box>
               </Tabs.Content>
             ))}
+            <Tabs.Content value="ui">
+              <Box pt="4">
+                <UISettingsForm />
+              </Box>
+            </Tabs.Content>
           </Tabs.Root>
         </Card>
       )}
