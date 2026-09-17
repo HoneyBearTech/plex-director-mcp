@@ -2,7 +2,7 @@
 
 [![CI/CD](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
+[![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logoColor=white&logo=docker)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)](package.json)
