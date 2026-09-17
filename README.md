@@ -156,15 +156,6 @@ docker build -t plex-director-mcp .
 - **Build & push Docker image** (`publish`) — runs on every push to `main` and every `v*.*.*` tag push, only if `check` passes. Publishes to both `ghcr.io/honeybeartech/plex-director-mcp` and `honeybeartech/plex-director-mcp` on Docker Hub. Branch pushes tag the image `latest` plus the commit SHA; tag pushes additionally tag it with the matching semver version (e.g. `1.2.3` and `1.2`). Afterward, [Docker Scout](https://docs.docker.com/scout/) scans the pushed image for critical/high CVEs and writes a report to the job summary; it doesn't fail the build yet (`exit-code: false` in the workflow) until there's a reviewed baseline.
 - **Create GitHub Release** (`release`) — runs only on `v*.*.*` tag pushes, after `publish` succeeds. Creates a GitHub Release from the tag with auto-generated notes.
 
-To cut a release, optionally bump `"version"` in `package.json` to match, then:
-
-```bash
-git tag v1.2.3
-git push origin v1.2.3
-```
-
-Publishing to GHCR uses the repo's built-in `GITHUB_TOKEN` — no extra setup needed there, but the repo's Actions settings must have "Read and write permissions" enabled for workflows (Settings → Actions → General → Workflow permissions). Publishing to Docker Hub needs two repository secrets set manually (Settings → Secrets and variables → Actions): `DOCKERHUB_USERNAME` and a `DOCKERHUB_TOKEN` (a Docker Hub access token with Read & Write scope).
-
 ## Runtime notes
 
 - Uses the official MCP SDK
