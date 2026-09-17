@@ -1,0 +1,30 @@
+node_modules
+data
+dist
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and runtime state
+*.db
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite
+*.sqlite3
+*.sqlite-shm
+*.sqlite-wal
+*.log
+*.log.*
+
+# VCS, editor, and CI metadata
+.git
+.github
+.vscode
+.DS_Store

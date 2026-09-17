@@ -122,6 +122,31 @@ npm run start
 
 The server runs via stdio and waits for MCP client connections.
 
+## Running in Docker
+
+Every push to `main` that passes CI publishes an image to GitHub Container Registry:
+
+```bash
+docker run -i --rm --env-file .env ghcr.io/honeybeartech/plex-director-mcp:latest
+```
+
+The `-i` flag is required since the server communicates over stdio, not a network port. You can also build it locally:
+
+```bash
+docker build -t plex-director-mcp .
+```
+
+`.dockerignore` keeps `.env`, `data/` (the local SQLite database), and other secrets/local state out of the build context, mirroring `.gitignore`. Pass configuration at run time with `--env-file` or `-e`, as above — never bake secrets into the image.
+
+## CI/CD
+
+`.github/workflows/ci.yml` runs on every push and pull request against `main`:
+
+- **Typecheck & audit** — `tsc --noEmit` and `npm audit --audit-level=high`.
+- **Build & push Docker image** — only on pushes to `main`, and only if the checks above pass. Publishes `ghcr.io/honeybeartech/plex-director-mcp` tagged `latest` and with the commit SHA.
+
+Publishing to GHCR uses the repo's built-in `GITHUB_TOKEN`, so no extra secrets are needed — but the repo's Actions settings must have "Read and write permissions" enabled for workflows (Settings → Actions → General → Workflow permissions).
+
 ## Runtime notes
 
 - Uses the official MCP SDK
