@@ -2,6 +2,7 @@
 
 [![CI/CD](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml)
+[![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HoneyBearTech/plex-director-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/HoneyBearTech/plex-director-mcp)
 [![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logoColor=white&logo=docker)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
@@ -153,10 +154,12 @@ docker build -t plex-director-mcp .
 `.github/workflows/ci.yml` has three jobs:
 
 - **Typecheck & audit** (`check`) — runs on every push and pull request against `main`: `tsc --noEmit` and `npm audit --audit-level=high`.
-- **Build & push Docker image** (`publish`) — runs on every push to `main` and every `v*.*.*` tag push, only if `check` passes. Publishes to both `ghcr.io/honeybeartech/plex-director-mcp` and `honeybeartech/plex-director-mcp` on Docker Hub. Branch pushes tag the image `latest` plus the commit SHA; tag pushes additionally tag it with the matching semver version (e.g. `1.2.3` and `1.2`). Afterward, [Docker Scout](https://docs.docker.com/scout/) scans the pushed image for critical/high CVEs and writes a report to the job summary; it doesn't fail the build yet (`exit-code: false` in the workflow) until there's a reviewed baseline.
+- **Build, smoke test, and publish** (`publish`) — runs on every push to `main`, every `v*.*.*` tag push, and every pull request, as long as `check` passes. Every run builds the image and boots it with dummy config to confirm it actually starts (catches things like the two Dockerfile stages drifting to incompatible Node versions — Dependabot can't know they need to move together, since it tracks each `FROM` line independently). Only push events go further: publishing to both `ghcr.io/honeybeartech/plex-director-mcp` and `honeybeartech/plex-director-mcp` on Docker Hub (branch pushes tag `latest` plus the commit SHA; tag pushes additionally get the matching semver version, e.g. `1.2.3` and `1.2`), then a [Docker Scout](https://docs.docker.com/scout/) CVE scan written to the job summary (non-blocking for now — `exit-code: false` — until there's a reviewed baseline).
 - **Create GitHub Release** (`release`) — runs only on `v*.*.*` tag pushes, after `publish` succeeds. Creates a GitHub Release from the tag with auto-generated notes.
 
 `.github/workflows/codeql.yml` runs [CodeQL](https://codeql.github.com/) against the TypeScript source on every push/PR to `main` and weekly, surfacing findings in the repo's Security tab.
+
+`.github/workflows/scorecard.yml` runs [OpenSSF Scorecard](https://scorecard.dev/) weekly (and on push to `main`), scoring the repo's supply-chain security practices — branch protection, pinned dependencies, CI practices, and so on — and publishing the result publicly (see the badge above).
 
 ## Runtime notes
 
