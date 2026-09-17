@@ -1,6 +1,7 @@
 # plex-director-mcp
 
 [![CI/CD](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml)
+[![CodeQL](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml)
 [![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
@@ -155,6 +156,8 @@ docker build -t plex-director-mcp .
 - **Typecheck & audit** (`check`) — runs on every push and pull request against `main`: `tsc --noEmit` and `npm audit --audit-level=high`.
 - **Build & push Docker image** (`publish`) — runs on every push to `main` and every `v*.*.*` tag push, only if `check` passes. Publishes to both `ghcr.io/honeybeartech/plex-director-mcp` and `honeybeartech/plex-director-mcp` on Docker Hub. Branch pushes tag the image `latest` plus the commit SHA; tag pushes additionally tag it with the matching semver version (e.g. `1.2.3` and `1.2`). Afterward, [Docker Scout](https://docs.docker.com/scout/) scans the pushed image for critical/high CVEs and writes a report to the job summary; it doesn't fail the build yet (`exit-code: false` in the workflow) until there's a reviewed baseline.
 - **Create GitHub Release** (`release`) — runs only on `v*.*.*` tag pushes, after `publish` succeeds. Creates a GitHub Release from the tag with auto-generated notes.
+
+`.github/workflows/codeql.yml` runs [CodeQL](https://codeql.github.com/) against the TypeScript source on every push/PR to `main` and weekly, surfacing findings in the repo's Security tab.
 
 ## Runtime notes
 
