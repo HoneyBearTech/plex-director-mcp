@@ -16,6 +16,12 @@ RUN npm prune --omit=dev
 FROM node:24-slim AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
+# The base image bundles its own npm/npx/corepack install for building with,
+# which we don't need at runtime (we just run `node dist/index.js`) - and its
+# vendored dependencies are a real source of flagged CVEs that have nothing
+# to do with this app.
+RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
+    /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack
 COPY package.json package-lock.json ./
 COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/dist ./dist
