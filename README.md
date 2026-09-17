@@ -8,7 +8,7 @@
 
 A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it.
 
-> The CI/CD badge is served by GitHub itself, so it renders for anyone with repo access even though this repo is private. The Docker badges read from the public Docker Hub mirror (`hub.docker.com/r/honeybeartech/plex-director-mcp`) since GHCR doesn't expose pull counts or a queryable version, and third-party badge services can't read a private repo's GHCR package.
+> The Docker badges read from the public Docker Hub mirror (`hub.docker.com/r/honeybeartech/plex-director-mcp`) rather than GHCR, since GHCR doesn't expose a pull count or a queryable version through any API.
 
 This project gives Claude access to your Radarr, Sonarr, SABnzbd, qBittorrent, Tautulli, TMDb, Prowlarr, and remote Ubuntu host monitoring setup so it can diagnose missing media, watch queue health, evaluate cluster status, and coordinate safe operational tasks from inside Claude Desktop.
 
@@ -132,7 +132,7 @@ The server runs via stdio and waits for MCP client connections.
 
 ## Running in Docker
 
-Every push to `main` that passes CI publishes an image to GitHub Container Registry (private, tied to this repo) and to Docker Hub (public):
+Every push to `main` that passes CI publishes an image to both GitHub Container Registry and Docker Hub:
 
 ```bash
 docker run -i --rm --env-file .env ghcr.io/honeybeartech/plex-director-mcp:latest
