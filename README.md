@@ -161,6 +161,8 @@ docker build -t plex-director-mcp .
 
 `.github/workflows/scorecard.yml` runs [OpenSSF Scorecard](https://scorecard.dev/) weekly (and on push to `main`), scoring the repo's supply-chain security practices — branch protection, pinned dependencies, CI practices, and so on — and publishing the result publicly (see the badge above).
 
+`.github/dependabot.yml` opens weekly PRs for npm, Docker base image, and GitHub Actions updates (grouped by minor/patch to cut down on PR noise; the Docker `node` dependency's major bumps are ignored, since the builder and distroless runtime stages' versions have to be coordinated by hand). `.github/workflows/dependabot-auto-merge.yml` auto-merges those PRs once `check` and `publish` pass, as long as the update isn't a major version bump — those are left for manual review.
+
 ## Runtime notes
 
 - Uses the official MCP SDK

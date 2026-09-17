@@ -1,0 +1,35 @@
+name: Dependabot auto-merge
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.actor == 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v2
+        with:
+          github-token: "${{ secrets.GITHUB_TOKEN }}"
+
+      # dependabot.yml only ever groups minor/patch updates together, never
+      # major, so a grouped PR's reported update-type - "the highest semver
+      # change in the PR" - can only be minor or patch here. Majors (and the
+      # ignored Docker node major bumps) always arrive as their own separate,
+      # ungrouped PR and are left for manual review.
+      #
+      # This only actually waits for check/publish because both are set as
+      # required status checks on main's ruleset - without that, auto-merge
+      # has nothing to wait for and would merge immediately.
+      - name: Enable auto-merge for non-major updates
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        run: gh pr merge --auto --squash "${{ github.event.pull_request.html_url }}"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
