@@ -6,10 +6,9 @@
 [![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)](package.json)
+[![License](https://img.shields.io/github/license/HoneyBearTech/plex-director-mcp)](LICENSE)
 
 A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it.
-
-> The Docker badges read from the public Docker Hub mirror (`hub.docker.com/r/honeybeartech/plex-director-mcp`) rather than GHCR, since GHCR doesn't expose a pull count or a queryable version through any API.
 
 This project gives Claude access to your Radarr, Sonarr, SABnzbd, qBittorrent, Tautulli, TMDb, Prowlarr, and remote Ubuntu host monitoring setup so it can diagnose missing media, watch queue health, evaluate cluster status, and coordinate safe operational tasks from inside Claude Desktop.
 
