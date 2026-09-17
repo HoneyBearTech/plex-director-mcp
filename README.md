@@ -1,6 +1,14 @@
 # plex-director-mcp
 
+[![CI/CD](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
+[![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
+[![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
+[![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)](package.json)
+
 A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it.
+
+> The CI/CD badge is served by GitHub itself, so it renders for anyone with repo access even though this repo is private. The Docker badges read from the public Docker Hub mirror (`hub.docker.com/r/honeybeartech/plex-director-mcp`) since GHCR doesn't expose pull counts or a queryable version, and third-party badge services can't read a private repo's GHCR package.
 
 This project gives Claude access to your Radarr, Sonarr, SABnzbd, qBittorrent, Tautulli, TMDb, Prowlarr, and remote Ubuntu host monitoring setup so it can diagnose missing media, watch queue health, evaluate cluster status, and coordinate safe operational tasks from inside Claude Desktop.
 
@@ -124,10 +132,12 @@ The server runs via stdio and waits for MCP client connections.
 
 ## Running in Docker
 
-Every push to `main` that passes CI publishes an image to GitHub Container Registry:
+Every push to `main` that passes CI publishes an image to GitHub Container Registry (private, tied to this repo) and to Docker Hub (public):
 
 ```bash
 docker run -i --rm --env-file .env ghcr.io/honeybeartech/plex-director-mcp:latest
+# or
+docker run -i --rm --env-file .env honeybeartech/plex-director-mcp:latest
 ```
 
 The `-i` flag is required since the server communicates over stdio, not a network port. You can also build it locally:
@@ -140,12 +150,20 @@ docker build -t plex-director-mcp .
 
 ## CI/CD
 
-`.github/workflows/ci.yml` runs on every push and pull request against `main`:
+`.github/workflows/ci.yml` has three jobs:
 
-- **Typecheck & audit** — `tsc --noEmit` and `npm audit --audit-level=high`.
-- **Build & push Docker image** — only on pushes to `main`, and only if the checks above pass. Publishes `ghcr.io/honeybeartech/plex-director-mcp` tagged `latest` and with the commit SHA.
+- **Typecheck & audit** (`check`) — runs on every push and pull request against `main`: `tsc --noEmit` and `npm audit --audit-level=high`.
+- **Build & push Docker image** (`publish`) — runs on every push to `main` and every `v*.*.*` tag push, only if `check` passes. Publishes to both `ghcr.io/honeybeartech/plex-director-mcp` and `honeybeartech/plex-director-mcp` on Docker Hub. Branch pushes tag the image `latest` plus the commit SHA; tag pushes additionally tag it with the matching semver version (e.g. `1.2.3` and `1.2`).
+- **Create GitHub Release** (`release`) — runs only on `v*.*.*` tag pushes, after `publish` succeeds. Creates a GitHub Release from the tag with auto-generated notes.
 
-Publishing to GHCR uses the repo's built-in `GITHUB_TOKEN`, so no extra secrets are needed — but the repo's Actions settings must have "Read and write permissions" enabled for workflows (Settings → Actions → General → Workflow permissions).
+To cut a release, optionally bump `"version"` in `package.json` to match, then:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+Publishing to GHCR uses the repo's built-in `GITHUB_TOKEN` — no extra setup needed there, but the repo's Actions settings must have "Read and write permissions" enabled for workflows (Settings → Actions → General → Workflow permissions). Publishing to Docker Hub needs two repository secrets set manually (Settings → Secrets and variables → Actions): `DOCKERHUB_USERNAME` and a `DOCKERHUB_TOKEN` (a Docker Hub access token with Read & Write scope).
 
 ## Runtime notes
 
