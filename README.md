@@ -94,6 +94,7 @@ Notes:
 - `DISCORD_WEBHOOK_URL` is optional and used for rich job notifications when configured.
 - `UBUNTU_HOSTS` should be a comma-separated list of remote hosts to monitor.
 - `WEB_PORT` is optional (defaults to `3000`) and controls the web UI's port.
+- **Don't put inline comments on the same line as a value** (e.g. `TMDB_API_KEY=abc123 # my key`). Docker's `--env-file` flag doesn't strip these the way `dotenv` does - the comment becomes part of the value, silently breaking that credential when run via `docker run --env-file .env`. Put comments on their own line above the variable instead.
 
 ### 3) Add the server to Claude Desktop
 
