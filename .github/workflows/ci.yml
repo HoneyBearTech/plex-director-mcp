@@ -102,18 +102,27 @@ jobs:
             -e TAUTULLI_URL=http://smoke-test.invalid -e TAUTULLI_API_KEY=dummy \
             -e TMDB_API_KEY=dummy \
             -e PROWLARR_URL=http://smoke-test.invalid -e PROWLARR_API_KEY=dummy \
+            -p 3000:3000 \
             smoke-test:latest
 
+          stdio_ok=""
+          web_ok=""
           for i in $(seq 1 10); do
-            if docker logs smoke-test 2>&1 | grep -q "Plex Director MCP server running on Stdio"; then
-              echo "Smoke test passed"
+            if [ -z "$stdio_ok" ] && docker logs smoke-test 2>&1 | grep -q "Plex Director MCP server running on Stdio"; then
+              stdio_ok=1
+            fi
+            if [ -z "$web_ok" ] && curl -sf http://localhost:3000/healthz > /dev/null 2>&1; then
+              web_ok=1
+            fi
+            if [ -n "$stdio_ok" ] && [ -n "$web_ok" ]; then
+              echo "Smoke test passed (stdio + web UI both up)"
               docker rm -f smoke-test
               exit 0
             fi
             sleep 1
           done
 
-          echo "::error::Smoke test failed - server did not reach ready state within 10s"
+          echo "::error::Smoke test failed within 10s - stdio ready: ${stdio_ok:-no}, web UI ready: ${web_ok:-no}"
           docker logs smoke-test
           docker rm -f smoke-test
           exit 1
