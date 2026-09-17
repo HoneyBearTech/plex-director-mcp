@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:24-slim AS builder
+FROM node:26-slim AS builder
 WORKDIR /app
 # better-sqlite3 and ssh2's optional cpu-features package compile native
 # bindings at install time and need a toolchain to do it.
