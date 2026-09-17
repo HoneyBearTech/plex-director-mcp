@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:26-slim AS builder
+FROM node:26-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS builder
 WORKDIR /app
 # better-sqlite3 and ssh2's optional cpu-features package compile native
 # bindings at install time and need a toolchain to do it.
@@ -17,7 +17,7 @@ RUN npm prune --omit=dev
 # Node runtime itself - it's not just npm that's absent but most of the
 # Debian packages (perl, util-linux, etc.) that showed up as CVEs on
 # node:24-slim despite this app never using them.
-FROM gcr.io/distroless/nodejs24-debian12 AS runtime
+FROM gcr.io/distroless/nodejs24-debian12@sha256:61f4f4341db81820c24ce771b83d202eb6452076f58628cd536cc7d94a10978b AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # package.json must stay - Node needs its "type": "module" field to know
