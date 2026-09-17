@@ -125,7 +125,7 @@ The server runs via stdio and waits for MCP client connections.
 ## Runtime notes
 
 - Uses the official MCP SDK
-- Stores persistent job state and selection context in a local SQLite database: `plex_director.db`
+- Stores persistent job state and selection context in a local SQLite database: `data/plex_director.db`
 - Loads configuration from `.env`
 - Supports optional Discord webhook alerts and remote SSH host monitoring
 - Intended for local self-hosted media automation, queue troubleshooting, and host-level observability
