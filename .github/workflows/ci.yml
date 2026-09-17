@@ -71,11 +71,24 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
 
       - uses: docker/build-push-action@v6
+        id: build
         with:
           context: .
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      # Non-blocking for now (exit-code: false) so a baseline can be reviewed
+      # before deciding whether to gate the pipeline on it. Results land in
+      # this job's summary. Flip exit-code to true once you're ready to fail
+      # the build on new critical/high CVEs.
+      - name: Docker Scout - CVE scan
+        uses: docker/scout-action@v1
+        with:
+          command: cves
+          image: docker.io/honeybeartech/plex-director-mcp@${{ steps.build.outputs.digest }}
+          only-severities: critical,high
+          exit-code: false
 
   release:
     name: Create GitHub Release
