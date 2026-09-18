@@ -1,6 +1,6 @@
 import { server } from "../server.js";
 import { tautulliClient } from "../clients.js";
-import { textReply, getErrorMessage } from "../util.js";
+import { textReply, getErrorMessage, rowLabel, rowPlays } from "../util.js";
 
 // Plex playback and historical usage metrics.
 export function registerMonitoringTools() {
@@ -52,9 +52,7 @@ export function registerMonitoringTools() {
 
         stats.forEach((category: any) => {
           const categoryTitle = category.stat_title || category.stat_id || "Watch statistics";
-          const categoryKey = String(category.stat_id || category.stat_title || "").toLowerCase();
-          const isUserStats = categoryKey.includes("user");
-          const isLibraryStats = categoryKey.includes("librar");
+          const statId = String(category.stat_id || "");
           richDashboard += `### 📊 ${categoryTitle}\n`;
           richDashboard += "| Rank | Title / Profile Identifier | Total Stream Count |\n";
           richDashboard += "| :---: | :--- | :--- |\n";
@@ -62,13 +60,9 @@ export function registerMonitoringTools() {
           const items = category.rows || [];
           items.slice(0, 3).forEach((item: any, index: number) => {
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
-            const playCount = item.total_plays ?? item.play_count ?? 0;
-            const label = isUserStats
-              ? item.friendly_name || item.user || item.username
-              : isLibraryStats
-                ? item.section_name || item.library_name || item.library
-                : item.title || item.user || item.friendly_name;
-            richDashboard += `| ${medal} | **${label || "Unknown"}** | \`${playCount} plays\` |\n`;
+            const playCount = rowPlays(item);
+            const label = rowLabel(statId, item);
+            richDashboard += `| ${medal} | **${label}** | \`${playCount} plays\` |\n`;
           });
           richDashboard += "\n";
         });
