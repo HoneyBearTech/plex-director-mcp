@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM node:26-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS backend-builder
+FROM node:26-slim@sha256:d82e1d091233ff0f771fc6c22837fa64c1019806ae2ac76cf5345cbc1e01668a AS backend-builder
 WORKDIR /app
 # better-sqlite3 and ssh2's optional cpu-features package compile native
 # bindings at install time and need a toolchain to do it.
@@ -15,7 +15,7 @@ RUN npm prune --omit=dev
 
 # Separate stage (no native compilation, no toolchain needed) so it builds
 # independently of - and in parallel with - the backend.
-FROM node:26-slim@sha256:14bf3eac4bf209d906d3c41256597d3ab1f926b2e93a79e9bdfe1efd32454239 AS frontend-builder
+FROM node:26-slim@sha256:d82e1d091233ff0f771fc6c22837fa64c1019806ae2ac76cf5345cbc1e01668a AS frontend-builder
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
