@@ -33,6 +33,7 @@ node_modules/
 # Editor and OS files
 .vscode/
 .DS_Store
+.obsidian-docs/
 
 # Local CodeQL query workspace scaffolding (VSCode CodeQL extension)
 codeql-custom-queries-*/
