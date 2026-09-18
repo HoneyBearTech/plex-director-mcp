@@ -121,7 +121,7 @@ export function registerDiscoveryTools() {
         choices.forEach((movie: any, index: number) => {
           const choiceId = index + 1;
           const year = movie.release_date ? movie.release_date.split("-")[0] : "N/A";
-          const posterUrl = movie.poster_path ? `https://tmdb.org${movie.poster_path}` : "https://placeholder.com";
+          const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : "https://placeholder.com";
 
           insertStmt.run(choiceId, movie.id, movie.title, year);
 
