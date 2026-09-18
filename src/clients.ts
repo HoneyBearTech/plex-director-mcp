@@ -19,6 +19,10 @@ export const sabnzbdClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 export const radarrClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 export const sonarrClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
 export const tautulliClient = axios.create({ timeout: REQUEST_TIMEOUT_MS });
+export const plexClient = axios.create({
+  headers: { Accept: "application/json" },
+  timeout: REQUEST_TIMEOUT_MS,
+});
 export const tmdbClient = axios.create({
   baseURL: "https://api.themoviedb.org/3",
   headers: { Accept: "application/json" },
@@ -44,6 +48,9 @@ export function refreshClients(): void {
 
   tautulliClient.defaults.baseURL = tautulliApiUrl(getSetting("TAUTULLI_URL"));
   tautulliClient.defaults.params = { apikey: getSetting("TAUTULLI_API_KEY"), cmd: "" };
+
+  plexClient.defaults.baseURL = getSetting("PLEX_URL");
+  plexClient.defaults.headers.common["X-Plex-Token"] = getSetting("PLEX_TOKEN");
 
   tmdbClient.defaults.headers.common["Authorization"] = `Bearer ${getSetting("TMDB_API_KEY")}`;
 

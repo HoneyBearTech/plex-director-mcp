@@ -16,6 +16,8 @@ export const SETTINGS_KEYS = [
   "QBITTORRENT_PASS",
   "TAUTULLI_URL",
   "TAUTULLI_API_KEY",
+  "PLEX_URL",
+  "PLEX_TOKEN",
   "TMDB_API_KEY",
   "UBUNTU_HOSTS",
   "SSH_USER",
@@ -65,6 +67,7 @@ const SERVICE_URL_KEYS = {
   SABNZBD: "SABNZBD_URL",
   QBITTORRENT: "QBITTORRENT_URL",
   TAUTULLI: "TAUTULLI_URL",
+  PLEX: "PLEX_URL",
 } as const;
 
 export function isConfigured(service: keyof typeof SERVICE_URL_KEYS): boolean {

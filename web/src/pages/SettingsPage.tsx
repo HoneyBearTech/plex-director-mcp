@@ -61,6 +61,14 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     ],
   },
   {
+    value: "plex",
+    label: "Plex",
+    fields: [
+      { name: "url", label: "URL", placeholder: "http://plex:32400" },
+      { name: "token", label: "Token", secret: true },
+    ],
+  },
+  {
     value: "tmdb",
     label: "TMDB",
     fields: [{ name: "apiKey", label: "API Key", secret: true }],
