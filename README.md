@@ -4,7 +4,7 @@
 [![CodeQL](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HoneyBearTech/plex-director-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/HoneyBearTech/plex-director-mcp)
 [![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logoColor=white&logo=docker)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
-[![Docker Version](https://img.shields.io/docker/v/honeybeartech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
+[![Docker Version](https://img.shields.io/github/v/tag/HoneyBearTech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)](package.json)
 [![License](https://img.shields.io/github/license/HoneyBearTech/plex-director-mcp)](LICENSE)
