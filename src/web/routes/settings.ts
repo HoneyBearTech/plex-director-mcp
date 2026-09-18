@@ -76,7 +76,7 @@ settingsRouter.put("/:service", (req, res) => {
   for (const f of fields) {
     const raw = body[f.field];
     if (typeof raw !== "string") continue; // field omitted - leave unchanged
-    if (f.secret && raw === "") continue; // blank secret - keep the existing value
+    if (f.secret && raw.trim() === "") continue; // blank secret - keep the existing value
     setSetting(f.key, raw.trim());
   }
 

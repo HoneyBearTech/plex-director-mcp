@@ -5,6 +5,8 @@ import { movieTools } from "../tools/movies.js";
 const MODEL = "claude-sonnet-5";
 const MAX_TOOL_ROUNDS = 4;
 
+const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
+
 const SYSTEM_PROMPT =
   "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. " +
   "Use the available tools to answer questions about the movie library - never guess. Be concise and direct.";
@@ -71,7 +73,7 @@ export async function askMovieAssistant(question: string): Promise<ChatAnswer> {
       for (const block of result.content) {
         if (block.type === "text") {
           content.push({ type: "text", text: block.text });
-        } else if (block.type === "image") {
+        } else if (block.type === "image" && SUPPORTED_IMAGE_TYPES.has(block.mimeType)) {
           content.push({
             type: "image",
             source: { type: "base64", media_type: block.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: block.data },

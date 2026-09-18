@@ -5,24 +5,38 @@ import { server } from "../server.js";
 import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 
+// /movie/lookup returns a TMDB-backed search result that, even for a movie
+// already in the library, omits some fields the actual library record has
+// (notably hasFile - see diagnoseMissingMedia below). Both tools need the
+// real /movie record, not just the lookup hit, to trust hasFile/path/status.
+async function findRadarrMatch(title: string): Promise<{ lookupMatch: any; primaryMatch: any | undefined } | null> {
+  const lookupResponse = await radarrClient.get(`/api/v3/movie/lookup?term=${encodeURIComponent(title)}`);
+  const lookupMovies = lookupResponse.data as Array<any>;
+
+  if (!lookupMovies || lookupMovies.length === 0) {
+    return null;
+  }
+
+  const lookupMatch = lookupMovies[0];
+  const libraryResponse = await radarrClient.get("/api/v3/movie");
+  const libraryMovies = libraryResponse.data as Array<any>;
+  const normalizedTitle = String(lookupMatch.title || title).trim().toLowerCase();
+  const primaryMatch = libraryMovies.find((movie: any) =>
+    (lookupMatch.tmdbId && movie.tmdbId === lookupMatch.tmdbId) ||
+    (String(movie.title || "").trim().toLowerCase() === normalizedTitle && movie.year === lookupMatch.year)
+  );
+
+  return { lookupMatch, primaryMatch };
+}
+
 async function checkMovieStatus(title: string): Promise<CallToolResult> {
   try {
-    const lookupResponse = await radarrClient.get(`/api/v3/movie/lookup?term=${encodeURIComponent(title)}`);
-    const lookupMovies = lookupResponse.data as Array<any>;
-
-    if (!lookupMovies || lookupMovies.length === 0) {
+    const match = await findRadarrMatch(title);
+    if (!match) {
       return textReply(`❌ Movie "${title}" was not found in the Radarr database.`);
     }
 
-    const libraryResponse = await radarrClient.get("/api/v3/movie");
-    const libraryMovies = libraryResponse.data as Array<any>;
-    const lookupMatch = lookupMovies[0];
-    const normalizedTitle = String(lookupMatch.title || title).trim().toLowerCase();
-    const primaryMatch = libraryMovies.find((movie: any) =>
-      (lookupMatch.tmdbId && movie.tmdbId === lookupMatch.tmdbId) ||
-      (String(movie.title || "").trim().toLowerCase() === normalizedTitle && movie.year === lookupMatch.year)
-    );
-
+    const { primaryMatch } = match;
     if (!primaryMatch) {
       return textReply(`❌ Movie "${title}" was found in Radarr search results but is not currently in the library.`);
     }
@@ -74,14 +88,14 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
 
   try {
     traceSteps.push(`🔍 Step 1: Querying Radarr for "${title}"...`);
-    const radarrSearch = await radarrClient.get(`/api/v3/movie/lookup?term=${encodeURIComponent(title)}`);
-    const movieMatches = radarrSearch.data as Array<any>;
+    const match = await findRadarrMatch(title);
 
-    if (!movieMatches || movieMatches.length === 0) {
+    if (!match) {
       return textReply(`❌ Trace Failed:\n"${title}" is completely unmanaged. It does not exist in your Radarr database.`);
     }
 
-    const movie = movieMatches[0];
+    const { lookupMatch, primaryMatch } = match;
+    const movie = primaryMatch || lookupMatch;
     traceSteps.push(`  ↳ Found record: ${movie.title} (${movie.year}) [ID: ${movie.id || "Unassigned"}]`);
 
     if (!movie.monitored) {
@@ -90,8 +104,8 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
       traceSteps.push("  ✓ Status: Managed & Monitored.");
     }
 
-    if (movie.movieFileId) {
-      traceSteps.push(`  ✓ File Check: Radarr notes a file already exists at: ${movie.path}`);
+    if (primaryMatch?.hasFile) {
+      traceSteps.push(`  ✓ File Check: Radarr notes a file already exists at: ${primaryMatch.path}`);
       return textReply(traceSteps.join("\n"));
     }
 

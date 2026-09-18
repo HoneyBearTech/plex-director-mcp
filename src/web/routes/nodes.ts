@@ -44,26 +44,29 @@ nodesRouter.get("/health", async (_req, res) => {
   const ramTotalCmd = "free -m | awk 'NR==2{print $2}'";
   const dockerCountCmd = "docker ps --format '{{.Names}}' | wc -l";
   const dockerDownCmd = "docker ps -a --filter 'status=exited' --filter 'status=dead' --format '{{.Names}}' | tr '\\n' ','";
-  // Comma-separated "size,used,percent" for the root filesystem, e.g. "115G,55G,50%".
-  const diskCmd = "df -h / | awk 'NR==2{print $2\",\"$3\",\"$5}'";
+  // Space-separated "size used percent" for the root filesystem, e.g. "115G 55G 50%".
+  const diskCmd = "df -h / | awk 'NR==2{print $2, $3, $5}'";
   const uptimeCmd = "cat /proc/uptime | awk '{print int($1)}'";
+
+  // Each host previously opened one fresh SSH connection (full TCP+auth
+  // handshake, private-key file re-read) per metric - 9 per host, every 15s
+  // poll, since runRemoteCommand doesn't pool connections. Chaining them
+  // into one remote script and splitting the output collapses that to a
+  // single connection per host per poll.
+  const FIELD_SEP = "@@@FIELD@@@";
+  const combinedCmd = [hostnameCmd, cpuCmd, ramPercentCmd, ramUsedCmd, ramTotalCmd, dockerCountCmd, dockerDownCmd, diskCmd, uptimeCmd].join(
+    ` ; echo '${FIELD_SEP}' ; `
+  );
 
   const hostResults = await Promise.all(
     hosts.map(async (host) => {
       try {
-        const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] = await Promise.all([
-          runRemoteCommand(host, hostnameCmd),
-          runRemoteCommand(host, cpuCmd),
-          runRemoteCommand(host, ramPercentCmd),
-          runRemoteCommand(host, ramUsedCmd),
-          runRemoteCommand(host, ramTotalCmd),
-          runRemoteCommand(host, dockerCountCmd),
-          runRemoteCommand(host, dockerDownCmd),
-          runRemoteCommand(host, diskCmd),
-          runRemoteCommand(host, uptimeCmd),
-        ]);
+        const output = await runRemoteCommand(host, combinedCmd);
+        const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] = output
+          .split(FIELD_SEP)
+          .map((s) => s.trim());
 
-        const [diskTotal, diskUsed, diskPercentRaw] = disk.split(",");
+        const [diskTotal, diskUsed, diskPercentRaw] = (disk ?? "").split(/\s+/);
 
         return {
           host,
@@ -74,7 +77,7 @@ nodesRouter.get("/health", async (_req, res) => {
           ramUsedMb: Number(ramUsed) || 0,
           ramTotalMb: Number(ramTotal) || 0,
           containersRunning: Number(dockerCount) || 0,
-          deadContainers: deadContainers.split(",").filter(Boolean),
+          deadContainers: (deadContainers ?? "").split(",").filter(Boolean),
           diskPercent: Number.parseFloat(diskPercentRaw ?? "") || 0,
           diskUsed: diskUsed || "?",
           diskTotal: diskTotal || "?",

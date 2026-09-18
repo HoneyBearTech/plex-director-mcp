@@ -21,6 +21,13 @@ export function createWebApp() {
   app.use("/api/settings", settingsRouter);
   app.use("/api/chat", chatRouter);
 
+  // Anything under /api that didn't match a router above is a missing or
+  // mistyped endpoint - without this, it falls through to the SPA catch-all
+  // below and comes back as a 200 HTML page instead of a clear 404.
+  app.use("/api/{*splat}", (_req, res) => {
+    res.status(404).json({ error: "Not found" });
+  });
+
   const staticDir = path.join(projectRoot, "web", "dist");
   app.use(express.static(staticDir));
   app.get("/{*splat}", (_req, res) => {
