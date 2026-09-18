@@ -9,8 +9,8 @@ interface FieldDef {
 }
 
 // Service -> editable fields, and the .env/DB key each one maps to. The
-// Settings page's 8 tabs (Sonarr, Radarr, Prowlarr, SABnzbd, qBittorrent,
-// Tautulli, TMDB, Nodes) correspond directly to these keys.
+// Settings page's 9 tabs (Sonarr, Radarr, Prowlarr, SABnzbd, qBittorrent,
+// Tautulli, Plex, TMDB, Nodes) correspond directly to these keys.
 const SERVICES: Record<string, FieldDef[]> = {
   sonarr: [
     { field: "url", key: "SONARR_URL" },
@@ -36,6 +36,10 @@ const SERVICES: Record<string, FieldDef[]> = {
   tautulli: [
     { field: "url", key: "TAUTULLI_URL" },
     { field: "apiKey", key: "TAUTULLI_API_KEY", secret: true },
+  ],
+  plex: [
+    { field: "url", key: "PLEX_URL" },
+    { field: "token", key: "PLEX_TOKEN", secret: true },
   ],
   tmdb: [{ field: "apiKey", key: "TMDB_API_KEY", secret: true }],
   // SSH_KEY_PATH deliberately excluded - stays a server-side file path, never

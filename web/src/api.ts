@@ -68,6 +68,7 @@ export interface SettingsResponse {
   sabnzbd: { url: string; apiKey: SecretField };
   qbittorrent: { url: string; username: string; password: SecretField };
   tautulli: { url: string; apiKey: SecretField };
+  plex: { url: string; token: SecretField };
   tmdb: { apiKey: SecretField };
   nodes: { hosts: string; sshUser: string };
 }
