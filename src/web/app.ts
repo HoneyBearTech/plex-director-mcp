@@ -1,4 +1,5 @@
 import express from "express";
+import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { projectRoot } from "../env.js";
 import { statusRouter } from "./routes/status.js";
@@ -10,6 +11,18 @@ import { chatRouter } from "./routes/chat.js";
 export function createWebApp() {
   const app = express();
   app.use(express.json());
+  // Generous enough for normal dashboard polling (several endpoints polled
+  // every 10-15s) while bounding repeated disk reads from the static/SPA
+  // handlers below against abuse - flagged by CodeQL as unrate-limited
+  // file-system access otherwise.
+  app.use(
+    rateLimit({
+      windowMs: 60_000,
+      limit: 300,
+      standardHeaders: true,
+      legacyHeaders: false,
+    })
+  );
 
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true });
