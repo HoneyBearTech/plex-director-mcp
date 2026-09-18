@@ -1,0 +1,47 @@
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+}
+
+a.nav-link {
+  text-decoration: none;
+}
+
+a.nav-link:hover > div {
+  background: var(--gray-a3);
+}
+
+/* Slim, muted scrollbars for a more polished, app-like feel. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gray-a6) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-thumb {
+  background-color: var(--gray-a6);
+  border-radius: 999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.rt-TableRow {
+  transition: background-color 120ms ease;
+}
+
+.rt-TableRow:hover {
+  background: var(--gray-a2);
+}

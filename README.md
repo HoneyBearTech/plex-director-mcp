@@ -9,7 +9,7 @@
 [![Node](https://img.shields.io/badge/node-24-339933?logo=node.js&logoColor=white)](package.json)
 [![License](https://img.shields.io/github/license/HoneyBearTech/plex-director-mcp)](LICENSE)
 
-A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it.
+A Claude Desktop MCP server for troubleshooting and managing a self-hosted Plex + Servarr media stack, plus the supporting download and infrastructure layers around it — with a companion browser dashboard for the same lookups outside of a chat session.
 
 This project gives Claude access to your Radarr, Sonarr, SABnzbd, qBittorrent, Tautulli, TMDb, Prowlarr, and remote Ubuntu host monitoring setup so it can diagnose missing media, watch queue health, evaluate cluster status, and coordinate safe operational tasks from inside Claude Desktop.
 
@@ -85,6 +85,7 @@ SSH_USER=your_ssh_username
 SSH_KEY_PATH=/path/to/id_ed25519
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 BACKUP_DIR=./backups
+WEB_PORT=3000
 ```
 
 Notes:
@@ -92,6 +93,8 @@ Notes:
 - `SONARR_*`, `QBITTORRENT_*`, and SSH/cluster variables are optional and only needed for the extra tooling you want enabled.
 - `DISCORD_WEBHOOK_URL` is optional and used for rich job notifications when configured.
 - `UBUNTU_HOSTS` should be a comma-separated list of remote hosts to monitor.
+- `WEB_PORT` is optional (defaults to `3000`) and controls the web UI's port.
+- **Don't put inline comments on the same line as a value** (e.g. `TMDB_API_KEY=abc123 # my key`). Docker's `--env-file` flag doesn't strip these the way `dotenv` does - the comment becomes part of the value, silently breaking that credential when run via `docker run --env-file .env`. Put comments on their own line above the variable instead.
 
 ### 3) Add the server to Claude Desktop
 
@@ -129,19 +132,33 @@ Run the server directly:
 npm run start
 ```
 
-The server runs via stdio and waits for MCP client connections.
+The server runs via stdio and waits for MCP client connections; it also starts an HTTP server for the web UI (see below) on the same process.
+
+## Web UI
+
+Alongside the MCP stdio interface, the server hosts a small read-only browser dashboard on `WEB_PORT` (default `3000`, override via `.env`): movie search/status/diagnosis, Plex activity and library analytics, per-host CPU/RAM/Docker utilization (over SSH), and the SABnzbd/qBittorrent queues. It's intentionally read-only and has **no authentication** — anyone who can reach the port can use it, so don't expose it beyond a trusted network.
+
+It's a separate npm project under `web/` (React + Vite + TypeScript, its own `package.json`) so its toolchain doesn't need to match the root project's. To work on it:
+
+```bash
+cd web
+npm install
+npm run dev   # dev server on :5173, proxies /api to the backend on :3000
+```
+
+`npm run build` in `web/` produces the static assets the backend serves in production; the Dockerfile builds this automatically.
 
 ## Running in Docker
 
 Every push to `main` that passes CI publishes an image to both GitHub Container Registry and Docker Hub:
 
 ```bash
-docker run -i --rm --env-file .env ghcr.io/honeybeartech/plex-director-mcp:latest
+docker run -i --rm -p 3000:3000 --env-file .env ghcr.io/honeybeartech/plex-director-mcp:latest
 # or
-docker run -i --rm --env-file .env honeybeartech/plex-director-mcp:latest
+docker run -i --rm -p 3000:3000 --env-file .env honeybeartech/plex-director-mcp:latest
 ```
 
-The `-i` flag is required since the server communicates over stdio, not a network port. You can also build it locally:
+The `-i` flag is required since the MCP interface communicates over stdio; `-p 3000:3000` exposes the web UI. You can also build it locally:
 
 ```bash
 docker build -t plex-director-mcp .

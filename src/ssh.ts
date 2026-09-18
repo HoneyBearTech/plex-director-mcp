@@ -1,5 +1,6 @@
 import { Client as SSHClient } from "ssh2";
 import fs from "node:fs";
+import { getSetting } from "./settings.js";
 
 // Execute one read-only telemetry command on a configured remote host.
 export function runRemoteCommand(host: string, command: string): Promise<string> {
@@ -23,7 +24,10 @@ export function runRemoteCommand(host: string, command: string): Promise<string>
       reject(err);
     }).connect({
       host: host,
-      username: process.env.SSH_USER ?? "",
+      // SSH_USER is a dynamic setting (editable via the Nodes tab); the
+      // private key stays a server-side file path, never typed into the
+      // browser or stored in the database.
+      username: getSetting("SSH_USER"),
       privateKey: fs.readFileSync(process.env.SSH_KEY_PATH || "")
     });
   });

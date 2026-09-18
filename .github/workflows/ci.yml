@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
 
       - run: npm ci
 
@@ -28,6 +31,22 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      # The web dashboard is a separate npm project from the backend above -
+      # its own tsc/vite build only otherwise runs inside the Docker image
+      # build below, which is slower and only signals failure via the whole
+      # smoke-build step. Checking it here fails fast on a plain type error.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Typecheck web
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Dependency audit (web)
+        working-directory: web
         run: npm audit --audit-level=high
 
   publish:
@@ -102,18 +121,27 @@ jobs:
             -e TAUTULLI_URL=http://smoke-test.invalid -e TAUTULLI_API_KEY=dummy \
             -e TMDB_API_KEY=dummy \
             -e PROWLARR_URL=http://smoke-test.invalid -e PROWLARR_API_KEY=dummy \
+            -p 3000:3000 \
             smoke-test:latest
 
+          stdio_ok=""
+          web_ok=""
           for i in $(seq 1 10); do
-            if docker logs smoke-test 2>&1 | grep -q "Plex Director MCP server running on Stdio"; then
-              echo "Smoke test passed"
+            if [ -z "$stdio_ok" ] && docker logs smoke-test 2>&1 | grep -q "Plex Director MCP server running on Stdio"; then
+              stdio_ok=1
+            fi
+            if [ -z "$web_ok" ] && curl -sf http://localhost:3000/healthz > /dev/null 2>&1; then
+              web_ok=1
+            fi
+            if [ -n "$stdio_ok" ] && [ -n "$web_ok" ]; then
+              echo "Smoke test passed (stdio + web UI both up)"
               docker rm -f smoke-test
               exit 0
             fi
             sleep 1
           done
 
-          echo "::error::Smoke test failed - server did not reach ready state within 10s"
+          echo "::error::Smoke test failed within 10s - stdio ready: ${stdio_ok:-no}, web UI ready: ${web_ok:-no}"
           docker logs smoke-test
           docker rm -f smoke-test
           exit 1
