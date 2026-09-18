@@ -36,7 +36,7 @@ queuesRouter.get("/qbittorrent", async (_req, res) => {
     const cookie = loginResponse.headers["set-cookie"];
     const requestConfig = { headers: { Cookie: cookie ? cookie[0] : "" } };
 
-    const torrentsResponse = await qbitClient.get("/api/v2/torrents/info", requestConfig);
+    const torrentsResponse = await qbitClient.get("/api/v2/torrents/info?filter=downloading", requestConfig);
     const torrents = torrentsResponse.data || [];
 
     res.json({

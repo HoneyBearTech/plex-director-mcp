@@ -10,6 +10,19 @@ updates:
           - "minor"
           - "patch"
 
+  # The web dashboard is a separate npm project (own package.json/lockfile)
+  # from the backend above - without its own entry here, React/Vite/Radix
+  # Themes and the rest of its dependency tree never get update PRs.
+  - package-ecosystem: "npm"
+    directory: "/web"
+    schedule:
+      interval: "weekly"
+    groups:
+      minor-and-patch:
+        update-types:
+          - "minor"
+          - "patch"
+
   - package-ecosystem: "docker"
     directory: "/"
     schedule:

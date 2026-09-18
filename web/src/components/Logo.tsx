@@ -1,0 +1,37 @@
+import { useId } from "react";
+
+// A clapperboard badge, matching the flat squircle-icon language shared by
+// the *Arr apps (Radarr, Sonarr, Lidarr, Bazarr) - solid brand color, white
+// glyph, no gradients. Red was picked because none of those apps use it
+// (Radarr #FFCB3D, Sonarr #2596BE, Lidarr #009252, Bazarr #be4bdb).
+export function Logo({ size = 28 }: { size?: number }) {
+  const baseClip = useId();
+  const topClip = useId();
+
+  return (
+    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plex Director logo">
+      <rect width="32" height="32" rx="7" fill="#E5484D" />
+      <rect x="6" y="15" width="20" height="11" rx="1.5" fill="white" />
+      <rect x="6" y="10.8" width="20" height="4.6" rx="1" fill="white" />
+      <clipPath id={baseClip}>
+        <rect x="6" y="10.8" width="20" height="4.6" rx="1" />
+      </clipPath>
+      <g clipPath={`url(#${baseClip})`}>
+        <rect x="9.3" y="10.8" width="3.4" height="4.6" fill="#E5484D" />
+        <rect x="16.1" y="10.8" width="3.4" height="4.6" fill="#E5484D" />
+        <rect x="22.9" y="10.8" width="3.4" height="4.6" fill="#E5484D" />
+      </g>
+      <g transform="rotate(-13 6.5 10.8)">
+        <rect x="6.5" y="6.2" width="20" height="4.6" rx="1" fill="white" />
+        <clipPath id={topClip}>
+          <rect x="6.5" y="6.2" width="20" height="4.6" rx="1" />
+        </clipPath>
+        <g clipPath={`url(#${topClip})`}>
+          <rect x="9.8" y="6.2" width="3.4" height="4.6" fill="#E5484D" />
+          <rect x="16.6" y="6.2" width="3.4" height="4.6" fill="#E5484D" />
+          <rect x="23.4" y="6.2" width="3.4" height="4.6" fill="#E5484D" />
+        </g>
+      </g>
+    </svg>
+  );
+}

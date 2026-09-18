@@ -4,6 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { App } from "./App";
 import { AppearanceProvider } from "./theme";
 import "@radix-ui/themes/styles.css";
+import "./index.css";
 
 const rootElement = document.getElementById("root");
 if (!rootElement) {

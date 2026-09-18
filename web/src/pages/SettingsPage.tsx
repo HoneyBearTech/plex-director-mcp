@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Badge, Box, Button, Callout, Card, Flex, Heading, Select, Tabs, Text, TextField } from "@radix-ui/themes";
+import { Badge, Box, Button, Callout, Card, Flex, Select, Tabs, Text, TextField } from "@radix-ui/themes";
 import { api, type SecretField, type SettingsResponse, type SettingsService } from "../api";
 import { useAppearance, type Appearance } from "../theme";
 
@@ -197,7 +197,6 @@ export function SettingsPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Settings</Heading>
       <Callout.Root color="amber">
         <Callout.Text>
           This page has no authentication - anyone who can reach this server can view and change these settings.

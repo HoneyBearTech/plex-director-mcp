@@ -1,6 +1,21 @@
-import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
+import { Avatar, Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
+
+function Poster({ src, alt }: { src: string | null; alt: string }) {
+  if (!src) {
+    return <Flex width="36px" height="54px" flexShrink="0" style={{ borderRadius: 4, background: "var(--gray-a4)" }} />;
+  }
+  return (
+    <img
+      src={src}
+      alt={alt}
+      width={36}
+      height={54}
+      style={{ borderRadius: 4, objectFit: "cover", flexShrink: 0 }}
+    />
+  );
+}
 
 export function StatusPage() {
   const activity = usePolling(api.plexActivity, 10_000);
@@ -8,8 +23,6 @@ export function StatusPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Server Status</Heading>
-
       <Card>
         <Heading size="4" mb="3">
           Plex Activity
@@ -34,9 +47,19 @@ export function StatusPage() {
               <Table.Body>
                 {activity.data.sessions.map((session, i) => (
                   <Table.Row key={i}>
-                    <Table.Cell>{session.user}</Table.Cell>
                     <Table.Cell>
-                      {session.title} {session.year && `(${session.year})`}
+                      <Flex align="center" gap="2">
+                        <Avatar src={session.userThumb ?? undefined} fallback={session.user.charAt(0).toUpperCase()} size="2" radius="full" />
+                        <Text>{session.user}</Text>
+                      </Flex>
+                    </Table.Cell>
+                    <Table.Cell>
+                      <Flex align="center" gap="3">
+                        <Poster src={session.posterUrl} alt={session.title} />
+                        <Text>
+                          {session.title} {session.year && `(${session.year})`}
+                        </Text>
+                      </Flex>
                     </Table.Cell>
                     <Table.Cell>{session.resolution}</Table.Cell>
                     <Table.Cell>
@@ -71,7 +94,16 @@ export function StatusPage() {
               <Table.Body>
                 {category.rows.map((row, i) => (
                   <Table.Row key={i}>
-                    <Table.Cell>{row.label}</Table.Cell>
+                    <Table.Cell>
+                      <Flex align="center" gap="3">
+                        {row.userThumb ? (
+                          <Avatar src={row.userThumb} fallback={row.label.charAt(0).toUpperCase()} size="2" radius="full" />
+                        ) : row.posterUrl ? (
+                          <Poster src={row.posterUrl} alt={row.label} />
+                        ) : null}
+                        <Text>{row.label}</Text>
+                      </Flex>
+                    </Table.Cell>
                     <Table.Cell>{row.plays} plays</Table.Cell>
                   </Table.Row>
                 ))}

@@ -1,50 +1,29 @@
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { Box, Container, Heading, Tabs } from "@radix-ui/themes";
-import { QueryPage } from "./pages/QueryPage";
-import { StatusPage } from "./pages/StatusPage";
-import { NodesPage } from "./pages/NodesPage";
-import { QueuesPage } from "./pages/QueuesPage";
-import { SettingsPage } from "./pages/SettingsPage";
-
-const TABS = [
-  { value: "/", label: "Query" },
-  { value: "/status", label: "Server Status" },
-  { value: "/nodes", label: "Node Utilization" },
-  { value: "/queues", label: "Queues" },
-  { value: "/settings", label: "Settings" },
-];
+import { Route, Routes, useLocation } from "react-router-dom";
+import { Box, Flex, Heading } from "@radix-ui/themes";
+import { Sidebar } from "./components/Sidebar";
+import { APP_ROUTES } from "./routes";
 
 export function App() {
   const location = useLocation();
-  const navigate = useNavigate();
+  const current = APP_ROUTES.find((route) =>
+    route.end ? route.path === location.pathname : location.pathname.startsWith(route.path)
+  );
 
   return (
-    <Box>
-      <Box style={{ borderBottom: "1px solid var(--gray-a5)" }} px="5" pt="4">
-        <Container size="3">
-          <Heading size="5" mb="3">
-            Plex Director
-          </Heading>
-          <Tabs.Root value={location.pathname} onValueChange={(value) => navigate(value)}>
-            <Tabs.List>
-              {TABS.map((tab) => (
-                <Tabs.Trigger key={tab.value} value={tab.value}>
-                  {tab.label}
-                </Tabs.Trigger>
-              ))}
-            </Tabs.List>
-          </Tabs.Root>
-        </Container>
+    <Flex style={{ minHeight: "100vh" }}>
+      <Sidebar />
+      <Box style={{ flex: 1, minWidth: 0 }}>
+        <Flex align="center" px="6" style={{ height: 56, borderBottom: "1px solid var(--gray-a5)" }}>
+          <Heading size="4">{current?.label ?? "Plex Director"}</Heading>
+        </Flex>
+        <Box px="6" py="5" style={{ maxWidth: 1200 }}>
+          <Routes>
+            {APP_ROUTES.map((route) => (
+              <Route key={route.path} path={route.path} element={route.element} />
+            ))}
+          </Routes>
+        </Box>
       </Box>
-      <Container size="3" px="5" py="5">
-        <Routes>
-          <Route path="/" element={<QueryPage />} />
-          <Route path="/status" element={<StatusPage />} />
-          <Route path="/nodes" element={<NodesPage />} />
-          <Route path="/queues" element={<QueuesPage />} />
-          <Route path="/settings" element={<SettingsPage />} />
-        </Routes>
-      </Container>
-    </Box>
+    </Flex>
   );
 }

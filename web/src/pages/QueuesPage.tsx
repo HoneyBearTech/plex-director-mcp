@@ -1,4 +1,4 @@
-import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/themes";
+import { Badge, Callout, Card, Flex, Heading, Progress, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
 
@@ -8,8 +8,6 @@ export function QueuesPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Heading size="6">Downloader Queues</Heading>
-
       <Card>
         <Heading size="4" mb="3">
           SABnzbd
@@ -35,7 +33,14 @@ export function QueuesPage() {
                 <Table.Row key={i}>
                   <Table.Cell>{item.filename}</Table.Cell>
                   <Table.Cell>{item.status}</Table.Cell>
-                  <Table.Cell>{item.percentage}%</Table.Cell>
+                  <Table.Cell>
+                    <Flex align="center" gap="2">
+                      <Progress value={item.percentage} style={{ width: 100 }} />
+                      <Text size="1" color="gray">
+                        {item.percentage}%
+                      </Text>
+                    </Flex>
+                  </Table.Cell>
                   <Table.Cell>{item.timeleft}</Table.Cell>
                 </Table.Row>
               ))}
@@ -75,7 +80,14 @@ export function QueuesPage() {
                     </Flex>
                   </Table.Cell>
                   <Table.Cell>{item.state}</Table.Cell>
-                  <Table.Cell>{(item.progress * 100).toFixed(1)}%</Table.Cell>
+                  <Table.Cell>
+                    <Flex align="center" gap="2">
+                      <Progress value={item.progress * 100} color={item.stalled ? "red" : "blue"} style={{ width: 100 }} />
+                      <Text size="1" color="gray">
+                        {(item.progress * 100).toFixed(1)}%
+                      </Text>
+                    </Flex>
+                  </Table.Cell>
                   <Table.Cell>{item.dlspeedKbps.toFixed(1)} KB/s</Table.Cell>
                   <Table.Cell>{item.seeders}</Table.Cell>
                 </Table.Row>

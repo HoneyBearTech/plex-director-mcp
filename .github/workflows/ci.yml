@@ -21,6 +21,9 @@ jobs:
         with:
           node-version: 24
           cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            web/package-lock.json
 
       - run: npm ci
 
@@ -28,6 +31,22 @@ jobs:
         run: npx tsc --noEmit
 
       - name: Dependency audit
+        run: npm audit --audit-level=high
+
+      # The web dashboard is a separate npm project from the backend above -
+      # its own tsc/vite build only otherwise runs inside the Docker image
+      # build below, which is slower and only signals failure via the whole
+      # smoke-build step. Checking it here fails fast on a plain type error.
+      - name: Install web dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Typecheck web
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Dependency audit (web)
+        working-directory: web
         run: npm audit --audit-level=high
 
   publish:

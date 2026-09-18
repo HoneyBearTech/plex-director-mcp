@@ -1,38 +1,13 @@
-export interface MovieStatus {
-  found: boolean;
-  inRadarrDatabase?: boolean;
-  title?: string;
-  year?: number;
-  monitored?: boolean;
-  status?: string;
-  hasFile?: boolean;
-  path?: string | null;
-  overview?: string | null;
-  posterUrl?: string | null;
-}
-
-export interface DiagnoseStep {
-  step: string;
-  status: "ok" | "warn" | "error" | "info";
-  detail: string;
-}
-
-export interface SearchResult {
-  tmdbId: number;
-  title: string;
-  year: string | null;
-  overview: string | null;
-  posterUrl: string | null;
-}
-
 export interface PlexSession {
   user: string;
+  userThumb: string | null;
   title: string;
   year: number | null;
   resolution: string;
   container: string;
   transcoding: boolean;
   progress: number;
+  posterUrl: string | null;
 }
 
 export interface PlexActivity {
@@ -45,12 +20,13 @@ export interface PlexActivity {
 export interface LibraryAnalytics {
   categories: Array<{
     title: string;
-    rows: Array<{ label: string; plays: number }>;
+    rows: Array<{ label: string; plays: number; posterUrl: string | null; userThumb: string | null }>;
   }>;
 }
 
 export interface NodeHealth {
   host: string;
+  hostname: string;
   online: boolean;
   cpuPercent?: number;
   ramPercent?: number;
@@ -58,6 +34,10 @@ export interface NodeHealth {
   ramTotalMb?: number;
   containersRunning?: number;
   deadContainers?: string[];
+  diskPercent?: number;
+  diskUsed?: string;
+  diskTotal?: string;
+  uptime?: string;
 }
 
 export interface SabnzbdItem {
@@ -94,6 +74,16 @@ export interface SettingsResponse {
 
 export type SettingsService = keyof SettingsResponse;
 
+export interface ChatImage {
+  mimeType: string;
+  data: string;
+}
+
+export interface ChatAnswer {
+  text: string;
+  images: ChatImage[];
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   const data = await response.json();
@@ -115,10 +105,21 @@ async function putJson(url: string, body: Record<string, string>): Promise<void>
   }
 }
 
+async function postJson<T>(url: string, body: Record<string, unknown>): Promise<T> {
+  const response = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  const data = await response.json();
+  if (!response.ok) {
+    throw new Error(data?.error ?? `Request failed: ${response.status}`);
+  }
+  return data as T;
+}
+
 export const api = {
-  movieStatus: (title: string) => getJson<MovieStatus>(`/api/movies/status?title=${encodeURIComponent(title)}`),
-  movieDiagnose: (title: string) => getJson<{ steps: DiagnoseStep[] }>(`/api/movies/diagnose?title=${encodeURIComponent(title)}`),
-  movieSearch: (query: string) => getJson<{ results: SearchResult[] }>(`/api/movies/search?query=${encodeURIComponent(query)}`),
+  chatWithMovies: (question: string) => postJson<ChatAnswer>("/api/chat/movies", { question }),
   plexActivity: () => getJson<PlexActivity>("/api/status/activity"),
   libraryAnalytics: () => getJson<LibraryAnalytics>("/api/status/library-analytics"),
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
