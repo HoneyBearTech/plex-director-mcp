@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { tautulliClient } from "../../clients.js";
-import { getErrorMessage } from "../../util.js";
+import { getErrorMessage, rowLabel, rowPlays } from "../../util.js";
 
 export const statusRouter = Router();
 
@@ -12,32 +12,6 @@ export const statusRouter = Router();
 function posterProxyUrl(imgPath: string | undefined | null): string | null {
   if (!imgPath) return null;
   return `/api/status/image?path=${encodeURIComponent(imgPath)}`;
-}
-
-// get_home_stats rows share one shape across very different category types
-// (media titles, users, platforms, libraries, a synthetic "concurrent
-// streams" row), so the field that actually identifies each row - and its
-// play count - varies by category rather than by which fields happen to be
-// populated on any given row.
-function rowLabel(statId: string, item: any): string {
-  switch (statId) {
-    case "top_users":
-      return item.friendly_name || item.user || item.username || "Unknown";
-    case "top_platforms":
-      return item.platform || item.platform_name || "Unknown";
-    case "top_libraries":
-      return item.section_name || item.library_name || "Unknown";
-    case "most_concurrent":
-      return item.title || "Unknown";
-    default:
-      // top_movies, popular_movies, top_tv, popular_tv, top_music,
-      // popular_music, last_watched - the media title, not who watched it.
-      return item.grandparent_title || item.title || "Unknown";
-  }
-}
-
-function rowPlays(item: any): number {
-  return item.total_plays ?? item.play_count ?? item.count ?? 0;
 }
 
 // Only one image makes sense per row, matching whatever rowLabel picked -
