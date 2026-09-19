@@ -40,7 +40,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 
 ## What it can do
 
-- **Find what you own.** Search your Plex library by genre, actor, title, year and library (for example just the 4K libraries) across every movie library at once. A movie held in both HD and 4K is one result with both libraries shown.
+- **Find what you own.** Search your Plex library, movies and TV shows, by genre, actor, title, year and library (for example just the 4K libraries) across every library at once. A title held in both HD and 4K is one result with both libraries shown, and shows come with their season and episode counts and how much you have watched. You can leave a library such as Sports out of searches unless you name it.
 - **Owned versus missing.** Look up an actor's TMDb filmography and see which of those movies are in Plex and which are not, optionally narrowed by year range, or by "in 4K".
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
@@ -243,6 +243,7 @@ Nothing is required to start the container: it boots with no configuration and l
 | `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` | qBittorrent Web UI. |
 | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Tautulli, for streams and watch statistics. |
 | `PLEX_URL`, `PLEX_TOKEN` | Plex, for searching what you own. |
+| `PLEX_SKIP_LIBRARIES` | *Optional.* Comma-separated Plex library names to leave out of searches (whole names, any case), e.g. `Sports`. A library you name in a question, such as "in Sports", is still searched. Blank searches every library. Also on the Plex tab of the Settings page. |
 | `TMDB_API_KEY` | TMDb **API Read Access Token**, for actor filmographies and the movie-choice grid. |
 | `UBUNTU_HOSTS` | Comma-separated hosts to monitor over SSH, e.g. `192.168.1.10,192.168.1.11`. Add `:port` for a non-standard SSH port (`192.168.1.10:2222`). |
 | `SSH_USER` | The SSH user for those hosts. |
@@ -391,7 +392,7 @@ The dashboard runs on `WEB_PORT` (default `3000`) in the same process as the MCP
 
 | Page | What it shows |
 | :--- | :--- |
-| **Query** | A chat box that answers questions about your library using Claude and your services. Search results appear as a table with posters, showing the first 50 with a button to expand. Follow-up questions keep the context; **New chat** starts over. Needs `ANTHROPIC_API_KEY`. |
+| **Query** | A chat box that answers questions about your library using Claude and your services. Search results appear as a table with posters (shows add seasons, episodes and watch progress), showing the first 50 with a button to expand. Follow-up questions keep the context; **New chat** starts over. Needs `ANTHROPIC_API_KEY`. |
 | **Server Status** | Live Plex streams and watch statistics (from Tautulli). |
 | **Node Utilization** | CPU, memory, disk, uptime and container health for each SSH host. A host that is unreachable shows why; a host whose SSH key changed is flagged with a **Trust new key** button (see [Security](#security)). |
 | **Queues** | The SABnzbd and qBittorrent download queues. |
@@ -411,7 +412,7 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 
 | Tool | What it does |
 | :--- | :--- |
-| ★ `search_plex_library` | Searches the movies in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all movie libraries. Paged for large results. |
+| ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Paged for large results. |
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography with each movie marked as in Plex or not, filterable by year range, owned/missing, and library. |
 | ★ `check_movie_status` | Whether a movie is in Radarr, and its monitoring status, with artwork. |
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |

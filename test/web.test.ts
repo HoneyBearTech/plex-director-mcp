@@ -4,6 +4,8 @@ import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { plexClient, prowlarrClient, qbitClient } from "../src/clients.js";
 import { db } from "../src/db.js";
 import { getSetting, setSetting } from "../src/settings.js";
+import { buildHistoryMessages } from "../src/web/chat.js";
+import { parseHistory } from "../src/web/routes/chat.js";
 import { fakeApi, resetDb, startApp } from "./helpers.js";
 
 let app: Awaited<ReturnType<typeof startApp>>;
@@ -59,6 +61,14 @@ describe("settings API", () => {
     assert.equal(body.radarr.defaultQualityProfile, "Remux + WEB 1080p");
     await send("PUT", "/api/settings/radarr", { defaultQualityProfile: "" });
     assert.equal(((await (await get("/api/settings")).json()) as any).radarr.defaultQualityProfile, "", "it can be cleared back to 'first profile'");
+  });
+
+  it("saves and returns the libraries to leave out of Plex searches as a plain (non-secret) field", async () => {
+    await send("PUT", "/api/settings/plex", { skipLibraries: "  Sports, Kid's TV Shows " });
+    assert.equal(getSetting("PLEX_SKIP_LIBRARIES"), "Sports, Kid's TV Shows");
+    assert.equal(((await (await get("/api/settings")).json()) as any).plex.skipLibraries, "Sports, Kid's TV Shows");
+    await send("PUT", "/api/settings/plex", { skipLibraries: "" });
+    assert.equal(((await (await get("/api/settings")).json()) as any).plex.skipLibraries, "", "it can be cleared to search everything");
   });
 
   it("saves trimmed values", async () => {
@@ -212,6 +222,44 @@ describe("chat API", () => {
     const res = await send("POST", "/api/chat/movies", { question: "hi", history: [null, 5, { role: "system" }, { role: "user", text: 3 }] });
     assert.equal(res.status, 502);
     assert.match(((await res.json()) as any).error, /ANTHROPIC_API_KEY is not configured/);
+  });
+});
+
+describe("chat history from the browser", () => {
+  it("keeps a table's movies and shows, telling shows apart, so follow-ups can refer to them", () => {
+    const turns = parseHistory([
+      { role: "user", text: "what do I have with Bryan Cranston?" },
+      {
+        role: "assistant",
+        text: "See the table below.",
+        media: [
+          { kind: "show", title: "Breaking Bad", year: 2008, libraries: ["TV Shows", "4k TV Shows"], posterUrl: "javascript:alert(1)", genres: ["Drama"] },
+          { kind: "movie", title: "Argo", year: 2012, libraries: ["Movies"] },
+          { title: "Kind missing", year: "2020", libraries: "nope" },
+          { kind: "bogus", title: "Kind wrong" },
+          { kind: "show" },
+          "junk",
+        ],
+      },
+    ]);
+    const media = turns[1]!.media!;
+    assert.deepEqual(media.map((m) => [m.kind, m.title, m.year, m.libraries]), [
+      ["show", "Breaking Bad", 2008, ["TV Shows", "4k TV Shows"]],
+      ["movie", "Argo", 2012, ["Movies"]],
+      ["movie", "Kind missing", null, null],
+      ["movie", "Kind wrong", null, null],
+    ]);
+    assert.ok(media.every((m) => m.posterUrl === null && m.genres.length === 0), "only the fields the summary needs survive");
+    const summary = String(buildHistoryMessages(turns)[1]!.content);
+    assert.match(summary, /Breaking Bad \(2008\) \[TV show\] - in Plex: TV Shows, 4k TV Shows; Argo \(2012\) - in Plex: Movies/);
+  });
+
+  it("ignores the old 'movies' field from a browser tab opened before this version, without failing", () => {
+    const turns = parseHistory([
+      { role: "user", text: "q" },
+      { role: "assistant", text: "a", movies: [{ title: "Heat", year: 1995, libraries: ["Movies"] }] },
+    ]);
+    assert.deepEqual(turns, [{ role: "user", text: "q" }, { role: "assistant", text: "a" }]);
   });
 });
 

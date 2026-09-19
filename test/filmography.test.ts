@@ -68,7 +68,7 @@ afterEach(() => {
 });
 
 const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
-const rows = (r: any) => r.structuredContent.movies as Array<Record<string, any>>;
+const rows = (r: any) => r.structuredContent.media as Array<Record<string, any>>;
 
 describe("resolveActorFilmography", () => {
   it("drops self appearances, uncredited roles, documentaries and archive footage; newest first", async () => {

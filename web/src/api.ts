@@ -71,7 +71,7 @@ export interface SettingsResponse {
   sabnzbd: { url: string; apiKey: SecretField };
   qbittorrent: { url: string; username: string; password: SecretField };
   tautulli: { url: string; apiKey: SecretField };
-  plex: { url: string; token: SecretField };
+  plex: { url: string; token: SecretField; skipLibraries: string };
   tmdb: { apiKey: SecretField };
   nodes: { hosts: string; sshUser: string };
 }
@@ -83,8 +83,9 @@ export interface ChatImage {
   data: string;
 }
 
-// Mirrors MovieRow in src/tools/plex.ts.
-export interface MovieRow {
+// Mirrors MediaRow in src/tools/plex.ts.
+export interface MediaRow {
+  kind: "movie" | "show";
   title: string;
   year: number | null;
   posterUrl: string | null;
@@ -93,18 +94,25 @@ export interface MovieRow {
   genres: string[];
   rating: number | null;
   detail: string | null;
+  // Only on shows.
+  show?: {
+    seasons: number | null;
+    episodes: number | null;
+    watchedEpisodes: number | null;
+    network: string | null;
+  };
 }
 
 export interface ChatHistoryTurn {
   role: "user" | "assistant";
   text: string;
-  movies?: MovieRow[];
+  media?: MediaRow[];
 }
 
 export interface ChatAnswer {
   text: string;
   images: ChatImage[];
-  movies: MovieRow[];
+  media: MediaRow[];
 }
 
 // Mirrors the /api/jobs response in src/web/routes/jobs.ts.

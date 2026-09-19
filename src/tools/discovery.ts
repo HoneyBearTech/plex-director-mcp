@@ -4,7 +4,7 @@ import { db } from "../db.js";
 import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 import { getSetting, isConfigured } from "../settings.js";
-import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
+import { getOwnedTmdbIndex, type MediaRow } from "./plex.js";
 import { getIndexerHealth } from "../indexers.js";
 
 const DEFAULT_FILMOGRAPHY_LIMIT = 15;
@@ -116,7 +116,8 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 
     // Same titles as the text list, for the web UI's results table. TMDb
     // posters are public, so they can be loaded directly (unlike Plex's).
-    const movies: MovieRow[] = matching.slice(0, limit).map((movie: any) => ({
+    const media: MediaRow[] = matching.slice(0, limit).map((movie: any) => ({
+      kind: "movie",
       title: String(movie.title),
       year: movie.release_date ? Number(movie.release_date.split("-")[0]) : null,
       posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w154${movie.poster_path}` : null,
@@ -126,7 +127,7 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
       detail: movie.character ? `As ${movie.character}` : null,
     }));
 
-    return { ...textReply(output), structuredContent: { movies } };
+    return { ...textReply(output), structuredContent: { media } };
   } catch (error: unknown) {
     return textReply(`TMDb Resolution failed: ${getErrorMessage(error)}`, true);
   }

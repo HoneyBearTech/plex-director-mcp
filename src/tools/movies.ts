@@ -195,26 +195,30 @@ export const movieTools: MovieTool[] = [
   {
     name: "search_plex_library",
     description:
-      "Searches the movies actually in the user's Plex library (across all movie libraries, including 4K) by genre, actor, title, release year, and/or library. Filters can be combined, e.g. genre 'Horror' with year 1982, or genre 'Horror' with library '4k'. Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie. " +
+      "Searches the movies and TV shows actually in the user's Plex library (across all movie and show libraries, including 4K) by genre, actor, title, release year, and/or library. Filters can be combined, e.g. genre 'Horror' with year 1982, or genre 'Horror' with library '4k'. " +
+      "Pass mediaType 'movie' when the user asks about movies/films, 'show' for TV/series/shows, and leave it out (any) when the question is about titles in general, e.g. everything with an actor; a show in several libraries is one result, with its season and episode counts. Some libraries (such as Sports) may be left out unless named in the library filter. " +
+      "Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie. " +
       "Always express a narrowing the user asks for (4K, a genre, a year...) as a filter here rather than filtering results yourself, because the results table shown to the user contains exactly the rows this returns. " +
       "The default limit is small: when the user wants everything ('all', 'every', 'list them'), pass limit 500; if the reply says more matches remain, call again with the offset it gives.",
     zodSchema: {
-      title: z.string().optional().describe("Part of the movie title."),
+      title: z.string().optional().describe("Part of the movie or show title."),
+      mediaType: z.enum(["movie", "show", "any"]).optional().describe("Search only movies, only TV shows, or both (default any)."),
       genre: z.string().optional().describe("Genre name, e.g. 'Horror' or 'Science Fiction'."),
       actor: z.string().optional().describe("Full actor name, e.g. 'Harrison Ford'."),
-      year: z.number().int().optional().describe("Release year."),
-      library: z.string().optional().describe("Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'documentaries'."),
+      year: z.number().int().optional().describe("Release year (a show's first air year)."),
+      library: z.string().optional().describe("Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'anime', 'sports'."),
       limit: z.number().int().min(1).max(500).optional().describe("Maximum results to return (default 25, max 500)."),
       offset: z.number().int().min(0).optional().describe("Matches to skip, to fetch the next page of a long result."),
     },
     inputSchema: {
       type: "object" as const,
       properties: {
-        title: { type: "string", description: "Part of the movie title." },
+        title: { type: "string", description: "Part of the movie or show title." },
+        mediaType: { type: "string", enum: ["movie", "show", "any"], description: "Search only movies, only TV shows, or both (default any)." },
         genre: { type: "string", description: "Genre name, e.g. 'Horror' or 'Science Fiction'." },
         actor: { type: "string", description: "Full actor name, e.g. 'Harrison Ford'." },
-        year: { type: "integer", description: "Release year." },
-        library: { type: "string", description: "Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'documentaries'." },
+        year: { type: "integer", description: "Release year (a show's first air year)." },
+        library: { type: "string", description: "Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'anime', 'sports'." },
         limit: { type: "integer", description: "Maximum results to return (default 25, max 500)." },
         offset: { type: "integer", description: "Matches to skip, to fetch the next page of a long result." },
       },
