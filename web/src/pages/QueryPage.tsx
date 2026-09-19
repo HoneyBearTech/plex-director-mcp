@@ -43,12 +43,19 @@ function PosterThumb({ src, title }: { src: string | null; title: string }) {
 // Search results as a table with the poster next to each movie. "In Plex"
 // only appears when a tool actually checked ownership (libraries !== null).
 function MovieTable({ movies }: { movies: MovieRow[] }) {
+  const distinctCount = new Set(movies.map((m) => `${m.title}|${m.year}`)).size;
   const showOwnership = movies.some((m) => m.libraries !== null);
   const showRating = movies.some((m) => m.rating !== null);
   const showDetail = movies.some((m) => m.genres.length > 0 || m.detail);
 
   return (
-    <Table.Root size="1" variant="surface" style={{ marginTop: 8 }}>
+    <>
+    <Text as="p" size="1" color="gray" mt="2">
+      {distinctCount === movies.length
+        ? `${movies.length} ${movies.length === 1 ? "movie" : "movies"}`
+        : `${movies.length} rows · ${distinctCount} distinct movies (some are held in more than one library)`}
+    </Text>
+    <Table.Root size="1" variant="surface" style={{ marginTop: 4 }}>
       <Table.Header>
         <Table.Row>
           <Table.ColumnHeaderCell width="56px" />
@@ -90,6 +97,7 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
         ))}
       </Table.Body>
     </Table.Root>
+    </>
   );
 }
 

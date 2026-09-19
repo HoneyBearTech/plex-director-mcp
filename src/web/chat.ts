@@ -13,9 +13,28 @@ const SYSTEM_PROMPT =
   "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. " +
   "Use the available tools to answer questions about the movie library - never guess. Be concise and direct. " +
   "Tool results are authoritative: report every row a tool returns rather than filtering or dropping rows based on your own knowledge of the movie. " +
-  "When a search tool returns a list of movies, the interface already displays them as a table with posters, so do not list the titles again in your reply - refer to the table (e.g. \"see the table below\") and add only a brief summary or remark. " +
+  "When a search tool returns a list of movies, the interface already displays them as a table with posters, so do not list the titles again in your reply - refer to it as the table below your reply (it is displayed directly under your text, so never say \"above\") and add only a brief summary or remark. " +
   "Earlier messages in the conversation are included, so follow-ups such as \"what about the sequel?\" or \"which of those are in 4K?\" refer to them; a bracketed \"[Table shown to the user ...]\" note in an earlier answer lists the rows the user saw. " +
-  "Use a tool's own filters (year range, owned/missing, genre, actor) to narrow results to exactly what was asked, since the table shows every row the tool returns.";
+  "Use a tool's own filters (year range, owned/missing, genre, actor, library such as 4K) to narrow results to exactly what was asked - never filter a tool's results yourself in your reply, since the table shows every row the tool returns. " +
+  "For a follow-up like \"which of those are 4K?\", run the search again with the earlier filters plus the new one (e.g. library \"4k\") so the table shows exactly that set. " +
+  "If the user asks for everything, request the maximum limit, and if the tool says more matches remain, fetch the next page with the offset it gives.";
+
+// What the results table should show after a tool call. A new search replaces
+// what was there - the model often runs a broad search, then a narrower one,
+// and the user should see only the set the answer is about, not both. Only a
+// page continuation (offset > 0) adds to the previous rows, and it skips rows
+// already in the table: the model only reads the first 100 rows of a long
+// result and has been seen asking for "the rest" that the user already had.
+export function mergeToolRows(current: MovieRow[], structured: unknown): MovieRow[] {
+  const content = structured as { movies?: unknown; append?: unknown } | undefined;
+  if (!content || !Array.isArray(content.movies)) return current;
+  const rows = content.movies as MovieRow[];
+  if (content.append !== true) return rows;
+
+  const key = (m: MovieRow) => `${m.title}|${m.year}|${(m.libraries ?? []).join(",")}`;
+  const seen = new Set(current.map(key));
+  return [...current, ...rows.filter((m) => !seen.has(key(m)))];
+}
 
 // A previous message in the conversation, as sent back by the browser.
 export interface ChatTurn {
@@ -141,8 +160,7 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
         ? await tool.handler(use.input as { title: string })
         : { content: [{ type: "text" as const, text: `Unknown tool "${use.name}"` }], isError: true };
 
-      const rows = result.structuredContent?.movies;
-      if (Array.isArray(rows)) movies.push(...(rows as MovieRow[]));
+      movies.splice(0, movies.length, ...mergeToolRows(movies, result.structuredContent));
 
       const content: ToolResultBlockParam["content"] = [];
       for (const block of result.content) {

@@ -1,7 +1,7 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHistoryMessages } from "../src/web/chat.js";
+import { buildHistoryMessages, mergeToolRows } from "../src/web/chat.js";
 import type { MovieRow } from "../src/tools/plex.js";
 
 const row = (title: string, libraries: string[] | null, year: number | null = 2000): MovieRow => ({
@@ -78,3 +78,35 @@ describe("buildHistoryMessages", () => {
     assert.deepEqual(messages.map((m) => m.content), ["real"]);
   });
 });
+
+// Regression: after a follow-up, the table showed the previous question's rows again,
+// because every tool call's rows were piled onto the answer's table.
+describe("mergeToolRows", () => {
+  const a = [row("A", ["Movies"]), row("B", ["Movies"])];
+  const b = [row("C", ["4k Movies"])];
+
+  it("a new search replaces the table instead of adding to it", () => {
+    assert.deepEqual(mergeToolRows(a, { movies: b, append: false }), b);
+    assert.deepEqual(mergeToolRows(a, { movies: b }), b);
+  });
+  it("a page continuation appends to the previous rows", () => {
+    assert.deepEqual(mergeToolRows(a, { movies: b, append: true }), [...a, ...b]);
+  });
+  it("a continuation skips rows already in the table (the model re-requested rows the user had)", () => {
+    const overlap = [row("B", ["Movies"]), row("C", ["4k Movies"])];
+    assert.deepEqual(mergeToolRows(a, { movies: overlap, append: true }), [...a, row("C", ["4k Movies"])]);
+    assert.deepEqual(mergeToolRows(a, { movies: a, append: true }), a, "a fully repeated page adds nothing");
+  });
+  it("the same movie in a different library is a different row", () => {
+    assert.deepEqual(mergeToolRows(a, { movies: [row("A", ["4k Movies"])], append: true }).length, 3);
+  });
+  it("keeps the current rows when a tool returns no structured rows (errors, other tools)", () => {
+    assert.deepEqual(mergeToolRows(a, undefined), a);
+    assert.deepEqual(mergeToolRows(a, {}), a);
+    assert.deepEqual(mergeToolRows(a, { movies: "nope" }), a);
+  });
+  it("an empty replacement clears the table", () => {
+    assert.deepEqual(mergeToolRows(a, { movies: [], append: false }), []);
+  });
+});
+

@@ -195,13 +195,17 @@ export const movieTools: MovieTool[] = [
   {
     name: "search_plex_library",
     description:
-      "Searches the movies actually in the user's Plex library (across all movie libraries, including 4K) by genre, actor, title, and/or release year. Filters can be combined, e.g. genre 'Horror' with year 1982. Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie.",
+      "Searches the movies actually in the user's Plex library (across all movie libraries, including 4K) by genre, actor, title, release year, and/or library. Filters can be combined, e.g. genre 'Horror' with year 1982, or genre 'Horror' with library '4k'. Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie. " +
+      "Always express a narrowing the user asks for (4K, a genre, a year...) as a filter here rather than filtering results yourself, because the results table shown to the user contains exactly the rows this returns. " +
+      "The default limit is small: when the user wants everything ('all', 'every', 'list them'), pass limit 500; if the reply says more matches remain, call again with the offset it gives.",
     zodSchema: {
       title: z.string().optional().describe("Part of the movie title."),
       genre: z.string().optional().describe("Genre name, e.g. 'Horror' or 'Science Fiction'."),
       actor: z.string().optional().describe("Full actor name, e.g. 'Harrison Ford'."),
       year: z.number().int().optional().describe("Release year."),
-      limit: z.number().int().min(1).max(100).optional().describe("Maximum results to return (default 25)."),
+      library: z.string().optional().describe("Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'documentaries'."),
+      limit: z.number().int().min(1).max(500).optional().describe("Maximum results to return (default 25, max 500)."),
+      offset: z.number().int().min(0).optional().describe("Matches to skip, to fetch the next page of a long result."),
     },
     inputSchema: {
       type: "object" as const,
@@ -210,7 +214,9 @@ export const movieTools: MovieTool[] = [
         genre: { type: "string", description: "Genre name, e.g. 'Horror' or 'Science Fiction'." },
         actor: { type: "string", description: "Full actor name, e.g. 'Harrison Ford'." },
         year: { type: "integer", description: "Release year." },
-        limit: { type: "integer", description: "Maximum results to return (default 25)." },
+        library: { type: "string", description: "Only search Plex libraries whose name contains this text, e.g. '4k' for the 4K libraries, 'kids', 'documentaries'." },
+        limit: { type: "integer", description: "Maximum results to return (default 25, max 500)." },
+        offset: { type: "integer", description: "Matches to skip, to fetch the next page of a long result." },
       },
       required: [] as string[],
     },
@@ -226,6 +232,7 @@ export const movieTools: MovieTool[] = [
       yearFrom: z.number().int().optional().describe("Only titles released in or after this year."),
       yearTo: z.number().int().optional().describe("Only titles released in or before this year."),
       show: z.enum(["all", "owned", "missing"]).optional().describe("Only titles the user has in Plex ('owned'), only those they don't ('missing'), or both (default)."),
+      library: z.string().optional().describe("Judge ownership only against Plex libraries whose name contains this text, e.g. '4k': 'owned' then means held in a 4K library and 'missing' means not held in any."),
     },
     inputSchema: {
       type: "object" as const,
@@ -235,6 +242,7 @@ export const movieTools: MovieTool[] = [
         yearFrom: { type: "integer", description: "Only titles released in or after this year." },
         yearTo: { type: "integer", description: "Only titles released in or before this year." },
         show: { type: "string", enum: ["all", "owned", "missing"], description: "Only titles the user has in Plex ('owned'), only those they don't ('missing'), or both (default)." },
+        library: { type: "string", description: "Judge ownership only against Plex libraries whose name contains this text, e.g. '4k': 'owned' then means held in a 4K library and 'missing' means not held in any." },
       },
       required: ["actorName"],
     },
