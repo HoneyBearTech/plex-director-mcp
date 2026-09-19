@@ -8,6 +8,7 @@ import { queuesRouter } from "./routes/queues.js";
 import { settingsRouter } from "./routes/settings.js";
 import { chatRouter } from "./routes/chat.js";
 import { plexRouter } from "./routes/plex.js";
+import { indexersRouter } from "./routes/indexers.js";
 import { jobsRouter } from "./routes/jobs.js";
 
 export function createWebApp() {
@@ -36,6 +37,7 @@ export function createWebApp() {
   app.use("/api/settings", settingsRouter);
   app.use("/api/chat", chatRouter);
   app.use("/api/plex", plexRouter);
+  app.use("/api/indexers", indexersRouter);
   app.use("/api/jobs", jobsRouter);
 
   // Anything under /api that didn't match a router above is a missing or
