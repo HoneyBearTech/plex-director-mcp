@@ -575,3 +575,124 @@ export function resetOwnedTmdbIndexCache(): void {
   delete ownedIndexCache.movie;
   delete ownedIndexCache.show;
 }
+
+export interface OnDeckArgs {
+  // Only movies, only shows (their next episodes), or both (the default).
+  mediaType?: "movie" | "show" | "any";
+  // Only titles from libraries whose name contains this text (case-insensitive).
+  library?: string;
+  // Only a movie or show whose title contains this text (case-insensitive).
+  title?: string;
+  limit?: number;
+}
+
+const DEFAULT_DECK_LIMIT = 10;
+// Plex reports at most this many On Deck items.
+const MAX_DECK_LIMIT = 50;
+
+// Plex's "Continue Watching": for shows the episode to watch next (or the one
+// half watched), for movies the ones partly played, most recent first. Answers
+// "what should I watch next?". Like the watch filters in searchPlexLibrary it
+// is for the Plex account the app is connected with. A title held in HD and 4K
+// shows up once per library in Plex; here it is one entry listing both.
+export async function getOnDeck(args: OnDeckArgs = {}) {
+  if (!isConfigured("PLEX")) {
+    return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
+  }
+  const mediaType = args.mediaType ?? "any";
+  const limit = Math.min(Math.max(Math.trunc(args.limit ?? DEFAULT_DECK_LIMIT), 1), MAX_DECK_LIMIT);
+
+  try {
+    const response = await plexClient.get("/library/onDeck", { params: { "X-Plex-Container-Start": 0, "X-Plex-Container-Size": MAX_DECK_LIMIT } });
+    const raw: any[] = (response.data?.MediaContainer?.Metadata ?? []).filter((item: any) => item.type === "episode" || item.type === "movie");
+    const kindOf = (item: any): MediaKind => (item.type === "episode" ? "show" : "movie");
+
+    let items = raw.filter((item) => mediaType === "any" || kindOf(item) === mediaType);
+    if (args.library) {
+      const wanted = args.library.trim().toLowerCase();
+      const present = [...new Set(items.map((item) => String(item.librarySectionTitle ?? "")).filter(Boolean))];
+      items = items.filter((item) => String(item.librarySectionTitle ?? "").toLowerCase().includes(wanted));
+      if (items.length === 0) {
+        return textReply(`Nothing on deck in a library matching "${args.library}". Libraries with something on deck: ${present.join(", ") || "none"}.`);
+      }
+    }
+
+    if (args.title?.trim()) {
+      const wanted = args.title.trim().toLowerCase();
+      items = items.filter((item) => String(kindOf(item) === "show" ? item.grandparentTitle : item.title).toLowerCase().includes(wanted));
+      if (items.length === 0) {
+        return textReply(`Nothing on deck matches "${args.title}". Plex lists a show here only once it has been started and has an episode left to watch, and a movie only while it is part way through.`);
+      }
+    }
+
+    // One entry per movie or show, however many libraries hold it.
+    interface Entry {
+      item: any;
+      kind: MediaKind;
+      libraries: string[];
+    }
+    const entries: Entry[] = [];
+    const byTitle = new Map<string, Entry>();
+    for (const item of items) {
+      const kind = kindOf(item);
+      const key = kind === "show" ? `show:${item.grandparentGuid ?? item.grandparentTitle}` : `movie:${item.guid ?? `${item.title}|${item.year}`}`;
+      const library = String(item.librarySectionTitle ?? "");
+      const existing = byTitle.get(key);
+      if (existing) {
+        if (library && !existing.libraries.includes(library)) existing.libraries.push(library);
+      } else {
+        const entry: Entry = { item, kind, libraries: library ? [library] : [] };
+        entries.push(entry);
+        byTitle.set(key, entry);
+      }
+    }
+
+    const noun = mediaType === "any" ? "movies or shows" : `${mediaType}s`;
+    if (entries.length === 0) {
+      return textReply(`Nothing is on deck in Plex${mediaType === "any" ? "" : ` for ${noun}`}.`);
+    }
+
+    const listed = entries.slice(0, limit);
+    const describe = ({ item, kind }: Entry) => {
+      const played = numberOrNull(item.viewOffset) ?? 0;
+      const duration = numberOrNull(item.duration);
+      const percent = played > 0 && duration ? Math.min(99, Math.round((played / duration) * 100)) : null;
+      const date = isoDay(numberOrNull(item.lastViewedAt));
+      const state = played > 0 ? `${percent !== null ? `${percent}% watched` : "partly watched"}${date ? `, last watched ${date}` : ""}` : `next up${date ? `, last activity ${date}` : ""}`;
+      const episode = kind === "show" ? `S${item.parentIndex}E${String(item.index).padStart(2, "0")}${item.title ? ` "${item.title}"` : ""}` : null;
+      return { played, date, state, episode };
+    };
+
+    let output = `## On deck in Plex (the "continue watching" list): ${entries.length} ${entries.length === 1 ? "item" : "items"}\n`;
+    output += "Most recently active first. Each line is one movie, or the next episode of one show; the user sees the same list in a table below your reply. This is Plex's short On Deck list (at most 50 recent items), NOT every unfinished title: for a complete list of what is unwatched or unfinished use search_plex_library with its watched filter. Watch state is for the Plex account the app is connected with.\n";
+    if (entries.length > listed.length) output += `Listed the first ${listed.length}; ${entries.length - listed.length} more are not listed (limit up to ${MAX_DECK_LIMIT}).\n`;
+    output += "\n";
+    for (const entry of listed) {
+      const { item, kind, libraries } = entry;
+      const { state, episode } = describe(entry);
+      const name = kind === "show" ? `${item.grandparentTitle ?? "Unknown show"} ${episode}` : `${item.title}${item.year ? ` (${item.year})` : ""}`;
+      output += `- ${name} - ${libraries.join(", ")} - ${state}\n`;
+    }
+
+    const media: MediaRow[] = listed.map((entry) => {
+      const { item, kind, libraries } = entry;
+      const { played, date, state, episode } = describe(entry);
+      const row: MediaRow = {
+        kind,
+        title: String(kind === "show" ? (item.grandparentTitle ?? "Unknown show") : item.title),
+        year: kind === "movie" && typeof item.year === "number" ? item.year : null,
+        posterUrl: plexPosterUrl(kind === "show" ? (item.grandparentThumb ?? item.thumb) : item.thumb),
+        libraries,
+        genres: [],
+        rating: null,
+        detail: kind === "show" ? `${episode} - ${state}` : state,
+      };
+      if (played > 0 && date) row.lastWatched = date;
+      return row;
+    });
+
+    return { ...textReply(output), structuredContent: { media, append: false } };
+  } catch (error: unknown) {
+    return textReply(`Failed to read On Deck from Plex: ${getErrorMessage(error)}`, true);
+  }
+}
