@@ -1,10 +1,11 @@
 import type { ReactNode } from "react";
-import { ActivityLogIcon, ChatBubbleIcon, DesktopIcon, DownloadIcon, GearIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
+import { ActivityLogIcon, ChatBubbleIcon, ClockIcon, DesktopIcon, DownloadIcon, GearIcon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { QueryPage } from "./pages/QueryPage";
 import { StatusPage } from "./pages/StatusPage";
 import { NodesPage } from "./pages/NodesPage";
 import { QueuesPage } from "./pages/QueuesPage";
 import { IndexersPage } from "./pages/IndexersPage";
+import { JobsPage } from "./pages/JobsPage";
 import { SettingsPage } from "./pages/SettingsPage";
 
 export interface AppRoute {
@@ -23,5 +24,6 @@ export const APP_ROUTES: AppRoute[] = [
   { path: "/nodes", label: "Node Utilization", icon: <DesktopIcon width={18} height={18} />, element: <NodesPage /> },
   { path: "/queues", label: "Queues", icon: <DownloadIcon width={18} height={18} />, element: <QueuesPage /> },
   { path: "/indexers", label: "Indexers", icon: <MagnifyingGlassIcon width={18} height={18} />, element: <IndexersPage /> },
+  { path: "/jobs", label: "Jobs", icon: <ClockIcon width={18} height={18} />, element: <JobsPage /> },
   { path: "/settings", label: "Settings", icon: <GearIcon width={18} height={18} />, element: <SettingsPage /> },
 ];

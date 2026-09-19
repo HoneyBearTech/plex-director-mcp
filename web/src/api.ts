@@ -98,6 +98,17 @@ export interface ChatAnswer {
   movies: MovieRow[];
 }
 
+// Mirrors the /api/jobs response in src/web/routes/jobs.ts.
+export interface BackgroundJob {
+  id: number;
+  taskName: string;
+  status: string;
+  totalItems: number;
+  processedItems: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 export type IndexerState = "healthy" | "warning" | "backing-off" | "disabled";
 
 // Mirrors IndexerRow / IndexerHealth in src/indexers.ts.
@@ -160,6 +171,7 @@ export const api = {
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
   indexerHealth: () => getJson<IndexerHealth>("/api/indexers/health"),
+  backgroundJobs: () => getJson<{ jobs: BackgroundJob[] }>("/api/jobs"),
   getSettings: () => getJson<SettingsResponse>("/api/settings"),
   updateSettings: (service: SettingsService, body: Record<string, string>) =>
     putJson(`/api/settings/${service}`, body),
