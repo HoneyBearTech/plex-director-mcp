@@ -90,11 +90,11 @@ describe("stdout stays clean for MCP", () => {
       }
       const tools = JSON.parse(lines.find((l) => l.includes('"id":2'))!).result.tools.map((t: { name: string }) => t.name);
       assert.ok(tools.includes("search_plex_library") && tools.includes("check_indexer_health"), `tools: ${tools}`);
-      for (const name of ["check_series_completeness", "find_series_gaps", "check_series_status", "diagnose_missing_episodes", "get_upcoming_episodes", "get_on_deck", "search_episodes"]) {
+      for (const name of ["check_series_completeness", "find_series_gaps", "check_series_status", "diagnose_missing_episodes", "get_upcoming_episodes", "get_on_deck", "search_episodes", "find_series_by_quality"]) {
         assert.ok(tools.includes(name), `missing ${name}; tools: ${tools}`);
       }
-      // README.md states this number ("24 tools", "Twenty-four tools"); change them together.
-      assert.equal(tools.length, 24, `tool count changed - update the counts in README.md too. tools: ${tools}`);
+      // README.md states this number ("25 tools", "Twenty-five tools"); change them together.
+      assert.equal(tools.length, 25, `tool count changed - update the counts in README.md too. tools: ${tools}`);
     } finally {
       child.kill("SIGKILL");
       fs.rmSync(dir, { recursive: true, force: true });

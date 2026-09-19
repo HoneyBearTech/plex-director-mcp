@@ -211,7 +211,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (24 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (25 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -410,7 +410,7 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-four tools are available to Claude Desktop. The eleven marked ★ are also what the dashboard's Query chat uses.
+Twenty-five tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
 
 **Your library**
 
@@ -422,6 +422,7 @@ Twenty-four tools are available to Claude Desktop. The eleven marked ★ are als
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
 | ★ `check_series_completeness` | "Do I have every episode of this show?" From Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). Counts the episodes themselves rather than Sonarr's statistics, which treat a partly downloaded, unmonitored show as complete. It does not check what Plex has scanned. |
 | ★ `find_series_gaps` | Which TV shows are missing aired episodes, most missing first, with how many are downloaded and whether Sonarr is looking for the rest. Filter by monitored, not monitored or actively being searched for, by how many are missing (for "nearly complete" shows) and hide shows with nothing downloaded. |
+| ★ `find_series_by_quality` | Finds TV shows by the video quality Sonarr downloaded: "which shows do I only have in 720p?", "which have 1080p or better?", "which mix qualities?" (upgrade candidates). Shows the lowest best quality first with how many files are at each resolution. It sees only what Sonarr downloaded, so a 4K copy in a separate Plex 4K library is not counted (use the Plex search with the `4k` library). Read-only. |
 | ★ `check_series_status` | What Sonarr knows about one show: monitored or not, its quality profile and location, when the next episode airs, when something was last downloaded, what is in the download queue, and how many aired episodes are downloaded. |
 | ★ `diagnose_missing_episodes` | *Why* aired episodes of a show have no file, from Sonarr's history and download queue: never grabbed, grabbed but never imported, a download that failed (with Sonarr's reason), a file that was removed, stuck in the queue, or simply not monitored so Sonarr never looks for it. Can be limited to a season or one episode. Read-only. |
 | ★ `get_upcoming_episodes` | What TV is coming, from Sonarr's calendar. With no title: "what's on this week?", every episode airing in the next few days (7 by default, up to 60) from the shows Sonarr monitors, by day, with season premieres and finales flagged and episodes already downloaded marked. With a title: "when does this show come back?", its next episodes, or that none is scheduled yet, or that it has ended. Shows Sonarr does not monitor are left out unless asked for, and their number is reported. |
