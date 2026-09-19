@@ -4,6 +4,7 @@ import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { server } from "../server.js";
 import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
+import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -179,6 +180,30 @@ export const movieTools = [
       required: ["title"],
     },
     handler: async ({ title }: { title: string }) => diagnoseMissingMedia(title),
+  },
+  {
+    name: "search_plex_library",
+    description:
+      "Searches the movies actually in the user's Plex library (across all movie libraries, including 4K) by genre, actor, title, and/or release year. Filters can be combined, e.g. genre 'Horror' with year 1982. Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie.",
+    zodSchema: {
+      title: z.string().optional().describe("Part of the movie title."),
+      genre: z.string().optional().describe("Genre name, e.g. 'Horror' or 'Science Fiction'."),
+      actor: z.string().optional().describe("Full actor name, e.g. 'Harrison Ford'."),
+      year: z.number().int().optional().describe("Release year."),
+      limit: z.number().int().min(1).max(100).optional().describe("Maximum results to return (default 25)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "Part of the movie title." },
+        genre: { type: "string", description: "Genre name, e.g. 'Horror' or 'Science Fiction'." },
+        actor: { type: "string", description: "Full actor name, e.g. 'Harrison Ford'." },
+        year: { type: "integer", description: "Release year." },
+        limit: { type: "integer", description: "Maximum results to return (default 25)." },
+      },
+      required: [] as string[],
+    },
+    handler: async (args: PlexSearchArgs) => searchPlexLibrary(args),
   },
 ];
 
