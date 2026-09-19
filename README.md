@@ -45,7 +45,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
 - **Run batch jobs safely.** Plan a movie-upgrade batch and let a rate-limited runner search one movie a minute, with pause, resume, cancel, and automatic pausing if Radarr stops responding.
-- **Keep an eye on your hosts.** CPU, memory, disk, uptime and Docker container health for your Linux hosts over SSH, plus Radarr/Sonarr built-in backups on demand.
+- **Keep an eye on your hosts.** CPU, memory, disk, uptime and Docker container health for your Linux hosts over SSH, plus Radarr, Sonarr and Prowlarr built-in backups on demand. Each host's SSH key is remembered the first time it connects, and a changed key is refused until you approve it.
 - **Understand usage.** Live Plex streams and watch statistics through Tautulli.
 - **Stay informed.** Optional Discord notifications when a batch job finishes or is paused.
 
@@ -152,14 +152,10 @@ services:
       - /path/to/ssh/id_ed25519:/ssh/id_ed25519:ro #optional, for host monitoring over SSH
     ports:
       - 3000:3000
-    healthcheck: #optional
-      test: ["CMD", "/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:3000/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
-      interval: 30s
-      timeout: 5s
-      start_period: 15s
-      retries: 3
     restart: unless-stopped
 ```
+
+The image has a built-in health check (`docker ps` shows `healthy` once it is up), so you don't need to add one.
 
 To keep your credentials out of the compose file, put them in a `.env`-style file next to it and reference it instead of listing them:
 
@@ -230,7 +226,6 @@ Container images are configured using parameters passed at runtime. These parame
 | `-e RADARR_URL=` etc. | Service connection details; see the [reference](#environment-variable-reference). Optional, since they can be entered on the Settings page. |
 | `-v /app/data` | The SQLite database: your saved settings, job history and login-session secret. **Mount a volume here.** |
 | `-v /ssh/id_ed25519:ro` | *Optional.* A private SSH key for host monitoring (with `-e SSH_KEY_PATH=/ssh/id_ed25519`). |
-| `-v /backups` | *Optional.* With `-e BACKUP_DIR=/backups`, where the backup tool makes sure a backup folder exists. |
 
 ### Environment variable reference
 
@@ -241,14 +236,15 @@ Nothing is required to start the container: it boots with no configuration and l
 | Variable | Description |
 | :--- | :--- |
 | `RADARR_URL`, `RADARR_API_KEY` | Radarr. Used for movie status, diagnosis, adding movies, and batch jobs. |
+| `RADARR_DEFAULT_QUALITY_PROFILE` | *Optional.* The name of the quality profile new movies get when you add them. Leave it blank to use Radarr's first profile. Also on the Radarr tab of the Settings page. |
 | `SONARR_URL`, `SONARR_API_KEY` | Sonarr. Optional; used for backups. |
-| `PROWLARR_URL`, `PROWLARR_API_KEY` | Prowlarr, for indexer health. |
+| `PROWLARR_URL`, `PROWLARR_API_KEY` | Prowlarr, for indexer health and backups. |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | SABnzbd, for the queue and for diagnosing missing media. |
 | `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` | qBittorrent Web UI. |
 | `TAUTULLI_URL`, `TAUTULLI_API_KEY` | Tautulli, for streams and watch statistics. |
 | `PLEX_URL`, `PLEX_TOKEN` | Plex, for searching what you own. |
 | `TMDB_API_KEY` | TMDb **API Read Access Token**, for actor filmographies and the movie-choice grid. |
-| `UBUNTU_HOSTS` | Comma-separated hosts to monitor over SSH, e.g. `192.168.1.10,192.168.1.11`. |
+| `UBUNTU_HOSTS` | Comma-separated hosts to monitor over SSH, e.g. `192.168.1.10,192.168.1.11`. Add `:port` for a non-standard SSH port (`192.168.1.10:2222`). |
 | `SSH_USER` | The SSH user for those hosts. |
 
 **Container settings.** These are read from the environment every time and are never stored in the database or shown on the Settings page.
@@ -258,8 +254,8 @@ Nothing is required to start the container: it boots with no configuration and l
 | `WEB_PASSWORD` | *(none)* | Requires a login for the dashboard. Changing it signs everyone out. |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Anthropic API key for the Query chat. |
-| `SSH_KEY_PATH` | *(none)* | Path (inside the container) to the private key for host monitoring. It must be unencrypted (no passphrase) and readable by the container's user. |
-| `BACKUP_DIR` | `./backups` | Folder the backup tool makes sure exists. |
+| `SSH_KEY_PATH` | *(none)* | Path (inside the container) to the private key for host monitoring. It must be readable by the container's user. |
+| `SSH_KEY_PASSPHRASE` | *(none)* | The passphrase, if that private key is passphrase-protected. |
 | `DISCORD_WEBHOOK_URL` | *(none)* | Discord webhook for job-completed and job-paused notifications. |
 | `JOB_RUNNER_INTERVAL_SECONDS` | `60` | How often the job runner advances a started job by one movie (minimum `10`; `0` turns the runner off). |
 
@@ -343,6 +339,7 @@ Create a `.env` file in the repo root with the services you use (all optional; y
 ```env
 RADARR_URL=http://radarr:7878
 RADARR_API_KEY=your_radarr_api_key
+RADARR_DEFAULT_QUALITY_PROFILE=Your Profile Name
 SONARR_URL=http://sonarr:8989
 SONARR_API_KEY=your_sonarr_api_key
 PROWLARR_URL=http://prowlarr:9696
@@ -361,8 +358,8 @@ ANTHROPIC_API_KEY=your_anthropic_api_key
 UBUNTU_HOSTS=192.168.1.10,192.168.1.11
 SSH_USER=your_ssh_username
 SSH_KEY_PATH=/path/to/id_ed25519
+SSH_KEY_PASSPHRASE=only_if_the_key_has_one
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
-BACKUP_DIR=./backups
 WEB_PORT=3000
 WEB_PASSWORD=choose-a-password
 ```
@@ -396,7 +393,7 @@ The dashboard runs on `WEB_PORT` (default `3000`) in the same process as the MCP
 | :--- | :--- |
 | **Query** | A chat box that answers questions about your library using Claude and your services. Search results appear as a table with posters, showing the first 50 with a button to expand. Follow-up questions keep the context; **New chat** starts over. Needs `ANTHROPIC_API_KEY`. |
 | **Server Status** | Live Plex streams and watch statistics (from Tautulli). |
-| **Node Utilization** | CPU, memory, disk, uptime and container health for each SSH host. |
+| **Node Utilization** | CPU, memory, disk, uptime and container health for each SSH host. A host that is unreachable shows why; a host whose SSH key changed is flagged with a **Trust new key** button (see [Security](#security)). |
 | **Queues** | The SABnzbd and qBittorrent download queues. |
 | **Indexers** | Every Prowlarr indexer with its status (healthy, recent failures, backing off, disabled) and Prowlarr's own health warnings. |
 | **Jobs** | Batch jobs and their progress. Read-only: start, pause and cancel jobs from Claude. |
@@ -404,7 +401,7 @@ The dashboard runs on `WEB_PORT` (default `3000`) in the same process as the MCP
 
 Set `WEB_PASSWORD` to require a login: a sign-in page, then a signed 7-day session cookie (marked `Secure` automatically when served over HTTPS). Failed logins are rate-limited. Logging out only clears your browser's copy, so to revoke every session, change the password.
 
-The health check for orchestrators is `GET /healthz`, which returns `{"ok":true}` and needs no login. (The image has no `curl`; use the Node-based healthcheck shown in [Docker Compose](#docker-compose-recommended).)
+The health check is `GET /healthz`, which returns `{"ok":true}` and needs no login. The Docker image runs it for you every 30 seconds using Node itself (the image has no `curl`), on whatever `WEB_PORT` is set to.
 
 ## MCP tools
 
@@ -419,7 +416,7 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 | ★ `check_movie_status` | Whether a movie is in Radarr, and its monitoring status, with artwork. |
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |
 | `search_and_select_movies` | Searches TMDb and shows a numbered grid of matches. |
-| `confirm_selected_choices` | Adds the chosen numbers from that grid to Radarr as monitored movies and starts a download search. Already-present movies are reported, not added twice. Uses the quality profile named `Remux + WEB 1080p` unless you name another, and Radarr's first root folder. |
+| `confirm_selected_choices` | Adds the chosen numbers from that grid to Radarr as monitored movies and starts a download search. Already-present movies are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Radarr tab of the Settings page, otherwise Radarr's first profile; and Radarr's first root folder unless you name another. |
 
 **Downloads and indexers**
 
@@ -443,7 +440,7 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 | :--- | :--- |
 | `get_cluster_infrastructure_health` | CPU, memory and Docker container health for each SSH host. |
 | `get_cluster_hardware_analytics` | CPU and memory per host as a table. |
-| `run_cluster_backup` | Asks Radarr and Sonarr to run their built-in database backups, and makes sure `BACKUP_DIR` exists. It does not copy the backups. |
+| `run_cluster_backup` | Asks Radarr, Sonarr and Prowlarr (whichever are configured) to run their built-in database backups, waits for each (up to about a minute; a slower one is reported as still running), and confirms a new backup file appeared, with its name, size and time. The backups stay in each app's own backup folder; nothing is copied. |
 | `get_plex_activity` | Live playback streams and transcoding load, via Tautulli. |
 | `get_library_analytics` | Most-watched titles, top users, platforms and libraries, via Tautulli. |
 
@@ -454,7 +451,7 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 - **Run it on a trusted network.** It is designed for a home LAN and is not designed or tested to be exposed to the public internet. If you do reach it from outside, put it behind HTTPS and a reverse proxy you trust. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Set `WEB_PASSWORD`.** Without it, anyone who can reach the port can use the dashboard and change its settings.
 - **Secrets stay on the server.** The Settings page never returns a saved key or token, and Plex artwork is fetched through a server-side proxy so the Plex token never reaches your browser.
-- **SSH host monitoring uses key authentication only, and does not verify host keys.** Use a dedicated, unprivileged user with a key that has no passphrase, and keep it on a network you trust.
+- **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
 - **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes torrents and their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
 - The image runs as root by default; see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down.
 
