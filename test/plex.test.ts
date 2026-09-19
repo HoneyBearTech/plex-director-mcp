@@ -521,6 +521,276 @@ describe("searchPlexLibrary: TV shows", () => {
   });
 });
 
+describe("searchPlexLibrary: watch state", () => {
+  // Saturday 2026-09-19 15:00 UTC.
+  const NOW = Date.parse("2026-09-19T15:00:00Z");
+  const at = (iso: string) => Math.floor(Date.parse(`${iso}T12:00:00Z`) / 1000);
+  const rowsOf = (r: any) => (r.structuredContent?.media ?? []) as any[];
+  const titlesOf = (r: any) => rowsOf(r).map((m) => m.title);
+  const bullets = (r: { content: Array<{ text: string }> }) => textOf(r).split("\n").filter((l) => l.startsWith("- "));
+  // A movie / show with its own ids, so nothing groups by accident.
+  const m = (n: number, title: string, extra: Record<string, unknown> = {}) => movie(title, 2000 + (n % 20), { Guid: [{ id: `tmdb://${n}` }], ...extra });
+  const sh = (n: number, title: string, extra: Record<string, unknown> = {}) => show(title, 2000 + (n % 20), { Guid: [{ id: `tmdb://${n}` }], ...extra });
+  const search = (args: Parameters<typeof searchPlexLibrary>[0]) => searchPlexLibrary(args, NOW);
+
+  describe("the watched filter", () => {
+    it("finds movies never played, ignoring ones watched or partly watched", async () => {
+      library["1"] = [
+        m(1, "Never Seen"),
+        m(2, "Seen Once", { viewCount: 1, lastViewedAt: at("2025-06-01") }),
+        m(3, "Half Way", { viewOffset: 1000, duration: 4000, lastViewedAt: at("2026-02-21") }),
+        m(4, "Zero Count", { viewCount: 0 }),
+      ];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ watched: "unwatched", mediaType: "movie" })), ["Never Seen", "Zero Count"]);
+    });
+
+    it("finds movies in progress (partly played), and movies watched at least once", async () => {
+      library["1"] = [
+        m(1, "Never Seen"),
+        m(2, "Seen Once", { viewCount: 1, lastViewedAt: at("2025-06-01") }),
+        m(3, "Half Way", { viewOffset: 1000, duration: 4000, lastViewedAt: at("2026-02-21") }),
+        m(4, "Rewatching", { viewCount: 2, viewOffset: 500, lastViewedAt: at("2026-09-01") }),
+      ];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ watched: "inProgress", mediaType: "movie" })), ["Half Way", "Rewatching"]);
+      assert.deepEqual(titlesOf(await search({ watched: "watched", mediaType: "movie" })), ["Rewatching", "Seen Once"], "a movie being rewatched has still been watched");
+    });
+
+    it("finds shows with no episodes watched, some but not all, or all", async () => {
+      library["3"] = [
+        sh(1, "Fresh", { viewedLeafCount: undefined }),
+        sh(2, "Zero", { viewedLeafCount: 0 }),
+        sh(3, "Midway", { leafCount: 10, viewedLeafCount: 4, lastViewedAt: at("2026-07-17") }),
+        sh(4, "All Done", { leafCount: 10, viewedLeafCount: 10, lastViewedAt: at("2025-01-01") }),
+        sh(5, "Empty Show", { leafCount: 0, viewedLeafCount: 0 }),
+      ];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ watched: "unwatched", mediaType: "show" })), ["Empty Show", "Fresh", "Zero"]);
+      assert.deepEqual(titlesOf(await search({ watched: "inProgress", mediaType: "show" })), ["Midway"]);
+      assert.deepEqual(titlesOf(await search({ watched: "watched", mediaType: "show" })), ["All Done"]);
+    });
+
+    it("judges a show held in two libraries by its furthest-watched copy", async () => {
+      library["3"] = [sh(1, "Andor", { leafCount: 24, viewedLeafCount: 0 })];
+      library["4"] = [sh(1, "Andor", { leafCount: 24, viewedLeafCount: 10, lastViewedAt: at("2026-08-01") })];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ watched: "unwatched", mediaType: "show" })), [], "watched in 4K, so not unwatched");
+      const result = await search({ watched: "inProgress", mediaType: "show" });
+      assert.deepEqual(rowsOf(result).map((r) => [r.title, r.libraries, r.show.watchedEpisodes, r.show.episodes, r.lastWatched]), [["Andor", ["TV Shows", "4k TV Shows"], 10, 24, "2026-08-01"]]);
+      assert.match(bullets(result)[0]!, /24 episodes \(10 watched\)/);
+    });
+
+    it("takes the most recent watch date across copies, and counts a movie watched in either copy as watched", async () => {
+      library["3"] = [sh(1, "Andor", { leafCount: 24, viewedLeafCount: 10, lastViewedAt: at("2026-01-01") })];
+      library["4"] = [sh(1, "Andor", { leafCount: 24, viewedLeafCount: 10, lastViewedAt: at("2026-08-01") })];
+      library["1"] = [m(10, "Two Copies", { viewCount: 0 })];
+      library["2"] = [m(10, "Two Copies", { viewCount: 2, lastViewedAt: at("2026-03-03") })];
+      plexFake();
+      assert.equal(rowsOf(await search({ watched: "inProgress", mediaType: "show" }))[0].lastWatched, "2026-08-01", "the later of the two dates");
+      assert.deepEqual(titlesOf(await search({ watched: "watched", mediaType: "movie" })), ["Two Copies"]);
+      assert.deepEqual(titlesOf(await search({ watched: "unwatched", mediaType: "movie" })), [], "watched in the 4K copy, so not unwatched");
+    });
+
+    it("combines with the other filters and applies before paging", async () => {
+      library["1"] = [...Array.from({ length: 60 }, (_, i) => m(100 + i, `Unseen ${String(i).padStart(2, "0")}`)), ...Array.from({ length: 10 }, (_, i) => m(200 + i, `Seen ${i}`, { viewCount: 1, lastViewedAt: at("2025-01-01") }))];
+      plexFake();
+      const result = await search({ watched: "unwatched", mediaType: "movie", genre: "Horror", library: "movies", limit: 10 });
+      assert.match(textOf(result), /60 matching movies, listed 1-10\./);
+      assert.equal(allCalls()[0]!.params.genre, "930");
+      assert.match(textOf(result), /## Plex library: unwatched, in "Movies", "4k Movies", genre "Horror"/);
+      const page2 = await search({ watched: "unwatched", mediaType: "movie", limit: 10, offset: 55 });
+      assert.deepEqual(titlesOf(page2), ["Unseen 55", "Unseen 56", "Unseen 57", "Unseen 58", "Unseen 59"]);
+    });
+
+    it("says whose watch state it is", async () => {
+      library["1"] = [m(1, "Never Seen")];
+      plexFake();
+      assert.match(textOf(await search({ watched: "unwatched" })), /Watch state is for the Plex account the app is connected with\./);
+      assert.doesNotMatch(textOf(await search({ title: "never" })), /Watch state/);
+    });
+
+    it("is enough on its own to make a search, as is a sort, but the default sort alone is not", async () => {
+      plexFake();
+      assert.equal((await search({ watched: "unwatched" })).isError, undefined);
+      assert.equal((await search({ sort: "recentlyAdded" })).isError, undefined);
+      const none = await search({ sort: "title" });
+      assert.equal(none.isError, true);
+      assert.match(textOf(none), /Provide at least one of: .*watched, notWatchedInYears, sort/);
+    });
+  });
+
+  describe("notWatchedInYears", () => {
+    it("finds movies last watched longer ago than that, and never-watched ones added that long ago", async () => {
+      library["1"] = [
+        m(1, "Watched Long Ago", { viewCount: 1, lastViewedAt: at("2023-01-10") }),
+        m(2, "Watched Last Year", { viewCount: 1, lastViewedAt: at("2025-06-01") }),
+        m(3, "Old Unseen", { addedAt: at("2022-05-01") }),
+        m(4, "Recent Unseen", { addedAt: at("2026-03-01") }),
+        m(5, "Old But Rewatched Lately", { viewCount: 3, lastViewedAt: at("2026-09-01"), addedAt: at("2019-01-01") }),
+      ];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ notWatchedInYears: 2, mediaType: "movie" })), ["Old Unseen", "Watched Long Ago"]);
+      assert.deepEqual(titlesOf(await search({ notWatchedInYears: 1, mediaType: "movie" })), ["Old Unseen", "Watched Last Year", "Watched Long Ago"]);
+      assert.deepEqual(titlesOf(await search({ notWatchedInYears: 0.5, mediaType: "movie" })), ["Old Unseen", "Recent Unseen", "Watched Last Year", "Watched Long Ago"], "fractions of a year work");
+    });
+
+    it("uses when a show was last watched, or when it was added if it never was", async () => {
+      library["3"] = [
+        sh(1, "Stale Show", { leafCount: 10, viewedLeafCount: 3, lastViewedAt: at("2022-02-02") }),
+        sh(2, "Active Show", { leafCount: 10, viewedLeafCount: 3, lastViewedAt: at("2026-09-01") }),
+        sh(3, "Unwatched Old", { viewedLeafCount: 0, addedAt: at("2021-01-01") }),
+        sh(4, "Unwatched New", { viewedLeafCount: 0, addedAt: at("2026-08-01") }),
+      ];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ notWatchedInYears: 2, mediaType: "show" })), ["Stale Show", "Unwatched Old"]);
+    });
+
+    it("leaves out, and says so for, titles Plex says were watched but holds no date for", async () => {
+      library["3"] = [
+        sh(1, "Stale Show", { leafCount: 10, viewedLeafCount: 3, lastViewedAt: at("2022-02-02") }),
+        sh(2, "Watched No Date", { leafCount: 10, viewedLeafCount: 5, addedAt: at("2019-01-01") }),
+        sh(3, "Also No Date", { leafCount: 10, viewedLeafCount: 5 }),
+      ];
+      plexFake();
+      const result = await search({ notWatchedInYears: 2, mediaType: "show" });
+      assert.deepEqual(titlesOf(result), ["Stale Show"]);
+      assert.match(textOf(result), /2 titles have been watched but Plex holds no date for them, so they were left out of the "not watched in 2 years" list because that can't be judged\./);
+      // Even when nothing else is left, the reply must still explain the ones that were skipped.
+      library["3"] = [sh(1, "Watched No Date", { leafCount: 10, viewedLeafCount: 5 })];
+      const empty = textOf(await search({ notWatchedInYears: 2, mediaType: "show" }));
+      assert.match(empty, /^No shows in Plex match not watched in 2 years\. 1 title has been watched but Plex holds no date for it, so it was left out of the "not watched in 2 years" list because that can't be judged\.$/);
+    });
+
+    it("treats a title with nothing dated at all as unknown, not stale", async () => {
+      library["1"] = [m(1, "No Dates At All")];
+      plexFake();
+      assert.match(textOf(await search({ notWatchedInYears: 1, mediaType: "movie" })), /No movies in Plex match/);
+    });
+
+    it("counts from when it was first added when a title is in two libraries", async () => {
+      library["1"] = [m(1, "Upgraded", { addedAt: at("2020-01-01") })];
+      library["2"] = [m(1, "Upgraded", { addedAt: at("2026-09-01") })];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ notWatchedInYears: 3, mediaType: "movie" })), ["Upgraded"], "first added 2020, never watched since");
+    });
+
+    it("rejects a period that is not a positive number", async () => {
+      plexFake();
+      for (const bad of [0, -1, Number.NaN]) {
+        const result = await search({ notWatchedInYears: bad });
+        assert.equal(result.isError, true, String(bad));
+        assert.match(textOf(result), /notWatchedInYears must be greater than 0/);
+      }
+      assert.equal(allCalls().length, 0);
+    });
+
+    it("says what was asked in the heading", async () => {
+      library["1"] = [m(1, "Old", { addedAt: at("2020-01-01") })];
+      plexFake();
+      assert.match(textOf(await search({ notWatchedInYears: 2 })), /## Plex library: not watched in 2 years\n/);
+      assert.match(textOf(await search({ notWatchedInYears: 1 })), /not watched in 1 year\n/);
+    });
+  });
+
+  describe("sort", () => {
+    beforeEach(() => {
+      library["1"] = [
+        m(1, "Charlie", { addedAt: at("2024-01-01"), viewCount: 1, lastViewedAt: at("2025-05-05") }),
+        m(2, "Alpha", { addedAt: at("2026-08-01") }),
+        m(3, "Bravo", { addedAt: at("2023-03-03"), viewCount: 1, lastViewedAt: at("2026-01-01") }),
+        m(4, "Delta", { addedAt: at("2022-02-02") }),
+        m(5, "Echo", { viewCount: 1 }),
+      ];
+    });
+
+    it("names the ordering in the heading when nothing else is asked", async () => {
+      plexFake();
+      assert.match(textOf(await search({ sort: "recentlyAdded" })), /^## Plex library: newest additions first\n/);
+      assert.match(textOf(await search({ sort: "lastWatched" })), /^## Plex library: most recently watched first\n/);
+      assert.match(textOf(await search({ sort: "leastRecentlyWatched" })), /^## Plex library: longest unwatched first\n/);
+      assert.match(textOf(await search({ sort: "recentlyAdded", watched: "unwatched" })), /^## Plex library: unwatched\n/, "a real filter is described instead");
+    });
+
+    it("sorts by title by default", async () => {
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ mediaType: "movie", library: "movies" })), ["Alpha", "Bravo", "Charlie", "Delta", "Echo"]);
+    });
+
+    it("recentlyAdded lists the newest additions first, using the latest add date across libraries", async () => {
+      library["2"] = [m(4, "Delta", { addedAt: at("2026-09-10") })];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ mediaType: "movie", sort: "recentlyAdded" })), ["Delta", "Alpha", "Charlie", "Bravo", "Echo"], "Delta was re-added to 4K last week; Echo has no date so is last");
+    });
+
+    it("lastWatched lists the most recently watched first, with never-watched titles last", async () => {
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ mediaType: "movie", sort: "lastWatched" })), ["Bravo", "Charlie", "Alpha", "Delta", "Echo"]);
+    });
+
+    it("leastRecentlyWatched lists the longest-idle first: last watched, or added if never watched; unknown last", async () => {
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ mediaType: "movie", sort: "leastRecentlyWatched" })), ["Delta", "Charlie", "Bravo", "Alpha", "Echo"]);
+    });
+
+    it("keeps a stable title order among equal dates", async () => {
+      library["1"] = [m(1, "Zed", { addedAt: at("2025-01-01") }), m(2, "Abe", { addedAt: at("2025-01-01") })];
+      plexFake();
+      assert.deepEqual(titlesOf(await search({ mediaType: "movie", sort: "recentlyAdded" })), ["Abe", "Zed"]);
+    });
+
+    it("sorts before paging", async () => {
+      plexFake();
+      const first = await search({ mediaType: "movie", sort: "recentlyAdded", limit: 2 });
+      const second = await search({ mediaType: "movie", sort: "recentlyAdded", limit: 2, offset: 2 });
+      assert.deepEqual([...titlesOf(first), ...titlesOf(second)], ["Alpha", "Charlie", "Bravo", "Delta"]);
+    });
+  });
+
+  describe("dates on rows and in the text", () => {
+    it("adds last-watched and added dates to rows only for watch or sort queries", async () => {
+      library["1"] = [m(1, "Plain", { viewCount: 1, lastViewedAt: at("2026-02-21"), addedAt: at("2024-11-16") })];
+      plexFake();
+      const plain = rowsOf(await search({ title: "plain" }))[0];
+      assert.equal("lastWatched" in plain, false);
+      assert.equal("added" in plain, false);
+      const withDates = rowsOf(await search({ title: "plain", sort: "recentlyAdded" }))[0];
+      assert.deepEqual([withDates.lastWatched, withDates.added], ["2026-02-21", "2024-11-16"]);
+    });
+
+    it("says never (null), a date, or that the date is unknown", async () => {
+      library["1"] = [m(1, "Never"), m(2, "Dated", { viewCount: 1, lastViewedAt: at("2026-02-21") }), m(3, "Undated", { viewCount: 1 })];
+      library["3"] = [sh(4, "Show Undated", { leafCount: 10, viewedLeafCount: 3 })];
+      plexFake();
+      const byTitle = Object.fromEntries(rowsOf(await search({ sort: "lastWatched" })).map((r) => [r.title, r.lastWatched]));
+      assert.deepEqual(byTitle, { Never: null, Dated: "2026-02-21", Undated: "date unknown", "Show Undated": "date unknown" });
+    });
+
+    it("describes each title's watch state in the model's list", async () => {
+      library["1"] = [
+        m(1, "Never"),
+        m(2, "Dated", { viewCount: 1, lastViewedAt: at("2026-02-21"), addedAt: at("2024-11-16") }),
+        m(3, "Undated", { viewCount: 1 }),
+        m(4, "Halfway", { viewOffset: 1355406, duration: 6906912, lastViewedAt: at("2026-02-21") }),
+        m(5, "Halfway Undated", { viewOffset: 100 }),
+      ];
+      library["3"] = [sh(6, "Started", { leafCount: 30, viewedLeafCount: 23, lastViewedAt: at("2026-07-17") }), sh(7, "Fresh", { viewedLeafCount: undefined })];
+      plexFake();
+      const out = bullets(await search({ sort: "lastWatched" }));
+      const line = (t: string) => out.find((l) => l.startsWith(`- ${t} (`))!;
+      assert.match(line("Never"), / - unwatched$/);
+      assert.match(line("Dated"), / - watched 2026-02-21$/);
+      assert.match(line("Undated"), / - watched, date unknown$/);
+      assert.match(line("Halfway"), / - in progress \(20%\), last watched 2026-02-21$/);
+      assert.match(line("Halfway Undated"), / - in progress$/);
+      assert.match(line("Started"), /TV show, 5 seasons, 30 episodes \(23 watched\), TV Shows - Drama - last watched 2026-07-17$/);
+      assert.match(line("Fresh"), / - unwatched$/);
+      const added = bullets(await search({ sort: "recentlyAdded", title: "dated" }));
+      assert.match(added.find((l) => l.startsWith("- Dated"))!, / - watched 2026-02-21, added 2024-11-16$/);
+    });
+  });
+});
+
 describe("searchPlexLibrary: libraries left out by default", () => {
   const urls = () => allCalls().map((c) => c.url).sort();
   const rowsOf = (r: any) => r.structuredContent.media as any[];

@@ -31,7 +31,15 @@ export interface MediaRow {
     ownedEpisodes?: number | null;
     network: string | null;
   };
+  // Set only when the query was about watching or adding: YYYY-MM-DD dates.
+  // lastWatched null = never watched; "date unknown" = watched, but Plex
+  // recorded no date for it.
+  lastWatched?: string | null;
+  added?: string | null;
 }
+
+export type WatchFilter = "unwatched" | "inProgress" | "watched";
+export type SearchSort = "title" | "recentlyAdded" | "lastWatched" | "leastRecentlyWatched";
 
 export interface PlexSearchArgs {
   title?: string;
@@ -42,12 +50,21 @@ export interface PlexSearchArgs {
   mediaType?: "movie" | "show" | "any";
   // Only libraries whose name contains this text (case-insensitive), e.g. "4k".
   library?: string;
+  // Watch state of the Plex account the app is connected with. Movies:
+  // unwatched = never played, inProgress = partly played, watched = played
+  // through at least once. Shows: no episodes / some but not all / all watched.
+  watched?: WatchFilter;
+  // Only titles with no watching in this many years. A never-watched title
+  // counts from when it was added.
+  notWatchedInYears?: number;
+  sort?: SearchSort;
   limit?: number;
   // How many matches to skip, for paging through a large result.
   offset?: number;
 }
 
 const DEFAULT_LIMIT = 25;
+const DAY_MS = 86_400_000;
 const MAX_LIMIT = 500;
 // Plex is asked for everything that matches in one go; libraries here are
 // well under this, so it is effectively "all".
@@ -158,15 +175,19 @@ function plexPosterUrl(thumb: unknown): string | null {
 // Movies and shows actually in the Plex library, filtered by any combination of
 // genre, actor, title, and year. Complements check_movie_status (Radarr - what's
 // managed) and the TMDb tools (what exists) with "what can I actually watch".
-export async function searchPlexLibrary(args: PlexSearchArgs) {
+export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date.now()) {
   if (!isConfigured("PLEX")) {
     return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
   }
 
-  const { title, genre, actor, year, library } = args;
+  const { title, genre, actor, year, library, watched, notWatchedInYears } = args;
   const mediaType = args.mediaType ?? "any";
-  if (!title && !genre && !actor && year === undefined && !library && mediaType === "any") {
-    return textReply("Provide at least one of: title, genre, actor, year, library, mediaType.", true);
+  const sort = args.sort ?? "title";
+  if (!title && !genre && !actor && year === undefined && !library && mediaType === "any" && !watched && notWatchedInYears === undefined && sort === "title") {
+    return textReply("Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, sort.", true);
+  }
+  if (notWatchedInYears !== undefined && !(notWatchedInYears > 0)) {
+    return textReply("notWatchedInYears must be greater than 0.", true);
   }
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const offset = Math.max(args.offset ?? 0, 0);
@@ -204,6 +225,12 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     if (title) {
       filters.title = title;
       described.push(`title "${title}"`);
+    }
+    if (watched) {
+      described.push(watched === "inProgress" ? "in progress" : watched);
+    }
+    if (notWatchedInYears !== undefined) {
+      described.push(`not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}`);
     }
     if (year !== undefined) {
       filters.year = year;
@@ -257,6 +284,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       kind: MediaKind;
       item: any;
       libraries: string[];
+      watch: Watch;
     }
     const groups: Group[] = [];
     const byKey = new Map<string, Group>();
@@ -266,29 +294,61 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
         const existing = keys.map((k) => byKey.get(k)).find((g) => g !== undefined);
         if (existing) {
           existing.libraries.push(section.title);
+          existing.watch = mergeWatch(existing.watch, watchOf(item, section.kind));
           for (const k of keys) byKey.set(k, existing);
         } else {
-          const group: Group = { kind: section.kind, item, libraries: [section.title] };
+          const group: Group = { kind: section.kind, item, libraries: [section.title], watch: watchOf(item, section.kind) };
           groups.push(group);
           for (const k of keys) byKey.set(k, group);
         }
       }
     }
 
-    const sorted = groups.sort(
-      (a, b) =>
-        String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) ||
-        (a.item.year ?? 0) - (b.item.year ?? 0)
-    );
+    // Watch filters run on the whole title (all its libraries), before paging.
+    let candidates = watched ? groups.filter((g) => matchesWatch(g.kind, g.watch, watched)) : groups;
+    let undated = 0;
+    if (notWatchedInYears !== undefined) {
+      const cutoff = now - notWatchedInYears * 365.25 * DAY_MS;
+      candidates = candidates.filter((g) => {
+        const activity = lastActivity(g.kind, g.watch);
+        if (activity === null) {
+          undated++;
+          return false;
+        }
+        return activity * 1000 < cutoff;
+      });
+    }
+
+    const byTitle = (a: Group, b: Group) =>
+      String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) || (a.item.year ?? 0) - (b.item.year ?? 0);
+    // Newest / oldest first; a title with no date sorts last either way.
+    const byDate = (pick: (g: Group) => number | null, newestFirst: boolean) => (a: Group, b: Group) => {
+      const x = pick(a);
+      const y = pick(b);
+      if (x === null || y === null) return x === y ? byTitle(a, b) : x === null ? 1 : -1;
+      return (newestFirst ? y - x : x - y) || byTitle(a, b);
+    };
+    const comparator =
+      sort === "recentlyAdded" ? byDate((g) => g.watch.addedLast, true)
+      : sort === "lastWatched" ? byDate((g) => g.watch.lastViewed, true)
+      : sort === "leastRecentlyWatched" ? byDate((g) => lastActivity(g.kind, g.watch), false)
+      : byTitle;
+    const sorted = candidates.sort(comparator);
     const total = sorted.length;
     const rows = sorted.slice(offset, offset + limit);
 
-    const heading = described.join(", ") || "that request";
+    const withDates = Boolean(watched) || notWatchedInYears !== undefined || sort !== "title";
+    const sortHeading = sort === "recentlyAdded" ? "newest additions first" : sort === "lastWatched" ? "most recently watched first" : sort === "leastRecentlyWatched" ? "longest unwatched first" : "";
+    const heading = described.join(", ") || sortHeading || "that request";
+    const undatedNote =
+      undated > 0
+        ? ` ${undated} title${undated === 1 ? " has" : "s have"} been watched but Plex holds no date for ${undated === 1 ? "it" : "them"}, so ${undated === 1 ? "it was" : "they were"} left out of the "not watched in ${notWatchedInYears} years" list because that can't be judged.`
+        : "";
     if (rows.length === 0) {
       return textReply(
         total > 0
           ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.`
-          : `No ${noun} in Plex match ${heading}.`
+          : `No ${noun} in Plex match ${heading}.${undatedNote}`
       );
     }
 
@@ -307,14 +367,20 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     if (total > shownEnd) {
       output += ` ${total - shownEnd} more are not listed: call again with offset ${shownEnd} for the next page (limit up to ${MAX_LIMIT}).`;
     }
-    output += " Each line is one title with every Plex library that holds it; the user sees the same titles in a table below your reply.\n\n";
-    for (const { kind, item, libraries } of rows) {
+    output += " Each line is one title with every Plex library that holds it; the user sees the same titles in a table below your reply.";
+    if (watched || notWatchedInYears !== undefined || sort === "lastWatched" || sort === "leastRecentlyWatched") {
+      output += " Watch state is for the Plex account the app is connected with.";
+    }
+    output += undatedNote;
+    output += "\n\n";
+    for (const { kind, item, libraries, watch } of rows) {
       const genres = (item.Genre ?? []).map((g: any) => g.tag).join(", ");
-      const kindNote = kind === "show" ? `TV show, ${showSummary(item)}, ` : "";
-      output += `- ${item.title} (${item.year ?? "year unknown"}) - ${kindNote}${libraries.join(", ")}${genres ? ` - ${genres}` : ""}\n`;
+      const kindNote = kind === "show" ? `TV show, ${showSummary(item.childCount, watch)}, ` : "";
+      const watchNote = withDates ? ` - ${watchNoteOf(kind, watch, sort === "recentlyAdded")}` : "";
+      output += `- ${item.title} (${item.year ?? "year unknown"}) - ${kindNote}${libraries.join(", ")}${genres ? ` - ${genres}` : ""}${watchNote}\n`;
     }
 
-    const media: MediaRow[] = rows.map(({ kind, item, libraries }) => {
+    const media: MediaRow[] = rows.map(({ kind, item, libraries, watch }) => {
       const rating = item.audienceRating ?? item.rating;
       const row: MediaRow = {
         kind,
@@ -329,10 +395,14 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       if (kind === "show") {
         row.show = {
           seasons: numberOrNull(item.childCount),
-          episodes: numberOrNull(item.leafCount),
-          watchedEpisodes: numberOrNull(item.viewedLeafCount ?? 0),
+          episodes: watch.leaf,
+          watchedEpisodes: watch.seen,
           network: typeof item.studio === "string" && item.studio ? item.studio : null,
         };
+      }
+      if (withDates) {
+        row.lastWatched = lastWatchedLabel(kind, watch);
+        row.added = isoDay(watch.addedLast);
       }
       return row;
     });
@@ -348,14 +418,109 @@ function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
-// "5 seasons, 62 episodes (40 watched)" for the model's text list.
-function showSummary(item: any): string {
-  const seasons = numberOrNull(item.childCount);
-  const episodes = numberOrNull(item.leafCount);
-  const watched = numberOrNull(item.viewedLeafCount ?? 0);
+// What Plex records about watching one title, merged across the libraries that
+// hold it. Watch state is per library item, so an HD and a 4K copy can differ:
+// the title counts as far as its furthest-watched copy got.
+interface Watch {
+  viewCount: number;
+  viewOffset: number;
+  duration: number | null;
+  // Shows: episodes held and episodes watched, from the furthest-watched copy.
+  leaf: number | null;
+  seen: number;
+  // Epoch seconds.
+  lastViewed: number | null;
+  addedFirst: number | null;
+  addedLast: number | null;
+}
+
+const count = (value: unknown): number => numberOrNull(value) ?? 0;
+const latest = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b));
+const earliest = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b));
+
+function watchOf(item: any, kind: MediaKind): Watch {
+  return {
+    viewCount: count(item.viewCount),
+    viewOffset: count(item.viewOffset),
+    duration: numberOrNull(item.duration),
+    leaf: kind === "show" ? numberOrNull(item.leafCount) : null,
+    seen: kind === "show" ? count(item.viewedLeafCount) : 0,
+    lastViewed: numberOrNull(item.lastViewedAt),
+    addedFirst: numberOrNull(item.addedAt),
+    addedLast: numberOrNull(item.addedAt),
+  };
+}
+
+function mergeWatch(a: Watch, b: Watch): Watch {
+  const furthest = b.seen > a.seen || (b.seen === a.seen && (b.leaf ?? 0) > (a.leaf ?? 0)) ? b : a;
+  return {
+    viewCount: Math.max(a.viewCount, b.viewCount),
+    viewOffset: Math.max(a.viewOffset, b.viewOffset),
+    duration: a.duration ?? b.duration,
+    leaf: furthest.leaf,
+    seen: furthest.seen,
+    lastViewed: latest(a.lastViewed, b.lastViewed),
+    addedFirst: earliest(a.addedFirst, b.addedFirst),
+    addedLast: latest(a.addedLast, b.addedLast),
+  };
+}
+
+const showFinished = (w: Watch) => w.seen > 0 && w.leaf !== null && w.seen >= w.leaf;
+
+function matchesWatch(kind: MediaKind, w: Watch, want: WatchFilter): boolean {
+  if (kind === "movie") {
+    if (want === "unwatched") return w.viewCount === 0 && w.viewOffset === 0;
+    if (want === "inProgress") return w.viewOffset > 0;
+    return w.viewCount > 0;
+  }
+  if (want === "unwatched") return w.seen === 0;
+  if (want === "watched") return showFinished(w);
+  return w.seen > 0 && !showFinished(w);
+}
+
+const everWatched = (kind: MediaKind, w: Watch) => (kind === "movie" ? w.viewCount > 0 || w.viewOffset > 0 : w.seen > 0);
+
+// When someone last did something with the title, in epoch seconds: the last
+// time it was watched, or for a never-watched title when it was added. Null
+// when Plex says it was watched but not when.
+function lastActivity(kind: MediaKind, w: Watch): number | null {
+  if (w.lastViewed !== null) return w.lastViewed;
+  return everWatched(kind, w) ? null : w.addedFirst;
+}
+
+const isoDay = (seconds: number | null): string | null => (seconds === null ? null : new Date(seconds * 1000).toISOString().slice(0, 10));
+
+function lastWatchedLabel(kind: MediaKind, w: Watch): string | null {
+  if (w.lastViewed !== null) return isoDay(w.lastViewed);
+  return everWatched(kind, w) ? "date unknown" : null;
+}
+
+// "unwatched", "watched 2026-02-21", "in progress (20%), last watched ..." for the model's list.
+function watchNoteOf(kind: MediaKind, w: Watch, showAdded: boolean): string {
   const parts: string[] = [];
-  if (seasons !== null) parts.push(`${seasons} season${seasons === 1 ? "" : "s"}`);
-  if (episodes !== null) parts.push(`${episodes} episode${episodes === 1 ? "" : "s"}${watched !== null ? ` (${watched} watched)` : ""}`);
+  if (!everWatched(kind, w)) {
+    parts.push("unwatched");
+  } else {
+    const date = w.lastViewed !== null ? isoDay(w.lastViewed) : null;
+    if (kind === "movie" && w.viewOffset > 0) {
+      const percent = w.duration ? Math.min(99, Math.round((w.viewOffset / w.duration) * 100)) : null;
+      parts.push(`in progress${percent !== null ? ` (${percent}%)` : ""}${date ? `, last watched ${date}` : ""}`);
+    } else if (kind === "movie") {
+      parts.push(date ? `watched ${date}` : "watched, date unknown");
+    } else {
+      parts.push(date ? `last watched ${date}` : "watched, date unknown");
+    }
+  }
+  if (showAdded && w.addedLast !== null) parts.push(`added ${isoDay(w.addedLast)}`);
+  return parts.join(", ");
+}
+
+// "5 seasons, 62 episodes (40 watched)" for the model's text list.
+function showSummary(seasons: unknown, w: Watch): string {
+  const seasonCount = numberOrNull(seasons);
+  const parts: string[] = [];
+  if (seasonCount !== null) parts.push(`${seasonCount} season${seasonCount === 1 ? "" : "s"}`);
+  if (w.leaf !== null) parts.push(`${w.leaf} episode${w.leaf === 1 ? "" : "s"} (${w.seen} watched)`);
   return parts.join(", ") || "size unknown";
 }
 

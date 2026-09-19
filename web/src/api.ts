@@ -102,12 +102,34 @@ export interface MediaRow {
     ownedEpisodes?: number | null;
     network: string | null;
   };
+  // Present only on watch/added queries; null lastWatched = never watched.
+  lastWatched?: string | null;
+  added?: string | null;
 }
+
+// What the server reads of an earlier answer's table: kind, title, year and libraries.
+export type HistoryRow = Pick<MediaRow, "kind" | "title" | "year" | "libraries">;
 
 export interface ChatHistoryTurn {
   role: "user" | "assistant";
   text: string;
-  media?: MediaRow[];
+  media?: HistoryRow[];
+}
+
+// Sends only what the server uses of the conversation so far: its last 12
+// turns, and 25 rows of each table with just the fields it describes. Whole
+// tables (hundreds of rows, with posters) once made a long chat exceed the
+// request size limit.
+const HISTORY_TURNS = 12;
+const HISTORY_ROWS = 25;
+export function trimHistory(history: ChatHistoryTurn[]): ChatHistoryTurn[] {
+  return history.slice(-HISTORY_TURNS).map(({ role, text, media }) => ({
+    role,
+    text,
+    ...(media && media.length > 0
+      ? { media: media.slice(0, HISTORY_ROWS).map(({ kind, title, year, libraries }) => ({ kind, title, year, libraries })) }
+      : {}),
+  }));
 }
 
 export interface ChatAnswer {
@@ -201,7 +223,7 @@ export interface AuthStatus {
 export const api = {
   // history = the earlier messages of this conversation, so follow-ups have context.
   chatWithMovies: (question: string, history: ChatHistoryTurn[] = []) =>
-    postJson<ChatAnswer>("/api/chat/movies", { question, history }),
+    postJson<ChatAnswer>("/api/chat/movies", { question, history: trimHistory(history) }),
   plexActivity: () => getJson<PlexActivity>("/api/status/activity"),
   libraryAnalytics: () => getJson<LibraryAnalytics>("/api/status/library-analytics"),
   authStatus: () => getJson<AuthStatus>("/api/auth/status"),

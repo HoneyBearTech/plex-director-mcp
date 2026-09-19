@@ -225,6 +225,29 @@ describe("chat API", () => {
   });
 });
 
+describe("chat request size", () => {
+  const bigTable = (rows: number) => Array.from({ length: rows }, (_, i) => ({ kind: "movie", title: `Title ${i}`, year: 2000, libraries: ["Movies"], posterUrl: `/api/plex/image?path=${"x".repeat(200)}`, genres: ["Drama", "Thriller"], rating: 7.1, detail: null }));
+
+  // Found in the browser: two answers with 135 and 238 rows made the next question fail with 413.
+  it("accepts a conversation whose earlier answers had hundreds of rows (past express's 100 KB default)", async () => {
+    const history = [
+      { role: "user", text: "q1" },
+      { role: "assistant", text: "a1", media: bigTable(300) },
+      { role: "user", text: "q2" },
+      { role: "assistant", text: "a2", media: bigTable(300) },
+    ];
+    assert.ok(JSON.stringify(history).length > 200_000, "the fixture really is over the old limit");
+    const res = await send("POST", "/api/chat/movies", { question: "and?", history });
+    assert.equal(res.status, 502, "it got as far as needing the Anthropic key, instead of 413");
+    assert.match(((await res.json()) as any).error, /ANTHROPIC_API_KEY is not configured/);
+  });
+
+  it("still refuses an absurdly large request", async () => {
+    const res = await send("POST", "/api/chat/movies", { question: "x", history: [{ role: "assistant", text: "y".repeat(1_200_000) }] });
+    assert.equal(res.status, 413);
+  });
+});
+
 describe("chat history from the browser", () => {
   it("keeps a table's movies and shows, telling shows apart, so follow-ups can refer to them", () => {
     const turns = parseHistory([
