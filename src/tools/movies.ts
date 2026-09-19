@@ -5,7 +5,7 @@ import { server } from "../server.js";
 import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
-import { resolveActorFilmography } from "./discovery.js";
+import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -223,16 +223,22 @@ export const movieTools: MovieTool[] = [
     zodSchema: {
       actorName: z.string().describe("The exact name of the actor (e.g., 'Harrison Ford')."),
       limit: z.number().int().min(1).max(100).optional().describe("How many titles to list, newest first (default 15)."),
+      yearFrom: z.number().int().optional().describe("Only titles released in or after this year."),
+      yearTo: z.number().int().optional().describe("Only titles released in or before this year."),
+      show: z.enum(["all", "owned", "missing"]).optional().describe("Only titles the user has in Plex ('owned'), only those they don't ('missing'), or both (default)."),
     },
     inputSchema: {
       type: "object" as const,
       properties: {
         actorName: { type: "string", description: "The exact name of the actor (e.g., 'Harrison Ford')." },
         limit: { type: "integer", description: "How many titles to list, newest first (default 15)." },
+        yearFrom: { type: "integer", description: "Only titles released in or after this year." },
+        yearTo: { type: "integer", description: "Only titles released in or before this year." },
+        show: { type: "string", enum: ["all", "owned", "missing"], description: "Only titles the user has in Plex ('owned'), only those they don't ('missing'), or both (default)." },
       },
       required: ["actorName"],
     },
-    handler: async ({ actorName, limit }: { actorName: string; limit?: number }) => resolveActorFilmography(actorName, limit),
+    handler: async ({ actorName, ...options }: { actorName: string } & FilmographyOptions) => resolveActorFilmography(actorName, options),
   },
 ];
 

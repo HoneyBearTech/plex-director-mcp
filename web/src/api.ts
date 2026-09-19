@@ -80,9 +80,22 @@ export interface ChatImage {
   data: string;
 }
 
+// Mirrors MovieRow in src/tools/plex.ts.
+export interface MovieRow {
+  title: string;
+  year: number | null;
+  posterUrl: string | null;
+  // Libraries holding it in Plex; [] = not in Plex; null = not checked.
+  libraries: string[] | null;
+  genres: string[];
+  rating: number | null;
+  detail: string | null;
+}
+
 export interface ChatAnswer {
   text: string;
   images: ChatImage[];
+  movies: MovieRow[];
 }
 
 async function getJson<T>(url: string): Promise<T> {
