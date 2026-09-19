@@ -1,6 +1,7 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -41,6 +42,19 @@ afterEach(async () => {
   fs.rmSync(dir, { recursive: true, force: true });
   delete process.env.SSH_KEY_PATH;
   delete process.env.SSH_KEY_PASSPHRASE;
+});
+
+// Regression: ssh2 hands back an unparseable ed25519 key ~0.4% of the time, which made this
+// suite fail at random (once on CI). With no retry, 2,000 keys fail this test almost every time.
+describe("test key generation", () => {
+  it("only ever returns key pairs that ssh2 can parse", () => {
+    const { utils } = createRequire(import.meta.url)("ssh2") as typeof import("ssh2");
+    for (let i = 0; i < 2000; i++) {
+      const pair = generateKeyPair();
+      assert.ok(!(utils.parseKey(pair.privateKey) instanceof Error), `private key #${i} parses`);
+      assert.ok(!(utils.parseKey(pair.publicKey) instanceof Error), `public key #${i} parses`);
+    }
+  });
 });
 
 describe("host key bookkeeping (trust on first use)", () => {
