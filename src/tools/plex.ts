@@ -78,7 +78,7 @@ interface PlexSection {
 
 // A server can have several libraries of a kind (e.g. HD, 4K, kids,
 // documentaries); an "I own" question has to look across all of them.
-async function getSections(kinds: MediaKind[]): Promise<PlexSection[]> {
+export async function getSections(kinds: MediaKind[]): Promise<PlexSection[]> {
   const response = await plexClient.get("/library/sections");
   const directories: any[] = response.data?.MediaContainer?.Directory ?? [];
   return directories
@@ -88,7 +88,7 @@ async function getSections(kinds: MediaKind[]): Promise<PlexSection[]> {
 
 // Libraries the Settings page says to leave out unless one is asked for by name
 // (e.g. "Sports"). Whole names, case-insensitive, comma-separated.
-function skippedLibraryNames(): Set<string> {
+export function skippedLibraryNames(): Set<string> {
   return new Set(
     getSetting("PLEX_SKIP_LIBRARIES")
       .split(",")
@@ -168,7 +168,7 @@ function identityKeys(item: any, kind: MediaKind): string[] {
   return keys;
 }
 
-function plexPosterUrl(thumb: unknown): string | null {
+export function plexPosterUrl(thumb: unknown): string | null {
   return typeof thumb === "string" && thumb ? `/api/plex/image?path=${encodeURIComponent(thumb)}` : null;
 }
 
@@ -414,7 +414,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
   }
 }
 
-function numberOrNull(value: unknown): number | null {
+export function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
 
@@ -488,7 +488,7 @@ function lastActivity(kind: MediaKind, w: Watch): number | null {
   return everWatched(kind, w) ? null : w.addedFirst;
 }
 
-const isoDay = (seconds: number | null): string | null => (seconds === null ? null : new Date(seconds * 1000).toISOString().slice(0, 10));
+export const isoDay = (seconds: number | null): string | null => (seconds === null ? null : new Date(seconds * 1000).toISOString().slice(0, 10));
 
 function lastWatchedLabel(kind: MediaKind, w: Watch): string | null {
   if (w.lastViewed !== null) return isoDay(w.lastViewed);

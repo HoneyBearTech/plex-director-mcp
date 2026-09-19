@@ -211,7 +211,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (23 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (24 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -410,13 +410,14 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-three tools are available to Claude Desktop. The ten marked ★ are also what the dashboard's Query chat uses.
+Twenty-four tools are available to Claude Desktop. The eleven marked ★ are also what the dashboard's Query chat uses.
 
 **Your library**
 
 | Tool | What it does |
 | :--- | :--- |
 | ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Filter by watch state (unwatched, in progress, watched) or "not watched in N years" (a never-watched title counts from when it was added), and sort by recently added or last watched. Watch state is for the Plex account the app is connected with. Paged for large results. |
+| ★ `search_episodes` | Finds individual TV episodes: "the episode of Entourage where…", an episode by title, episodes that aired in a date range, a show's season premieres or finales. With a show named it searches the episode titles **and plots**; without one only titles and air dates, because Plex cannot search plots across the whole library. Shows the season and episode numbers, air date and watch state. |
 | ★ `get_on_deck` | "What should I watch next?" from Plex's On Deck (Continue Watching): the movies you have partly played and, for each show you are following, the episode to watch next (or the one you are part way through), most recently active first, with how far through each is. A movie held in HD and 4K is one entry. Can be limited to movies or shows, or to a library such as `kids`. Plex reports at most 50 items; the watch state is for the Plex account the app is connected with. |
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
 | ★ `check_series_completeness` | "Do I have every episode of this show?" From Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). Counts the episodes themselves rather than Sonarr's statistics, which treat a partly downloaded, unmonitored show as complete. It does not check what Plex has scanned. |

@@ -9,6 +9,7 @@ import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js
 import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "./series.js";
 import { checkSeriesStatus, diagnoseMissingEpisodes, type DiagnoseOptions } from "./seriesDiagnosis.js";
 import { getUpcomingEpisodes, type UpcomingOptions } from "./upcoming.js";
+import { searchEpisodes, type EpisodeSearchArgs } from "./plexEpisodes.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -258,6 +259,40 @@ export const movieTools: MovieTool[] = [
       required: [] as string[],
     },
     handler: async (args: OnDeckArgs) => getOnDeck(args),
+  },
+  {
+    name: "search_episodes",
+    description:
+      "Finds individual TV episodes in the user's Plex library: 'the episode of <show> where ...', 'which episode is called ...', episodes that aired in a date range, a show's season premieres or finales. " +
+      "IMPORTANT: Plex cannot search episode plots across the whole library. To search PLOTS (summaries) you must name the show (the show argument); the words then match the episode title and its plot. Without a show, only episode TITLES (and air dates) can be searched. When the user describes an episode by its plot and no show is known, ask which show or say only titles can be searched. " +
+      "Use season and episode for a specific one, airedFrom/airedTo (YYYY-MM-DD) for 'aired in March 2026', and episodeType 'premiere' or (with a show) 'finale'. Each result shows the show, season and episode numbers, air date and watch state.",
+    zodSchema: {
+      show: z.string().optional().describe("A show to search inside, e.g. 'Entourage'. Required to search plots."),
+      text: z.string().optional().describe("Words that must all appear in the episode title (and, with a show, its plot)."),
+      season: z.number().int().min(0).optional().describe("Only this season."),
+      episode: z.number().int().min(0).optional().describe("Only this episode number (needs season)."),
+      airedFrom: z.string().optional().describe("Aired on or after this date, YYYY-MM-DD."),
+      airedTo: z.string().optional().describe("Aired on or before this date, YYYY-MM-DD."),
+      episodeType: z.enum(["premiere", "finale"]).optional().describe("Only season premieres, or season finales (needs a show)."),
+      library: z.string().optional().describe("Without a show: only show libraries whose name contains this text, e.g. 'kids'."),
+      limit: z.number().int().min(1).max(100).optional().describe("How many to list (default 15, max 100)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        show: { type: "string", description: "A show to search inside, e.g. 'Entourage'. Required to search plots." },
+        text: { type: "string", description: "Words that must all appear in the episode title (and, with a show, its plot)." },
+        season: { type: "integer", description: "Only this season." },
+        episode: { type: "integer", description: "Only this episode number (needs season)." },
+        airedFrom: { type: "string", description: "Aired on or after this date, YYYY-MM-DD." },
+        airedTo: { type: "string", description: "Aired on or before this date, YYYY-MM-DD." },
+        episodeType: { type: "string", enum: ["premiere", "finale"], description: "Only season premieres, or season finales (needs a show)." },
+        library: { type: "string", description: "Without a show: only show libraries whose name contains this text, e.g. 'kids'." },
+        limit: { type: "integer", description: "How many to list (default 15, max 100)." },
+      },
+      required: [] as string[],
+    },
+    handler: async (args: EpisodeSearchArgs) => searchEpisodes(args),
   },
   {
     name: "resolve_actor_filmography",
