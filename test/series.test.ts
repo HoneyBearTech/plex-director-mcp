@@ -349,7 +349,7 @@ describe("check_series_completeness", () => {
     sonarrFake();
     const result = await checkSeriesCompleteness("Nothing Like It");
     assert.equal(result.isError, undefined);
-    assert.match(text(result), /No series matching "Nothing Like It" in Sonarr/);
+    assert.match(text(result), /No series matching "Nothing Like It" in Sonarr\./);
   });
 
   it("reports a Sonarr outage as an error", async () => {

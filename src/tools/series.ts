@@ -10,7 +10,7 @@ import type { MediaRow } from "./plex.js";
 // "100%" and /wanted/missing only covers monitored series. Counting aired
 // regular episodes with and without a file gives the answer a person means.
 
-const NOT_CONFIGURED =
+export const NOT_CONFIGURED =
   "Sonarr isn't configured. Set the Sonarr URL and API key on the Settings page (or SONARR_URL / SONARR_API_KEY in .env).";
 
 // Fetching every series' episodes is one request each; a handful at a time is
@@ -127,7 +127,7 @@ function normalizeTitle(title: string): string {
 }
 
 // "Title (2018)"; Sonarr sometimes already has the year in the title.
-const label = (series: any) => {
+export const label = (series: any) => {
   const title = String(series.title);
   return series.year && !/\(\d{4}\)\s*$/.test(title) ? `${title} (${series.year})` : title;
 };
@@ -185,12 +185,12 @@ function toRow(series: any, analysis: SeriesAnalysis): MediaRow {
   };
 }
 
-async function fetchAllSeries(): Promise<any[]> {
+export async function fetchAllSeries(): Promise<any[]> {
   const response = await sonarrClient.get("/api/v3/series");
   return (response.data ?? []) as any[];
 }
 
-async function fetchEpisodes(seriesId: number): Promise<any[]> {
+export async function fetchEpisodes(seriesId: number): Promise<any[]> {
   const response = await sonarrClient.get("/api/v3/episode", { params: { seriesId } });
   return (response.data ?? []) as any[];
 }
@@ -244,22 +244,30 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
   return lines;
 }
 
+// Finds the one show a title means, or the reply explaining why not (unknown,
+// or several to choose from). Used by every single-show Sonarr tool.
+export async function resolveSeries(title: string, year?: number): Promise<{ series: any } | { reply: ReturnType<typeof textReply> }> {
+  const found = findSeries(await fetchAllSeries(), title, year);
+  if (!found) {
+    return { reply: textReply(`No series matching "${title}" in Sonarr. It may not be tracked by Sonarr.`) };
+  }
+  if ("candidates" in found) {
+    const names = found.candidates.slice(0, 10).map(label);
+    return {
+      reply: textReply(
+        `"${title}" matches ${found.candidates.length} series in Sonarr: ${names.join("; ")}${found.candidates.length > 10 ? "; ..." : ""}. Ask again with the full title (and year if needed).`
+      ),
+    };
+  }
+  return { series: found.series };
+}
+
 export async function checkSeriesCompleteness(title: string, year?: number) {
   if (!isConfigured("SONARR")) return textReply(NOT_CONFIGURED, true);
   try {
-    const all = await fetchAllSeries();
-    const found = findSeries(all, title, year);
-    if (!found) {
-      return textReply(`No series matching "${title}" in Sonarr, so there is nothing to compare Plex against. It may not be tracked by Sonarr.`);
-    }
-    if ("candidates" in found) {
-      const names = found.candidates.slice(0, 10).map(label);
-      return textReply(
-        `"${title}" matches ${found.candidates.length} series in Sonarr: ${names.join("; ")}${found.candidates.length > 10 ? "; ..." : ""}. Ask again with the full title (and year if needed).`
-      );
-    }
-
-    const { series } = found;
+    const resolved = await resolveSeries(title, year);
+    if ("reply" in resolved) return resolved.reply;
+    const { series } = resolved;
     const analysis = analyzeEpisodes(await fetchEpisodes(series.id));
     const status = [series.status, series.monitored ? "monitored" : "not monitored"].filter(Boolean).join(", ");
 

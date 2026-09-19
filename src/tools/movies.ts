@@ -7,6 +7,7 @@ import { textReply, getErrorMessage } from "../util.js";
 import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
 import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js";
 import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "./series.js";
+import { checkSeriesStatus, diagnoseMissingEpisodes, type DiagnoseOptions } from "./seriesDiagnosis.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -300,6 +301,48 @@ export const movieTools: MovieTool[] = [
       required: [] as string[],
     },
     handler: async (options: SeriesGapOptions) => findSeriesGaps(options),
+  },
+  {
+    name: "check_series_status",
+    description:
+      "The TV counterpart of check_movie_status: what Sonarr knows about one show - whether it is monitored, its quality profile and location, when the next episode airs, when something was last downloaded, what is in the download queue, and how many aired episodes are downloaded. " +
+      "Use it for 'is <show> monitored?', 'what quality is <show>?', 'when does <show> come back?'. For which episodes are missing use check_series_completeness; for why one is missing use diagnose_missing_episodes.",
+    zodSchema: {
+      title: z.string().describe("The show's title, e.g. 'Severance'."),
+      year: z.number().int().optional().describe("First air year, only needed to tell same-named shows apart."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "The show's title, e.g. 'Severance'." },
+        year: { type: "integer", description: "First air year, only needed to tell same-named shows apart." },
+      },
+      required: ["title"],
+    },
+    handler: async ({ title, year }: { title: string; year?: number }) => checkSeriesStatus(title, year),
+  },
+  {
+    name: "diagnose_missing_episodes",
+    description:
+      "Explains WHY aired episodes of a show have no file, the TV counterpart of diagnose_missing_media: from Sonarr's history and download queue it says, per group of episodes, whether they were never grabbed, were grabbed but never imported, had a download fail (and why), had their file removed, are stuck in the queue, or are simply not monitored so Sonarr never looks for them. Read-only: it changes nothing. " +
+      "Give season (and episode) to look at just those; without them it groups every missing episode of the show. Use check_series_completeness first to see which episodes are missing.",
+    zodSchema: {
+      title: z.string().describe("The show's title, e.g. 'Bluey'."),
+      season: z.number().int().min(0).optional().describe("Only this season."),
+      episode: z.number().int().min(0).optional().describe("Only this episode number (needs season)."),
+      year: z.number().int().optional().describe("First air year, only needed to tell same-named shows apart."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "The show's title, e.g. 'Bluey'." },
+        season: { type: "integer", description: "Only this season." },
+        episode: { type: "integer", description: "Only this episode number (needs season)." },
+        year: { type: "integer", description: "First air year, only needed to tell same-named shows apart." },
+      },
+      required: ["title"],
+    },
+    handler: async ({ title, ...options }: { title: string } & DiagnoseOptions) => diagnoseMissingEpisodes(title, options),
   },
 ];
 
