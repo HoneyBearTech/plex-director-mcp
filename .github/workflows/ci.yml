@@ -30,6 +30,12 @@ jobs:
       - name: Typecheck
         run: npx tsc --noEmit
 
+      # Runs against a throwaway database with no network access and none of the
+      # real credentials (see test/setup.ts); test/isolation.test.ts fails the
+      # run if that isolation is ever broken.
+      - name: Test
+        run: npm test
+
       - name: Dependency audit
         run: npm audit --audit-level=high
 

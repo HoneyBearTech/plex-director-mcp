@@ -4,7 +4,7 @@
   "description": "A Plex Director MCP that will manage my Servarr Stack",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "node --import tsx --test \"test/**/*.test.ts\"",
     "start": "tsx src/index.ts"
   },
   "repository": {

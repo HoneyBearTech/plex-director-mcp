@@ -2,7 +2,7 @@ import { z } from "zod";
 import { server } from "../server.js";
 import { db } from "../db.js";
 import { tmdbClient, radarrClient } from "../clients.js";
-import { textReply, getErrorMessage } from "../util.js";
+import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 import { isConfigured } from "../settings.js";
 import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
 import { getIndexerHealth } from "../indexers.js";
@@ -206,7 +206,7 @@ export function registerDiscoveryTools() {
           insertStmt.run(choiceId, movie.id, movie.title, year);
 
           const cleanOverview = movie.overview
-            ? movie.overview.replace(/\\/g, "\\\\").replace(/\|/g, "\\|")
+            ? escapeTableCell(movie.overview)
             : "No overview available.";
           const truncatedOverview = cleanOverview.length > 180 ? `${cleanOverview.slice(0, 180)}...` : cleanOverview;
 
