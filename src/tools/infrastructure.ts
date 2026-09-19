@@ -1,7 +1,8 @@
 import fs from "node:fs";
 import { z } from "zod";
 import { server } from "../server.js";
-import { radarrClient, sonarrClient, qbitClient } from "../clients.js";
+import { radarrClient, sonarrClient } from "../clients.js";
+import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
 import { runRemoteCommand } from "../ssh.js";
 import { getSetting, isConfigured } from "../settings.js";
 
@@ -52,17 +53,9 @@ export function registerInfrastructureTools() {
     },
     async ({ action, minSpeedKbps }) => {
       try {
-        // Authenticate once and reuse the session cookie for queue operations.
-        const loginResponse = await qbitClient.post("/api/v2/auth/login",
-          `username=${encodeURIComponent(getSetting("QBITTORRENT_USER"))}&password=${encodeURIComponent(getSetting("QBITTORRENT_PASS"))}`,
-          { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-        );
-
-        const cookie = loginResponse.headers["set-cookie"];
-        const requestConfig = { headers: { Cookie: cookie ? cookie[0] : "" } };
-
-        const torrentsResponse = await qbitClient.get("/api/v2/torrents/info?filter=downloading", requestConfig);
-        const torrents = torrentsResponse.data || [];
+        // Authenticate once and reuse the session for queue operations.
+        const session = await loginToQbittorrent();
+        const torrents = await getDownloadingTorrents(session);
 
         // Include fully stalled downloads and downloads below the configured rate.
         const stalledTorrents = torrents.filter((t: any) => {
@@ -90,10 +83,7 @@ export function registerInfrastructureTools() {
         let purgeReport = `🧹 **Executing Torrent Remediation Strategy:**\n`;
         for (const torrent of stalledTorrents) {
           // Delete both the torrent metadata and its downloaded files.
-          await qbitClient.post("/api/v2/torrents/delete", `hashes=${torrent.hash}&deleteFiles=true`, {
-            ...requestConfig,
-            headers: { ...requestConfig.headers, "Content-Type": "application/x-www-form-urlencoded" }
-          });
+          await deleteTorrent(session, torrent.hash);
 
           // Servarr RSS routines can then search for an alternative release.
           purgeReport += `  ✓ Purged and blocklisted release: *${torrent.name}*\n`;
