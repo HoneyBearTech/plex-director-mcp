@@ -57,6 +57,17 @@ export interface PlexSearchArgs {
   // Only titles with no watching in this many years. A never-watched title
   // counts from when it was added.
   notWatchedInYears?: number;
+  // TV network (shows) or studio (movies); text contained in it, case-insensitive.
+  network?: string;
+  // Content rating such as "TV-MA" or "PG-13" (a country prefix like "gb/" is ignored).
+  contentRating?: string;
+  // Audience rating of at least this (0-10). Titles with no rating are left out.
+  minRating?: number;
+  // Release year range, inclusive: a decade is 1990 to 1999.
+  yearFrom?: number;
+  yearTo?: number;
+  // Added to Plex within this many days.
+  addedWithinDays?: number;
   sort?: SearchSort;
   limit?: number;
   // How many matches to skip, for paging through a large result.
@@ -65,6 +76,9 @@ export interface PlexSearchArgs {
 
 const DEFAULT_LIMIT = 25;
 const DAY_MS = 86_400_000;
+const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+// "gb/15" and "15" are the same rating; "tv-ma" and "TV-MA" too.
+const normalizeRating = (s: string) => s.trim().replace(/^[a-z]{2}\//i, "").toUpperCase();
 const MAX_LIMIT = 500;
 // Plex is asked for everything that matches in one go; libraries here are
 // well under this, so it is effectively "all".
@@ -180,15 +194,19 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
   }
 
-  const { title, genre, actor, year, library, watched, notWatchedInYears } = args;
+  const { title, genre, actor, year, library, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays } = args;
   const mediaType = args.mediaType ?? "any";
   const sort = args.sort ?? "title";
-  if (!title && !genre && !actor && year === undefined && !library && mediaType === "any" && !watched && notWatchedInYears === undefined && sort === "title") {
-    return textReply("Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, sort.", true);
+  const extra = Boolean(network?.trim()) || Boolean(contentRating?.trim()) || minRating !== undefined || yearFrom !== undefined || yearTo !== undefined || addedWithinDays !== undefined;
+  if (!title && !genre && !actor && year === undefined && !library && mediaType === "any" && !watched && notWatchedInYears === undefined && sort === "title" && !extra) {
+    return textReply("Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort.", true);
   }
   if (notWatchedInYears !== undefined && !(notWatchedInYears > 0)) {
     return textReply("notWatchedInYears must be greater than 0.", true);
   }
+  if (addedWithinDays !== undefined && !(addedWithinDays > 0)) return textReply("addedWithinDays must be greater than 0.", true);
+  if (minRating !== undefined && !(minRating >= 0 && minRating <= 10)) return textReply("minRating must be between 0 and 10.", true);
+  if (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo) return textReply("yearFrom is after yearTo.", true);
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const offset = Math.max(args.offset ?? 0, 0);
   const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
@@ -232,6 +250,11 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     if (notWatchedInYears !== undefined) {
       described.push(`not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}`);
     }
+    if (network?.trim()) described.push(`network/studio "${network.trim()}"`);
+    if (contentRating?.trim()) described.push(`rated ${contentRating.trim().toUpperCase()}`);
+    if (minRating !== undefined) described.push(`audience rating at least ${minRating}`);
+    if (yearFrom !== undefined || yearTo !== undefined) described.push(`released ${yearFrom ?? "any"}-${yearTo ?? "any"}`);
+    if (addedWithinDays !== undefined) described.push(`added in the last ${addedWithinDays} day${addedWithinDays === 1 ? "" : "s"}`);
     if (year !== undefined) {
       filters.year = year;
       described.push(`year ${year}`);
@@ -319,6 +342,23 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       });
     }
 
+    // Attribute filters, judged on the title's first copy (all copies of a title agree in practice).
+    const wantNetwork = network?.trim() ? fold(network) : null;
+    const wantRating = contentRating?.trim() ? normalizeRating(contentRating) : null;
+    candidates = candidates.filter((g) => {
+      if (wantNetwork && !fold(String(g.item.studio ?? "")).includes(wantNetwork)) return false;
+      if (wantRating && normalizeRating(String(g.item.contentRating ?? "")) !== wantRating) return false;
+      if (minRating !== undefined) {
+        const rating = numberOrNull(g.item.audienceRating ?? g.item.rating);
+        if (rating === null || rating < minRating) return false;
+      }
+      const released = numberOrNull(g.item.year);
+      if (yearFrom !== undefined && (released === null || released < yearFrom)) return false;
+      if (yearTo !== undefined && (released === null || released > yearTo)) return false;
+      if (addedWithinDays !== undefined && (g.watch.addedLast === null || g.watch.addedLast * 1000 < now - addedWithinDays * DAY_MS)) return false;
+      return true;
+    });
+
     const byTitle = (a: Group, b: Group) =>
       String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) || (a.item.year ?? 0) - (b.item.year ?? 0);
     // Newest / oldest first; a title with no date sorts last either way.
@@ -337,7 +377,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     const total = sorted.length;
     const rows = sorted.slice(offset, offset + limit);
 
-    const withDates = Boolean(watched) || notWatchedInYears !== undefined || sort !== "title";
+    const withDates = Boolean(watched) || notWatchedInYears !== undefined || addedWithinDays !== undefined || sort !== "title";
     const sortHeading = sort === "recentlyAdded" ? "newest additions first" : sort === "lastWatched" ? "most recently watched first" : sort === "leastRecentlyWatched" ? "longest unwatched first" : "";
     const heading = described.join(", ") || sortHeading || "that request";
     const undatedNote =
