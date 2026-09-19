@@ -4,9 +4,11 @@ import Database from "better-sqlite3";
 import { projectRoot } from "./env.js";
 
 const dataDir = path.join(projectRoot, "data");
-const dbPath = path.join(dataDir, "plex_director.db");
+// PLEX_DIRECTOR_DB_PATH lets the test suite use a throwaway database instead
+// of the real one in data/.
+const dbPath = process.env.PLEX_DIRECTOR_DB_PATH || path.join(dataDir, "plex_director.db");
 
-fs.mkdirSync(dataDir, { recursive: true });
+fs.mkdirSync(path.dirname(dbPath), { recursive: true });
 export const db: Database.Database = new Database(dbPath);
 
 // Keep job state durable so long-running media operations can resume across MCP restarts.

@@ -56,3 +56,11 @@ export function rowLabel(statId: string, item: any): string {
 export function rowPlays(item: any): number {
   return item.total_plays ?? item.play_count ?? item.count ?? 0;
 }
+
+// Escapes text for use inside a Markdown table cell. Backslashes first, then
+// pipes: escaping only the pipe would let a trailing "\\" cancel the pipe's
+// escape and break the row (CodeQL js/incomplete-sanitization).
+export function escapeTableCell(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
+}
+

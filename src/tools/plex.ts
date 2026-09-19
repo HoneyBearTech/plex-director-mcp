@@ -1,6 +1,6 @@
 import { plexClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
-import { textReply, getErrorMessage } from "../util.js";
+import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 
 // One movie in a result list. Tools attach these as structuredContent so the
 // web UI can render a table with posters; the text reply stays for MCP clients
@@ -98,14 +98,8 @@ function tmdbIdOf(item: any): string | null {
   return guid ? guid.id.slice("tmdb://".length) : null;
 }
 
-// Backslashes first: escaping only the pipe would let a trailing "\\" in a
-// title cancel out the pipe's escape and break the table row.
 function plexPosterUrl(thumb: unknown): string | null {
   return typeof thumb === "string" && thumb ? `/api/plex/image?path=${encodeURIComponent(thumb)}` : null;
-}
-
-function cell(text: string): string {
-  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 // Movies actually in the Plex library, filtered by any combination of genre,
@@ -197,7 +191,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     for (const { item, library } of rows) {
       const genres = (item.Genre ?? []).map((g: any) => g.tag).join(", ");
       const rating = item.audienceRating ?? item.rating;
-      output += `| ${cell(String(item.title))} | ${item.year ?? "N/A"} | ${cell(library)} | ${cell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
+      output += `| ${escapeTableCell(String(item.title))} | ${item.year ?? "N/A"} | ${escapeTableCell(library)} | ${escapeTableCell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
     }
 
     const movies: MovieRow[] = rows.map(({ item, library }) => {
@@ -259,3 +253,9 @@ export async function getOwnedTmdbIndex(): Promise<Map<string, string[]>> {
   ownedIndexCache = { at: Date.now(), byTmdbId };
   return byTmdbId;
 }
+
+// For tests: forget the cached index so the next call re-reads Plex.
+export function resetOwnedTmdbIndexCache(): void {
+  ownedIndexCache = null;
+}
+

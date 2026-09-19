@@ -83,30 +83,35 @@ const combinedCmd = [
   uptimeCmd,
 ].join(` ; echo '${FIELD_SEP}' ; `);
 
+// Turns the combined script's output into typed health data. Pure, so it can
+// be tested without an SSH connection.
+export function parseProbeOutput(host: string, output: string): OnlineHostHealth {
+  const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] = output
+    .split(FIELD_SEP)
+    .map((s) => s.trim());
+
+  const [diskTotal, diskUsed, diskPercentRaw] = (disk ?? "").split(/\s+/);
+
+  return {
+    host,
+    hostname: hostname || host,
+    online: true,
+    cpuPercent: Number(cpu) || 0,
+    ramPercent: Number(ramPercent) || 0,
+    ramUsedMb: Number(ramUsed) || 0,
+    ramTotalMb: Number(ramTotal) || 0,
+    containersRunning: Number(dockerCount) || 0,
+    deadContainers: (deadContainers ?? "").split(",").filter(Boolean),
+    diskPercent: Number.parseFloat(diskPercentRaw ?? "") || 0,
+    diskUsed: diskUsed || "?",
+    diskTotal: diskTotal || "?",
+    uptime: formatUptime(Number(uptime) || 0),
+  };
+}
+
 export async function probeHost(host: string): Promise<HostHealth> {
   try {
-    const output = await runRemoteCommand(host, combinedCmd);
-    const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] = output
-      .split(FIELD_SEP)
-      .map((s) => s.trim());
-
-    const [diskTotal, diskUsed, diskPercentRaw] = (disk ?? "").split(/\s+/);
-
-    return {
-      host,
-      hostname: hostname || host,
-      online: true,
-      cpuPercent: Number(cpu) || 0,
-      ramPercent: Number(ramPercent) || 0,
-      ramUsedMb: Number(ramUsed) || 0,
-      ramTotalMb: Number(ramTotal) || 0,
-      containersRunning: Number(dockerCount) || 0,
-      deadContainers: (deadContainers ?? "").split(",").filter(Boolean),
-      diskPercent: Number.parseFloat(diskPercentRaw ?? "") || 0,
-      diskUsed: diskUsed || "?",
-      diskTotal: diskTotal || "?",
-      uptime: formatUptime(Number(uptime) || 0),
-    };
+    return parseProbeOutput(host, await runRemoteCommand(host, combinedCmd));
   } catch {
     return { host, hostname: host, online: false };
   }
