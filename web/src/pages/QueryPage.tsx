@@ -110,7 +110,10 @@ export function QueryPage() {
     setError(null);
 
     try {
-      const answer = await api.chatWithMovies(trimmed);
+      const answer = await api.chatWithMovies(
+        trimmed,
+        messages.map(({ role, text, movies }) => ({ role, text, movies })),
+      );
       setMessages((prev) => [
         ...prev,
         { role: "assistant", text: answer.text, images: answer.images, movies: answer.movies },
@@ -127,7 +130,7 @@ export function QueryPage() {
       <Card>
         <Flex direction="column" gap="4" style={{ minHeight: 200 }}>
           {messages.length === 0 && (
-            <Text color="gray">Ask about your movie library, e.g. &quot;Do I have the F1 movie?&quot;</Text>
+            <Text color="gray">Ask about your movie library, e.g. &quot;Do I have the F1 movie?&quot; Follow-up questions keep the context of the conversation.</Text>
           )}
           {messages.map((message, i) => (
             <Flex key={i} direction="column" gap="1" align={message.role === "user" ? "end" : "start"}>
@@ -172,6 +175,18 @@ export function QueryPage() {
           </Box>
           <Button type="submit" loading={loading}>
             Ask
+          </Button>
+          <Button
+            type="button"
+            variant="soft"
+            color="gray"
+            disabled={loading || messages.length === 0}
+            onClick={() => {
+              setMessages([]);
+              setError(null);
+            }}
+          >
+            New chat
           </Button>
         </Flex>
       </form>

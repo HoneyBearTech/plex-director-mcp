@@ -92,6 +92,12 @@ export interface MovieRow {
   detail: string | null;
 }
 
+export interface ChatHistoryTurn {
+  role: "user" | "assistant";
+  text: string;
+  movies?: MovieRow[];
+}
+
 export interface ChatAnswer {
   text: string;
   images: ChatImage[];
@@ -133,7 +139,9 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
 }
 
 export const api = {
-  chatWithMovies: (question: string) => postJson<ChatAnswer>("/api/chat/movies", { question }),
+  // history = the earlier messages of this conversation, so follow-ups have context.
+  chatWithMovies: (question: string, history: ChatHistoryTurn[] = []) =>
+    postJson<ChatAnswer>("/api/chat/movies", { question, history }),
   plexActivity: () => getJson<PlexActivity>("/api/status/activity"),
   libraryAnalytics: () => getJson<LibraryAnalytics>("/api/status/library-analytics"),
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
