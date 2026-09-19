@@ -68,6 +68,8 @@ function MediaTable({ media }: { media: MediaRow[] }) {
   const showDetail = media.some((m) => m.genres.length > 0 || m.detail);
   const hasShows = media.some((m) => m.kind === "show");
   const hasMovies = media.some((m) => m.kind === "movie");
+  // Only Plex search rows carry season/episode data (TMDb filmography rows do not).
+  const hasShowDetail = media.some((m) => m.show);
   const noun = hasShows && hasMovies ? "title" : hasShows ? "show" : "movie";
 
   return (
@@ -85,7 +87,7 @@ function MediaTable({ media }: { media: MediaRow[] }) {
           {hasShows && hasMovies && <Table.ColumnHeaderCell>Kind</Table.ColumnHeaderCell>}
           <Table.ColumnHeaderCell>Year</Table.ColumnHeaderCell>
           {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
-          {hasShows && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
+          {hasShowDetail && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
           {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
           {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
         </Table.Row>
@@ -127,7 +129,7 @@ function MediaTable({ media }: { media: MediaRow[] }) {
                 )}
               </Table.Cell>
             )}
-            {hasShows && <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>}
+            {hasShowDetail && <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>}
             {showDetail && <Table.Cell>{item.detail ?? item.genres.join(", ")}</Table.Cell>}
             {showRating && <Table.Cell>{item.rating !== null ? item.rating.toFixed(1) : "-"}</Table.Cell>}
           </Table.Row>

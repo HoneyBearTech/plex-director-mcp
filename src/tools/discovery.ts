@@ -4,15 +4,23 @@ import { db } from "../db.js";
 import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 import { getSetting, isConfigured } from "../settings.js";
-import { getOwnedTmdbIndex, type MediaRow } from "./plex.js";
+import { getOwnedTmdbIndex, type MediaKind, type MediaRow } from "./plex.js";
 import { getIndexerHealth } from "../indexers.js";
 
 const DEFAULT_FILMOGRAPHY_LIMIT = 15;
 
+// TMDb genre ids that mark a credit as "appeared as themselves" material.
+const GENRE_DOCUMENTARY = 99;
+const GENRE_NEWS = 10763;
+const GENRE_TALK = 10767;
+
 // Registered through movieTools (src/tools/movies.ts) so the MCP client and the
-// web chat share it. TMDb knows every film an actor was in; Plex knows which of
-// them the user actually has, so when Plex is configured each title is marked.
+// web chat share it. TMDb knows every film and TV show an actor was in; Plex
+// knows which of them the user actually has, so when Plex is configured each
+// title is marked.
 export interface FilmographyOptions {
+  // Movies, TV shows, or both (the default).
+  mediaType?: "movie" | "show" | "any";
   limit?: number;
   yearFrom?: number;
   yearTo?: number;
@@ -24,8 +32,63 @@ export interface FilmographyOptions {
   library?: string;
 }
 
+// A movie credit and a TV credit, in one shape. TMDb names the fields
+// differently (title / release_date vs name / first_air_date).
+interface Credit {
+  kind: MediaKind;
+  id: string;
+  title: string;
+  date: string | null;
+  character: string;
+  posterPath: string | null;
+  rating: number | null;
+}
+
+function toCredit(kind: MediaKind, raw: any): Credit {
+  return {
+    kind,
+    id: String(raw.id),
+    title: String(kind === "movie" ? raw.title : raw.name),
+    date: (kind === "movie" ? raw.release_date : raw.first_air_date) || null,
+    character: raw.character || "",
+    posterPath: raw.poster_path || null,
+    rating: raw.vote_average ? Number(raw.vote_average) : null,
+  };
+}
+
+// Drops appearances as themselves, uncredited parts and documentaries; for TV
+// also talk shows and news, where a big TV career is mostly "Self".
+function isStructuralCredit(kind: MediaKind, raw: any): boolean {
+  const character = raw.character ? String(raw.character).toLowerCase() : "";
+  const isSelf = character.includes("self") || character.includes("historical footage") || character.includes("archive");
+  const isUncredited = character.includes("uncredited");
+  const genres: number[] = raw.genre_ids ?? [];
+  const excludedGenres = kind === "show" ? [GENRE_DOCUMENTARY, GENRE_NEWS, GENRE_TALK] : [GENRE_DOCUMENTARY];
+  return !isSelf && !isUncredited && !excludedGenres.some((g) => genres.includes(g));
+}
+
+// TMDb lists a title once per role (an actor who voiced several parts in one
+// show appears several times), and one credit can already hold several roles
+// ("Bert / Judge (voice)"). Merge them into one credit per title with each role
+// listed once, otherwise the counts are inflated and the table repeats the title.
+function mergeRoles(credits: Credit[]): Credit[] {
+  const byTitle = new Map<string, { credit: Credit; roles: string[] }>();
+  for (const credit of credits) {
+    const key = `${credit.kind}:${credit.id}`;
+    const entry = byTitle.get(key) ?? { credit: { ...credit }, roles: [] };
+    byTitle.set(key, entry);
+    for (const role of credit.character.split("/").map((r) => r.trim())) {
+      if (role && !entry.roles.includes(role)) entry.roles.push(role);
+    }
+  }
+  return [...byTitle.values()].map(({ credit, roles }) => ({ ...credit, character: roles.join(" / ") }));
+}
+
+const yearOf = (credit: Credit): number | null => (credit.date ? Number(String(credit.date).split("-")[0]) : null);
+
 export async function resolveActorFilmography(actorName: string, options: FilmographyOptions = {}) {
-  const { limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all", library } = options;
+  const { mediaType = "any", limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all", library } = options;
+  const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
   try {
     const personSearch = await tmdbClient.get(`/search/person?query=${encodeURIComponent(actorName)}`);
     const person = personSearch.data?.results?.[0];
@@ -34,65 +97,76 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
       return textReply(`❌ Actor "${actorName}" could not be resolved on TMDb.`, true);
     }
 
-    const creditsResponse = await tmdbClient.get(`/person/${person.id}/movie_credits`);
-    const castCredits = creditsResponse.data?.cast || [];
-
-    const cleanFilmography = castCredits.filter((movie: any) => {
-      const character = movie.character ? movie.character.toLowerCase() : "";
-      const isSelf = character.includes("self") || character.includes("historical footage") || character.includes("archive");
-      const isUncredited = character.includes("uncredited");
-      const isDocumentary = movie.genre_ids?.includes(99);
-
-      return !isSelf && !isUncredited && !isDocumentary;
-    });
-
-    cleanFilmography.sort(
-      (a: any, b: any) => new Date(b.release_date || 0).getTime() - new Date(a.release_date || 0).getTime()
+    const creditLists = await Promise.all(
+      kinds.map(async (kind) => {
+        const response = await tmdbClient.get(`/person/${person.id}/${kind === "movie" ? "movie_credits" : "tv_credits"}`);
+        return ((response.data?.cast || []) as any[]).filter((raw) => isStructuralCredit(kind, raw)).map((raw) => toCredit(kind, raw));
+      })
     );
+    const cleanFilmography = mergeRoles(creditLists.flat());
 
-    let owned: Map<string, string[]> | null = null;
+    cleanFilmography.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+
+    let owned: Record<MediaKind, Map<string, string[]>> | null = null;
     let plexNote = "";
     if (isConfigured("PLEX")) {
       try {
-        owned = await getOwnedTmdbIndex();
+        const indexes = await Promise.all(kinds.map((kind) => getOwnedTmdbIndex(kind)));
+        const built = { movie: new Map<string, string[]>(), show: new Map<string, string[]>() };
+        kinds.forEach((kind, i) => {
+          built[kind] = indexes[i]!;
+        });
+        owned = built;
 
         if (library) {
           const wanted = library.trim().toLowerCase();
-          const libraryNames = [...new Set([...owned.values()].flat())];
+          const libraryNames = [...new Set(indexes.flatMap((index) => [...index.values()].flat()))];
           if (!libraryNames.some((name) => name.toLowerCase().includes(wanted))) {
-            return textReply(`No Plex movie library matching "${library}". Movie libraries with titles: ${libraryNames.join(", ")}.`, true);
+            const label = mediaType === "any" ? "Libraries" : `${mediaType[0]!.toUpperCase()}${mediaType.slice(1)} libraries`;
+            return textReply(`No Plex ${mediaType === "any" ? "" : `${mediaType} `}library matching "${library}". ${label} with titles: ${libraryNames.join(", ")}.`, true);
           }
-          owned = new Map(
-            [...owned]
-              .map(([id, names]): [string, string[]] => [id, names.filter((name) => name.toLowerCase().includes(wanted))])
-              .filter(([, names]) => names.length > 0)
-          );
+          for (const kind of kinds) {
+            owned[kind] = new Map(
+              [...owned[kind]]
+                .map(([id, names]): [string, string[]] => [id, names.filter((name) => name.toLowerCase().includes(wanted))])
+                .filter(([, names]) => names.length > 0)
+            );
+          }
         }
       } catch (error: unknown) {
         plexNote = `(Couldn't check Plex ownership: ${getErrorMessage(error)})\n`;
       }
     }
+    const librariesOf = (credit: Credit): string[] | undefined => owned?.[credit.kind].get(credit.id);
 
+    const targets = mediaType === "movie" ? "movie" : mediaType === "show" ? "TV show" : "movie and TV";
+    const removed = mediaType === "movie" ? "docs/uncredited/self" : "docs, talk shows, news, uncredited and self appearances";
     let output = `🎬 Resolved: ${person.name} (TMDb ID: ${person.id})\n`;
-    output += `Filtered filmography to ${cleanFilmography.length} structural movie targets (removed docs/uncredited/self):\n`;
+    output += `Filtered filmography to ${cleanFilmography.length} structural ${targets} targets (removed ${removed}):\n`;
     if (owned) {
-      const ownedCount = cleanFilmography.filter((movie: any) => owned.has(String(movie.id))).length;
+      const ownedCount = cleanFilmography.filter((credit) => librariesOf(credit)).length;
       output += library
-        ? `In your Plex libraries matching "${library}": ${ownedCount} of ${cleanFilmography.length}.\n`
-        : `In your Plex library: ${ownedCount} of ${cleanFilmography.length}.\n`;
+        ? `In your Plex libraries matching "${library}": ${ownedCount} of ${cleanFilmography.length}`
+        : `In your Plex library: ${ownedCount} of ${cleanFilmography.length}`;
+      if (kinds.length > 1) {
+        const part = (kind: MediaKind, label: string) => {
+          const ofKind = cleanFilmography.filter((credit) => credit.kind === kind);
+          return `${ofKind.filter((credit) => librariesOf(credit)).length} of ${ofKind.length} ${label}`;
+        };
+        output += ` (${part("movie", "movies")}, ${part("show", "TV shows")})`;
+      }
+      output += ".\n";
     }
     output += plexNote;
 
     // Filters are applied here (not left to the model) so the table the web
     // UI shows is exactly the set that was asked about.
-    const releaseYear = (movie: any): number | null =>
-      movie.release_date ? Number(String(movie.release_date).split("-")[0]) : null;
-    const matching = cleanFilmography.filter((movie: any) => {
-      const year = releaseYear(movie);
+    const matching = cleanFilmography.filter((credit) => {
+      const year = yearOf(credit);
       if (yearFrom !== undefined && (year === null || year < yearFrom)) return false;
       if (yearTo !== undefined && (year === null || year > yearTo)) return false;
-      if (owned && show === "owned" && !owned.has(String(movie.id))) return false;
-      if (owned && show === "missing" && owned.has(String(movie.id))) return false;
+      if (owned && show === "owned" && !librariesOf(credit)) return false;
+      if (owned && show === "missing" && librariesOf(credit)) return false;
       return true;
     });
     if (matching.length !== cleanFilmography.length) {
@@ -104,10 +178,11 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
     }
     output += "\n";
 
-    matching.slice(0, limit).forEach((movie: any) => {
-      const libraries = owned?.get(String(movie.id));
+    matching.slice(0, limit).forEach((credit) => {
+      const libraries = librariesOf(credit);
       const status = owned ? (libraries ? ` - ✅ In Plex (${libraries.join(", ")})` : " - ❌ Not in Plex") : "";
-      output += `  ▪ ${movie.title} (${movie.release_date ? movie.release_date.split("-")[0] : "N/A"}) - As: ${movie.character || "Unknown"}${status}\n`;
+      const kindNote = credit.kind === "show" ? " [TV show]" : "";
+      output += `  ▪ ${credit.title} (${credit.date ? credit.date.split("-")[0] : "N/A"})${kindNote} - As: ${credit.character || "Unknown"}${status}\n`;
     });
 
     if (matching.length > limit) {
@@ -116,15 +191,15 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 
     // Same titles as the text list, for the web UI's results table. TMDb
     // posters are public, so they can be loaded directly (unlike Plex's).
-    const media: MediaRow[] = matching.slice(0, limit).map((movie: any) => ({
-      kind: "movie",
-      title: String(movie.title),
-      year: movie.release_date ? Number(movie.release_date.split("-")[0]) : null,
-      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w154${movie.poster_path}` : null,
-      libraries: owned ? (owned.get(String(movie.id)) ?? []) : null,
+    const media: MediaRow[] = matching.slice(0, limit).map((credit) => ({
+      kind: credit.kind,
+      title: credit.title,
+      year: yearOf(credit),
+      posterUrl: credit.posterPath ? `https://image.tmdb.org/t/p/w154${credit.posterPath}` : null,
+      libraries: owned ? (librariesOf(credit) ?? []) : null,
       genres: [],
-      rating: movie.vote_average ? Number(movie.vote_average) : null,
-      detail: movie.character ? `As ${movie.character}` : null,
+      rating: credit.rating,
+      detail: credit.character ? `As ${credit.character}` : null,
     }));
 
     return { ...textReply(output), structuredContent: { media } };

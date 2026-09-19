@@ -41,7 +41,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 ## What it can do
 
 - **Find what you own.** Search your Plex library, movies and TV shows, by genre, actor, title, year and library (for example just the 4K libraries) across every library at once. A title held in both HD and 4K is one result with both libraries shown, and shows come with their season and episode counts and how much you have watched. You can leave a library such as Sports out of searches unless you name it.
-- **Owned versus missing.** Look up an actor's TMDb filmography and see which of those movies are in Plex and which are not, optionally narrowed by year range, or by "in 4K".
+- **Owned versus missing.** Look up an actor's TMDb filmography, movies and TV shows, and see which of those titles are in Plex and which are not, optionally narrowed to movies or shows, by year range, or by "in 4K". Talk-show and "Self" appearances are left out, and a title appears once even when the actor played several roles in it.
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
 - **Run batch jobs safely.** Plan a movie-upgrade batch and let a rate-limited runner search one movie a minute, with pause, resume, cancel, and automatic pausing if Radarr stops responding.
@@ -413,7 +413,7 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 | Tool | What it does |
 | :--- | :--- |
 | ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Paged for large results. |
-| ★ `resolve_actor_filmography` | An actor's TMDb filmography with each movie marked as in Plex or not, filterable by year range, owned/missing, and library. |
+| ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
 | ★ `check_movie_status` | Whether a movie is in Radarr, and its monitoring status, with artwork. |
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |
 | `search_and_select_movies` | Searches TMDb and shows a numbered grid of matches. |
