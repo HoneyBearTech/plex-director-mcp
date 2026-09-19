@@ -8,6 +8,7 @@ import { registerInfrastructureTools } from "./tools/infrastructure.js";
 import { createWebApp } from "./web/app.js";
 import { seedSettingsFromEnv } from "./settings.js";
 import { refreshClients } from "./clients.js";
+import { startJobRunner } from "./jobRunner.js";
 
 // First boot: copy any configured .env values into the settings store so
 // there's something to seed from. After that, whatever's saved via the
@@ -40,3 +41,4 @@ run().catch((error) => {
 });
 
 runWebServer();
+startJobRunner();
