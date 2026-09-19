@@ -14,9 +14,17 @@ export interface KeyPair {
   publicKey: string;
 }
 
+// ssh2's ed25519 generator produces a key that ssh2 itself cannot parse back
+// (about 0.4% of the time: 3,403 of 867,381 in a measured sample). A suite that
+// generates ~50 keys per run therefore failed at random about 1 run in 5, so
+// every key is checked with ssh2's own parser and regenerated if it is bad.
 export function generateKeyPair(passphrase?: string): KeyPair {
-  const pair = utils.generateKeyPairSync("ed25519", passphrase ? { passphrase, cipher: "aes256-ctr", rounds: 16 } : {});
-  return { privateKey: pair.private, publicKey: pair.public };
+  for (let attempt = 0; attempt < 25; attempt++) {
+    const pair = utils.generateKeyPairSync("ed25519", passphrase ? { passphrase, cipher: "aes256-ctr", rounds: 16 } : {});
+    const usable = !(utils.parseKey(pair.private, passphrase) instanceof Error) && !(utils.parseKey(pair.public) instanceof Error);
+    if (usable) return { privateKey: pair.private, publicKey: pair.public };
+  }
+  throw new Error("Could not generate a usable SSH key pair");
 }
 
 export interface TestSshServer {
