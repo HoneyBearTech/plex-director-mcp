@@ -181,3 +181,44 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     return textReply(`Failed to search Plex: ${getErrorMessage(error)}`, true);
   }
 }
+
+// Every movie Plex holds, keyed by TMDb id -> the libraries that hold it.
+// Matching on TMDb id (rather than filtering by actor tag) is exact: Plex only
+// tags an actor on the cast it lists, so a tag filter would call a minor role
+// "not owned". The whole index is ~1,400 movies / a few MB, so it's cached
+// briefly instead of re-fetched for every question.
+const OWNED_INDEX_TTL_MS = 5 * 60_000;
+const INDEX_PAGE_SIZE = 1000;
+let ownedIndexCache: { at: number; byTmdbId: Map<string, string[]> } | null = null;
+
+export async function getOwnedTmdbIndex(): Promise<Map<string, string[]>> {
+  if (ownedIndexCache && Date.now() - ownedIndexCache.at < OWNED_INDEX_TTL_MS) {
+    return ownedIndexCache.byTmdbId;
+  }
+
+  const sections = await getMovieSections();
+  const byTmdbId = new Map<string, string[]>();
+
+  await Promise.all(
+    sections.map(async (section) => {
+      for (let start = 0; ; start += INDEX_PAGE_SIZE) {
+        const response = await plexClient.get(`/library/sections/${section.key}/all`, {
+          params: { includeGuids: 1, "X-Plex-Container-Start": start, "X-Plex-Container-Size": INDEX_PAGE_SIZE },
+        });
+        const container = response.data?.MediaContainer ?? {};
+        const items: any[] = container.Metadata ?? [];
+        for (const item of items) {
+          const tmdbId = tmdbIdOf(item);
+          if (!tmdbId) continue;
+          const libraries = byTmdbId.get(tmdbId) ?? [];
+          libraries.push(section.title);
+          byTmdbId.set(tmdbId, libraries);
+        }
+        if (items.length === 0 || start + items.length >= Number(container.totalSize ?? 0)) break;
+      }
+    })
+  );
+
+  ownedIndexCache = { at: Date.now(), byTmdbId };
+  return byTmdbId;
+}
