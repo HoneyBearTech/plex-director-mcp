@@ -103,6 +103,7 @@ Notes:
 - `DISCORD_WEBHOOK_URL` is optional and used for rich job notifications when configured.
 - `UBUNTU_HOSTS` should be a comma-separated list of remote hosts to monitor.
 - `WEB_PORT` is optional (defaults to `3000`) and controls the web UI's port.
+- `JOB_RUNNER_INTERVAL_SECONDS` is optional (defaults to `60`) and controls the automatic job runner: every interval it advances one item of one background job that has been started (status `RUNNING`) - it never starts `PENDING` jobs or touches paused/cancelled ones, and it pauses a job after 3 consecutive failed steps. Minimum `10`; set `0` to turn the runner off.
 - **Don't put inline comments on the same line as a value** (e.g. `TMDB_API_KEY=abc123 # my key`). Docker's `--env-file` flag doesn't strip these the way `dotenv` does - the comment becomes part of the value, silently breaking that credential when run via `docker run --env-file .env`. Put comments on their own line above the variable instead.
 
 ### 3) Add the server to Claude Desktop
