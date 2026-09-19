@@ -67,6 +67,7 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     fields: [
       { name: "url", label: "URL", placeholder: "http://plex:32400" },
       { name: "token", label: "Token", secret: true },
+      { name: "skipLibraries", label: "Libraries to leave out of searches", placeholder: "e.g. Sports (comma-separated; still searched when named)" },
     ],
   },
   {

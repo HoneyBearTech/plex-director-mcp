@@ -41,6 +41,7 @@ const SERVICES: Record<string, FieldDef[]> = {
   plex: [
     { field: "url", key: "PLEX_URL" },
     { field: "token", key: "PLEX_TOKEN", secret: true },
+    { field: "skipLibraries", key: "PLEX_SKIP_LIBRARIES" },
   ],
   tmdb: [{ field: "apiKey", key: "TMDB_API_KEY", secret: true }],
   // SSH_KEY_PATH deliberately excluded - stays a server-side file path, never

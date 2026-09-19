@@ -10,11 +10,15 @@ const SECTIONS = [
   { key: "1", type: "movie", title: "Movies" },
   { key: "2", type: "movie", title: "4k Movies" },
   { key: "3", type: "show", title: "TV Shows" },
+  { key: "4", type: "show", title: "4k TV Shows" },
+  { key: "5", type: "show", title: "Sports" },
 ];
 const GENRES: Record<string, Array<{ key: string; title: string }>> = {
   "1": [{ key: "930", title: "Horror" }, { key: "106", title: "Action" }],
   "2": [{ key: "106", title: "Action" }],
-  "3": [{ key: "999", title: "Drama" }],
+  "3": [{ key: "999", title: "Drama" }, { key: "930", title: "Horror" }],
+  "4": [{ key: "999", title: "Drama" }],
+  "5": [],
 };
 
 const movie = (title: string, year: number, extra: Record<string, unknown> = {}) => ({
@@ -25,6 +29,21 @@ const movie = (title: string, year: number, extra: Record<string, unknown> = {})
   audienceRating: 7.44,
   Genre: [{ tag: "Horror" }, { tag: "Thriller" }],
   Guid: [{ id: `imdb://tt${year}` }, { id: `tmdb://${year}` }],
+  ...extra,
+});
+
+const show = (title: string, year: number, extra: Record<string, unknown> = {}) => ({
+  title,
+  titleSort: title,
+  year,
+  thumb: `/library/metadata/${year}/thumb/2`,
+  audienceRating: 8.6,
+  studio: "HBO",
+  childCount: 5,
+  leafCount: 62,
+  viewedLeafCount: 40,
+  Genre: [{ tag: "Drama" }],
+  Guid: [{ id: `imdb://tt${year}` }, { id: `tmdb://${year}` }, { id: `tvdb://${year + 1000}` }],
   ...extra,
 });
 
@@ -54,7 +73,7 @@ function plexFake(overrides?: (req: RecordedRequest) => any) {
 beforeEach(async () => {
   await resetDb();
   setSetting("PLEX_URL", "http://plex:32400");
-  library = { "1": [], "2": [], "3": [movie("Should Never Appear", 1999)] };
+  library = { "1": [], "2": [], "3": [], "4": [], "5": [] };
   hubActors = [];
   resetOwnedTmdbIndexCache();
 });
@@ -91,9 +110,11 @@ describe("searchPlexLibrary: resolving genre and actor names", () => {
 
   it("lists the available genres when the name is unknown", async () => {
     plexFake();
-    const result = await searchPlexLibrary({ genre: "Nonexistent" });
-    assert.equal(result.isError, true);
-    assert.match(textOf(result), /No genre "Nonexistent" in Plex\. Available genres: Action, Horror\./);
+    const movies = await searchPlexLibrary({ genre: "Nonexistent", mediaType: "movie" });
+    assert.equal(movies.isError, true);
+    assert.match(textOf(movies), /No genre "Nonexistent" in Plex\. Available genres: Action, Horror\./);
+    const both = await searchPlexLibrary({ genre: "Nonexistent" });
+    assert.match(textOf(both), /Available genres: Action, Drama, Horror\./, "shows' genres count when shows are searched");
     assert.equal(allCalls().length, 0);
   });
 
@@ -128,16 +149,17 @@ describe("searchPlexLibrary: resolving genre and actor names", () => {
 });
 
 describe("searchPlexLibrary: results", () => {
-  const rowsOf = (r: any) => r.structuredContent.movies as any[];
+  const rowsOf = (r: any) => r.structuredContent.media as any[];
   const bullets = (r: { content: Array<{ text: string }> }) => textOf(r).split("\n").filter((l) => l.startsWith("- "));
 
-  it("searches every movie library and no other kind", async () => {
+  it("mediaType movie searches every movie library and no show library", async () => {
     library["1"] = [movie("Heat", 1995)];
     library["2"] = [movie("Heat", 1995)];
+    library["3"] = [show("Heat Show", 2001)];
     plexFake();
-    const result = await searchPlexLibrary({ title: "heat" });
+    const result = await searchPlexLibrary({ title: "heat", mediaType: "movie" });
     assert.deepEqual(allCalls().map((c) => c.url).sort(), ["/library/sections/1/all", "/library/sections/2/all"]);
-    assert.doesNotMatch(textOf(result), /Should Never Appear/);
+    assert.doesNotMatch(textOf(result), /Heat Show/);
   });
 
   it("passes title and year through and asks Plex for GUIDs and every match", async () => {
@@ -195,6 +217,7 @@ describe("searchPlexLibrary: results", () => {
     const result = await searchPlexLibrary({ title: "blade" });
     assert.deepEqual(rowsOf(result), [
       {
+        kind: "movie",
         title: "Blade Runner 2049",
         year: 2017,
         posterUrl: "/api/plex/image?path=%2Flibrary%2Fmetadata%2F91684%2Fthumb%2F123",
@@ -235,7 +258,9 @@ describe("searchPlexLibrary: results", () => {
     plexFake();
     const result = await searchPlexLibrary({ title: "nothing" });
     assert.equal(result.isError, undefined);
-    assert.match(textOf(result), /No movies in Plex match title "nothing"/);
+    assert.match(textOf(result), /No movies or shows in Plex match title "nothing"/);
+    assert.match(textOf(await searchPlexLibrary({ title: "nothing", mediaType: "movie" })), /No movies in Plex match title "nothing"/);
+    assert.match(textOf(await searchPlexLibrary({ title: "nothing", mediaType: "show" })), /No shows in Plex match title "nothing"/);
   });
 
   it("reports a Plex outage as an error, not as an empty library", async () => {
@@ -264,9 +289,9 @@ describe("searchPlexLibrary: library filter", () => {
 
   it("searches only libraries whose name contains the text, case-insensitively", async () => {
     plexFake();
-    const result = await searchPlexLibrary({ title: "x", library: "4K" });
+    const result = await searchPlexLibrary({ title: "x", library: "4K", mediaType: "movie" });
     assert.deepEqual(allCalls().map((c) => c.url), ["/library/sections/2/all"]);
-    const rows = (result as any).structuredContent.movies as any[];
+    const rows = (result as any).structuredContent.media as any[];
     assert.deepEqual(rows.map((r) => r.libraries), [["4k Movies"], ["4k Movies"]]);
     assert.match(textOf(result), /in "4k Movies"/);
   });
@@ -275,22 +300,23 @@ describe("searchPlexLibrary: library filter", () => {
     plexFake();
     const result = await searchPlexLibrary({ library: "movies" });
     assert.equal(result.isError, undefined);
-    assert.equal(allCalls().length, 2, "'movies' matches both Movies and 4k Movies");
+    assert.equal(allCalls().length, 2, "'movies' matches both Movies and 4k Movies, and no show library");
   });
 
   it("resolves a genre against every library even if the filtered library doesn't list it", async () => {
     plexFake();
     // Horror (930) exists only in section 1's genre list; the search is restricted to the 4K library.
-    await searchPlexLibrary({ genre: "Horror", library: "4k" });
+    await searchPlexLibrary({ genre: "Horror", library: "4k", mediaType: "movie" });
     assert.deepEqual(allCalls().map((c) => c.url), ["/library/sections/2/all"]);
     assert.equal(allCalls()[0]!.params.genre, "930");
   });
 
-  it("lists the movie libraries when none match", async () => {
+  it("lists the libraries of the searched kind when none match", async () => {
     plexFake();
-    const result = await searchPlexLibrary({ title: "x", library: "anime" });
+    const result = await searchPlexLibrary({ title: "x", library: "anime", mediaType: "movie" });
     assert.equal(result.isError, true);
-    assert.match(textOf(result), /No movie library matching "anime" in Plex\. Movie libraries: Movies, 4k Movies\./);
+    assert.match(textOf(result), /No movie library matching "anime" in Plex\. Libraries: Movies, 4k Movies\./);
+    assert.match(textOf(await searchPlexLibrary({ title: "x", library: "anime", mediaType: "show" })), /No show library matching "anime" in Plex\. Libraries: TV Shows, 4k TV Shows, Sports\./);
     assert.equal(allCalls().length, 0);
   });
 });
@@ -298,7 +324,7 @@ describe("searchPlexLibrary: library filter", () => {
 describe("searchPlexLibrary: paging and large results", () => {
   const many = (n: number) =>
     Array.from({ length: n }, (_, i) => movie(`Movie ${String(i).padStart(3, "0")}`, 2000, { titleSort: `Movie ${String(i).padStart(3, "0")}`, Guid: [{ id: `tmdb://${i}` }] }));
-  const titles = (r: any) => (r.structuredContent.movies as any[]).map((m) => m.title);
+  const titles = (r: any) => (r.structuredContent.media as any[]).map((m) => m.title);
 
   it("allows up to 500 movies in one call (the old cap was 100) and clamps beyond that", async () => {
     library["1"] = many(600);
@@ -351,6 +377,209 @@ describe("searchPlexLibrary: paging and large results", () => {
     library["1"] = many(3);
     plexFake();
     assert.equal(titles(await searchPlexLibrary({ title: "m", offset: -5 })).length, 3);
+  });
+});
+
+describe("searchPlexLibrary: TV shows", () => {
+  const rowsOf = (r: any) => r.structuredContent.media as any[];
+  const bullets = (r: { content: Array<{ text: string }> }) => textOf(r).split("\n").filter((l) => l.startsWith("- "));
+  const urls = () => allCalls().map((c) => c.url).sort();
+
+  it("mediaType show searches only show libraries; any searches both kinds", async () => {
+    plexFake();
+    await searchPlexLibrary({ title: "x", mediaType: "show" });
+    assert.deepEqual(urls(), ["/library/sections/3/all", "/library/sections/4/all", "/library/sections/5/all"]);
+    fake.calls.length = 0;
+    await searchPlexLibrary({ title: "x" });
+    assert.equal(allCalls().length, 5, "movie libraries and show libraries");
+    fake.calls.length = 0;
+    await searchPlexLibrary({ title: "x", mediaType: "any" });
+    assert.equal(allCalls().length, 5);
+  });
+
+  it("mediaType alone is enough to list shows, but 'any' alone is still not a search", async () => {
+    library["3"] = [show("Severance", 2022)];
+    plexFake();
+    const shows = await searchPlexLibrary({ mediaType: "show" });
+    assert.equal(shows.isError, undefined);
+    assert.deepEqual(rowsOf(shows).map((r) => r.title), ["Severance"]);
+    const none = await searchPlexLibrary({ mediaType: "any" });
+    assert.equal(none.isError, true);
+    assert.match(textOf(none), /Provide at least one of/);
+  });
+
+  it("describes a show with seasons, episodes, watch progress and network", async () => {
+    library["3"] = [show("Severance", 2022)];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "sever", mediaType: "show" });
+    assert.deepEqual(rowsOf(result), [
+      {
+        kind: "show",
+        title: "Severance",
+        year: 2022,
+        posterUrl: "/api/plex/image?path=%2Flibrary%2Fmetadata%2F2022%2Fthumb%2F2",
+        libraries: ["TV Shows"],
+        genres: ["Drama"],
+        rating: 8.6,
+        detail: null,
+        show: { seasons: 5, episodes: 62, watchedEpisodes: 40, network: "HBO" },
+      },
+    ]);
+    assert.deepEqual(bullets(result), ["- Severance (2022) - TV show, 5 seasons, 62 episodes (40 watched), TV Shows - Drama"]);
+    assert.match(textOf(result), /1 matching show\./);
+  });
+
+  it("treats a show Plex reports no watched count for as unwatched, and copes with missing counts", async () => {
+    library["3"] = [
+      show("Fresh", 2024, { viewedLeafCount: undefined, childCount: 1, leafCount: 1 }),
+      show("Bare", 2020, { childCount: undefined, leafCount: undefined, viewedLeafCount: undefined, studio: undefined, Guid: undefined }),
+    ];
+    plexFake();
+    const result = await searchPlexLibrary({ mediaType: "show" });
+    const [bare, fresh] = rowsOf(result);
+    assert.deepEqual(fresh.show, { seasons: 1, episodes: 1, watchedEpisodes: 0, network: "HBO" });
+    assert.deepEqual(bare.show, { seasons: null, episodes: null, watchedEpisodes: 0, network: null });
+    assert.deepEqual(bullets(result), ["- Bare (2020) - TV show, size unknown, TV Shows - Drama", "- Fresh (2024) - TV show, 1 season, 1 episode (0 watched), TV Shows - Drama"]);
+  });
+
+  it("makes a show held in HD and 4K libraries ONE entry with both libraries", async () => {
+    library["3"] = [show("Andor", 2022)];
+    library["4"] = [show("Andor", 2022)];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "andor", mediaType: "show" });
+    assert.deepEqual(rowsOf(result).map((r) => [r.title, r.libraries]), [["Andor", ["TV Shows", "4k TV Shows"]]]);
+    assert.match(textOf(result), /1 matching show\./);
+  });
+
+  it("groups by TMDb id first, and falls back to TVDB for a copy Plex matched only there", async () => {
+    // Same show: HD matched to TMDb + TVDB, 4K matched to TVDB alone.
+    library["3"] = [show("The Wire", 2002, { Guid: [{ id: "tmdb://1438" }, { id: "tvdb://79126" }] })];
+    library["4"] = [show("The Wire", 2002, { Guid: [{ id: "tvdb://79126" }] })];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ title: "wire", mediaType: "show" }));
+    assert.deepEqual(rows.map((r) => r.libraries), [["TV Shows", "4k TV Shows"]]);
+  });
+
+  it("groups shows by TVDB alone when Plex has no TMDb match at all", async () => {
+    library["3"] = [show("Obscure", 2015, { Guid: [{ id: "tvdb://555" }] })];
+    library["4"] = [show("Obscure", 2015, { Guid: [{ id: "tvdb://555" }] })];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ title: "obscure", mediaType: "show" }));
+    assert.deepEqual(rows.map((r) => r.libraries), [["TV Shows", "4k TV Shows"]]);
+  });
+
+  it("does not merge a TMDb number with the same TVDB number: they are different id spaces", async () => {
+    library["3"] = [show("Has TMDb 5", 2001, { Guid: [{ id: "tmdb://5" }] })];
+    library["4"] = [show("Has TVDB 5", 2002, { Guid: [{ id: "tvdb://5" }] })];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ mediaType: "show" }));
+    assert.deepEqual(rows.map((r) => [r.title, r.libraries]), [["Has TMDb 5", ["TV Shows"]], ["Has TVDB 5", ["4k TV Shows"]]]);
+  });
+
+  it("does not merge a movie and a show that share a TMDb number", async () => {
+    // TMDb numbers are separate for movies and TV, so 1399 is two different things.
+    library["1"] = [movie("Movie 1399", 2001, { Guid: [{ id: "tmdb://1399" }] })];
+    library["3"] = [show("Show 1399", 2002, { Guid: [{ id: "tmdb://1399" }] })];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "1399" });
+    assert.deepEqual(rowsOf(result).map((r) => [r.kind, r.title, r.libraries]), [["movie", "Movie 1399", ["Movies"]], ["show", "Show 1399", ["TV Shows"]]]);
+  });
+
+  it("returns movies and shows together with a count of each", async () => {
+    library["1"] = [movie("Fargo", 1996)];
+    library["3"] = [show("Fargo", 2014)];
+    library["4"] = [show("Fargo", 2014)];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "fargo" });
+    assert.match(textOf(result), /2 matching titles \(1 movie, 1 show\)\./);
+    assert.deepEqual(rowsOf(result).map((r) => [r.kind, r.year]), [["movie", 1996], ["show", 2014]]);
+    assert.match(textOf(result), /each line is one title/i);
+  });
+
+  it("passes genre, actor and year filters to show libraries too", async () => {
+    hubActors = [{ id: 7, tag: "Bryan Cranston" }];
+    plexFake();
+    await searchPlexLibrary({ genre: "Drama", actor: "Bryan Cranston", year: 2008, mediaType: "show" });
+    for (const call of allCalls()) {
+      assert.equal(call.params.genre, "999");
+      assert.equal(call.params.actor, "7");
+      assert.equal(call.params.year, 2008);
+    }
+    assert.equal(allCalls().length, 3);
+  });
+
+  it("pages shows exactly as it pages movies", async () => {
+    library["3"] = Array.from({ length: 30 }, (_, i) => show(`Show ${String(i).padStart(2, "0")}`, 2000, { Guid: [{ id: `tmdb://${i}` }] }));
+    plexFake();
+    const first = await searchPlexLibrary({ mediaType: "show", limit: 10 });
+    const second = await searchPlexLibrary({ mediaType: "show", limit: 10, offset: 10 });
+    assert.match(textOf(first), /30 matching shows, listed 1-10\. 20 more are not listed: call again with offset 10/);
+    assert.equal((first as any).structuredContent.append, false);
+    assert.equal((second as any).structuredContent.append, true);
+    assert.deepEqual(rowsOf(second).map((r) => r.title).slice(0, 2), ["Show 10", "Show 11"]);
+    assert.match(textOf(await searchPlexLibrary({ mediaType: "show", offset: 99 })), /Offset 99 is past the end: there are only 30 matching shows/);
+  });
+});
+
+describe("searchPlexLibrary: libraries left out by default", () => {
+  const urls = () => allCalls().map((c) => c.url).sort();
+  const rowsOf = (r: any) => r.structuredContent.media as any[];
+
+  it("searches every show library when nothing is set to be left out", async () => {
+    plexFake();
+    await searchPlexLibrary({ title: "x", mediaType: "show" });
+    assert.deepEqual(urls(), ["/library/sections/3/all", "/library/sections/4/all", "/library/sections/5/all"]);
+  });
+
+  it("leaves out libraries named in the setting (whole names, any case, spaces and stray commas ignored)", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "  sPoRtS , ,");
+    plexFake();
+    await searchPlexLibrary({ title: "x", mediaType: "show" });
+    assert.deepEqual(urls(), ["/library/sections/3/all", "/library/sections/4/all"]);
+    fake.calls.length = 0;
+    await searchPlexLibrary({ title: "x" });
+    assert.equal(allCalls().length, 4, "movies + the two shown show libraries");
+  });
+
+  it("matches whole names only, so 'sport' does not leave out 'Sports'", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "sport");
+    plexFake();
+    await searchPlexLibrary({ title: "x", mediaType: "show" });
+    assert.equal(allCalls().length, 3);
+  });
+
+  it("can leave out several libraries, including movie ones", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "Sports, 4k Movies");
+    plexFake();
+    await searchPlexLibrary({ title: "x" });
+    assert.deepEqual(urls(), ["/library/sections/1/all", "/library/sections/3/all", "/library/sections/4/all"]);
+  });
+
+  it("still searches a skipped library when the library filter names it", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "Sports");
+    library["5"] = [show("Formula 1: Drive to Survive", 2019, { Guid: [{ id: "tmdb://74" }] })];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "formula", library: "sports" });
+    assert.deepEqual(urls(), ["/library/sections/5/all"]);
+    assert.deepEqual(rowsOf(result).map((r) => r.libraries), [["Sports"]]);
+  });
+
+  it("does not hide the skipped library's titles from a title that is also elsewhere", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "Sports");
+    library["3"] = [show("Same", 2010, { Guid: [{ id: "tmdb://9" }] })];
+    library["5"] = [show("Same", 2010, { Guid: [{ id: "tmdb://9" }] })];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ title: "same", mediaType: "show" }));
+    assert.deepEqual(rows.map((r) => r.libraries), [["TV Shows"]], "the Sports copy is not searched by default");
+  });
+
+  it("says how to get at libraries when every one of the searched kind is left out", async () => {
+    setSetting("PLEX_SKIP_LIBRARIES", "TV Shows, 4k TV Shows, Sports");
+    plexFake();
+    const result = await searchPlexLibrary({ title: "x", mediaType: "show" });
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /Every show library is skipped by default.*Name one with the library filter: TV Shows, 4k TV Shows, Sports\./);
+    assert.equal(allCalls().length, 0);
   });
 });
 

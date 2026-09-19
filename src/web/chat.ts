@@ -2,7 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { MessageParam, TextBlock, ToolResultBlockParam, ToolUnion, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
 import { movieTools } from "../tools/movies.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
-import type { MovieRow } from "../tools/plex.js";
+import type { MediaRow } from "../tools/plex.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_TOOL_ROUNDS = 4;
@@ -10,11 +10,11 @@ const MAX_TOOL_ROUNDS = 4;
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
 const SYSTEM_PROMPT = [
-  "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. Use the available tools to answer questions about the movie library - never guess. Tool results are authoritative: report what a tool returns rather than dropping or second-guessing rows based on your own knowledge of a movie.",
+  "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. Use the available tools to answer questions about the movie and TV library - never guess. Tool results are authoritative: report what a tool returns rather than dropping or second-guessing rows based on your own knowledge of a movie.",
 
-  "HOW RESULTS ARE SHOWN: when a search tool returns movies, the interface displays them to the user as a table with posters directly BELOW your reply, one row per movie with the Plex libraries that hold it. The table always contains everything the tool returned, so never say anything is missing from it, never mention rows, limits, paging, offsets or 'the first N', and refer to it as \"the table below\" (never \"above\").",
+  "HOW RESULTS ARE SHOWN: when a search tool returns movies or shows, the interface displays them to the user as a table with posters directly BELOW your reply, one row per title with the Plex libraries that hold it (shows also get season and episode counts and watch progress). The table always contains everything the tool returned, so never say anything is missing from it, never mention rows, limits, paging, offsets or 'the first N', and refer to it as \"the table below\" (never \"above\").",
 
-  "FILTERS: the table shows exactly the rows the tool returned, so express any narrowing the user asks for as a tool filter (year range, owned/missing, genre, actor, library such as 4K) - never filter a tool's results yourself in your reply. For a follow-up like \"which of those are 4K?\", run the search again with the earlier filters plus the new one (e.g. library \"4k\"). If the user asks for everything, request the maximum limit, and if the tool says more movies remain, fetch the next page with the offset it gives. Earlier messages in the conversation are included, so follow-ups such as \"what about the sequel?\" refer to them; a bracketed \"[Table shown to the user ...]\" note in an earlier answer lists the movies the user saw.",
+  "FILTERS: the table shows exactly the rows the tool returned, so express any narrowing the user asks for as a tool filter (year range, owned/missing, genre, actor, library such as 4K, mediaType movie or show) - never filter a tool's results yourself in your reply. For a follow-up like \"which of those are 4K?\", run the search again with the earlier filters plus the new one (e.g. library \"4k\"). If the user asks for everything, request the maximum limit, and if the tool says more titles remain, fetch the next page with the offset it gives. Earlier messages in the conversation are included, so follow-ups such as \"what about the sequel?\" refer to them; a bracketed \"[Table shown to the user ...]\" note in an earlier answer lists the titles the user saw.",
 
   "REPLY STYLE (this is shown in a chat window, so keep it clean and scannable): start with the answer in one or two short sentences - the number that matters and what the table shows. Add up to three short '- ' bullet points only if they add something useful (a highlight, a caveat, an offer of a next step), each under about 15 words. Never write a paragraph, never list more than three example titles in a row, no long parenthetical lists. Use **bold** sparingly for the key number or title; avoid other Markdown, and no tables or headings. Be concise and direct.",
 ].join("\n\n");
@@ -25,13 +25,13 @@ const SYSTEM_PROMPT = [
 // page continuation (offset > 0) adds to the previous rows, and it skips rows
 // already in the table: the model only reads the first 100 rows of a long
 // result and has been seen asking for "the rest" that the user already had.
-export function mergeToolRows(current: MovieRow[], structured: unknown): MovieRow[] {
-  const content = structured as { movies?: unknown; append?: unknown } | undefined;
-  if (!content || !Array.isArray(content.movies)) return current;
-  const rows = content.movies as MovieRow[];
+export function mergeToolRows(current: MediaRow[], structured: unknown): MediaRow[] {
+  const content = structured as { media?: unknown; append?: unknown } | undefined;
+  if (!content || !Array.isArray(content.media)) return current;
+  const rows = content.media as MediaRow[];
   if (content.append !== true) return rows;
 
-  const key = (m: MovieRow) => `${m.title}|${m.year}|${(m.libraries ?? []).join(",")}`;
+  const key = (m: MediaRow) => `${m.kind}|${m.title}|${m.year}|${(m.libraries ?? []).join(",")}`;
   const seen = new Set(current.map(key));
   return [...current, ...rows.filter((m) => !seen.has(key(m)))];
 }
@@ -41,7 +41,7 @@ export interface ChatTurn {
   role: "user" | "assistant";
   text: string;
   // Rows the UI showed as a table under that assistant message.
-  movies?: MovieRow[];
+  media?: MediaRow[];
 }
 
 // Bounds on what the browser can feed back in: history is untrusted input
@@ -54,13 +54,14 @@ const MAX_SUMMARY_ROWS = 25;
 // means its own earlier text often doesn't name them. Without them, a
 // follow-up like "which of those are in 4K?" has nothing to refer to, so each
 // earlier assistant turn is given a compact text form of the table too.
-function describeTable(movies: MovieRow[]): string {
-  const rows = movies.slice(0, MAX_SUMMARY_ROWS).map((m) => {
+function describeTable(media: MediaRow[]): string {
+  const rows = media.slice(0, MAX_SUMMARY_ROWS).map((m) => {
     const year = m.year ? ` (${m.year})` : "";
+    const kind = m.kind === "show" ? " [TV show]" : "";
     const where = m.libraries === null ? "" : m.libraries.length === 0 ? " - not in Plex" : ` - in Plex: ${m.libraries.join(", ")}`;
-    return `${m.title}${year}${where}`;
+    return `${m.title}${year}${kind}${where}`;
   });
-  const more = movies.length > rows.length ? `; and ${movies.length - rows.length} more` : "";
+  const more = media.length > rows.length ? `; and ${media.length - rows.length} more` : "";
   return `\n\n[Table shown to the user with this answer: ${rows.join("; ")}${more}]`;
 }
 
@@ -73,8 +74,8 @@ export function buildHistoryMessages(history: ChatTurn[] = []): MessageParam[] {
   for (const turn of history.slice(-MAX_HISTORY_TURNS)) {
     if (turn.role !== "user" && turn.role !== "assistant") continue;
     let text = String(turn.text ?? "").slice(0, MAX_TURN_CHARS).trim();
-    if (turn.role === "assistant" && Array.isArray(turn.movies) && turn.movies.length > 0) {
-      text += describeTable(turn.movies);
+    if (turn.role === "assistant" && Array.isArray(turn.media) && turn.media.length > 0) {
+      text += describeTable(turn.media);
     }
     if (!text) continue;
 
@@ -102,7 +103,7 @@ export interface ChatAnswer {
   text: string;
   images: ChatImage[];
   // Rows from search-style tools, shown by the UI as a table with posters.
-  movies: MovieRow[];
+  media: MediaRow[];
 }
 
 function buildTools(): ToolUnion[] {
@@ -122,7 +123,7 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
   const anthropic = new Anthropic({ apiKey });
   const tools = buildTools();
   const images: ChatImage[] = [];
-  const movies: MovieRow[] = [];
+  const media: MediaRow[] = [];
   const messages: MessageParam[] = buildHistoryMessages(history);
   const previous = messages[messages.length - 1];
   if (previous && previous.role === "user") {
@@ -148,7 +149,7 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
         .map((block) => block.text)
         .join("\n")
         .trim();
-      return { text: text || "I couldn't come up with an answer for that.", images, movies };
+      return { text: text || "I couldn't come up with an answer for that.", images, media };
     }
 
     messages.push({ role: "assistant", content: response.content });
@@ -160,7 +161,7 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
         ? await tool.handler(use.input as { title: string })
         : { content: [{ type: "text" as const, text: `Unknown tool "${use.name}"` }], isError: true };
 
-      movies.splice(0, movies.length, ...mergeToolRows(movies, result.structuredContent));
+      media.splice(0, media.length, ...mergeToolRows(media, result.structuredContent));
 
       const content: ToolResultBlockParam["content"] = [];
       for (const block of result.content) {
@@ -186,5 +187,5 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
     messages.push({ role: "user", content: toolResults });
   }
 
-  return { text: "I wasn't able to finish looking that up - the assistant hit its tool-call limit.", images, movies };
+  return { text: "I wasn't able to finish looking that up - the assistant hit its tool-call limit.", images, media };
 }

@@ -1,13 +1,13 @@
 import { useState } from "react";
-import { Badge, Box, Button, Callout, Card, Flex, Table, Text, TextField } from "@radix-ui/themes";
-import { api, type ChatImage, type MovieRow } from "../api";
+import { Badge, Box, Button, Callout, Card, Flex, Progress, Table, Text, TextField } from "@radix-ui/themes";
+import { api, type ChatImage, type MediaRow } from "../api";
 import { ChatText } from "../components/ChatText";
 
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   images?: ChatImage[];
-  movies?: MovieRow[];
+  media?: MediaRow[];
 }
 
 function PosterThumb({ src, title }: { src: string | null; title: string }) {
@@ -26,54 +26,99 @@ function PosterThumb({ src, title }: { src: string | null; title: string }) {
   );
 }
 
-// Search results as a table with the poster next to each movie. "In Plex"
+// Search results as a table with the poster next to each title. "In Plex"
 // only appears when a tool actually checked ownership (libraries !== null).
-// A long result starts as a preview; the rest is one click away.
+// Shows add a Seasons / episodes column with watch progress, and a Kind column
+// appears when movies and shows are mixed. A long result starts as a preview;
+// the rest is one click away.
 const PREVIEW_ROWS = 50;
 
-function MovieTable({ movies }: { movies: MovieRow[] }) {
+function plural(count: number, one: string, many = `${one}s`) {
+  return `${count} ${count === 1 ? one : many}`;
+}
+
+function ShowProgress({ show }: { show: NonNullable<MediaRow["show"]> }) {
+  const { seasons, episodes, watchedEpisodes } = show;
+  const percent = episodes && watchedEpisodes !== null ? Math.min(100, Math.round((watchedEpisodes / episodes) * 100)) : null;
+  return (
+    <Flex direction="column" align="start" gap="1">
+      <Text size="1">
+        {[seasons !== null ? plural(seasons, "season") : null, episodes !== null ? plural(episodes, "episode") : null]
+          .filter(Boolean)
+          .join(", ") || "-"}
+      </Text>
+      {percent !== null && watchedEpisodes !== null && (
+        <>
+          <Progress value={percent} size="1" style={{ width: 90 }} aria-label={`${watchedEpisodes} of ${episodes} episodes watched`} />
+          <Text size="1" color="gray">
+            {watchedEpisodes} of {episodes} watched
+          </Text>
+        </>
+      )}
+    </Flex>
+  );
+}
+
+function MediaTable({ media }: { media: MediaRow[] }) {
   const [expanded, setExpanded] = useState(false);
-  const collapsible = movies.length > PREVIEW_ROWS;
-  const visible = collapsible && !expanded ? movies.slice(0, PREVIEW_ROWS) : movies;
-  const showOwnership = movies.some((m) => m.libraries !== null);
-  const showRating = movies.some((m) => m.rating !== null);
-  const showDetail = movies.some((m) => m.genres.length > 0 || m.detail);
+  const collapsible = media.length > PREVIEW_ROWS;
+  const visible = collapsible && !expanded ? media.slice(0, PREVIEW_ROWS) : media;
+  const showOwnership = media.some((m) => m.libraries !== null);
+  const showRating = media.some((m) => m.rating !== null);
+  const showDetail = media.some((m) => m.genres.length > 0 || m.detail);
+  const hasShows = media.some((m) => m.kind === "show");
+  const hasMovies = media.some((m) => m.kind === "movie");
+  const noun = hasShows && hasMovies ? "title" : hasShows ? "show" : "movie";
 
   return (
     <>
     <Text as="p" size="1" color="gray" mt="2">
-      {visible.length < movies.length
-        ? `Showing ${visible.length} of ${movies.length} movies`
-        : `${movies.length} ${movies.length === 1 ? "movie" : "movies"}`}
+      {visible.length < media.length
+        ? `Showing ${visible.length} of ${media.length} ${noun}s`
+        : plural(media.length, noun)}
     </Text>
     <Table.Root size="1" variant="surface" style={{ marginTop: 4 }}>
       <Table.Header>
         <Table.Row>
           <Table.ColumnHeaderCell width="56px" />
           <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
+          {hasShows && hasMovies && <Table.ColumnHeaderCell>Kind</Table.ColumnHeaderCell>}
           <Table.ColumnHeaderCell>Year</Table.ColumnHeaderCell>
           {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
+          {hasShows && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
           {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
           {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {visible.map((movie, i) => (
+        {visible.map((item, i) => (
           <Table.Row key={i} align="center">
             <Table.Cell>
-              <PosterThumb src={movie.posterUrl} title={movie.title} />
+              <PosterThumb src={item.posterUrl} title={item.title} />
             </Table.Cell>
-            <Table.RowHeaderCell>{movie.title}</Table.RowHeaderCell>
-            <Table.Cell>{movie.year ?? "-"}</Table.Cell>
+            <Table.RowHeaderCell>
+              {item.title}
+              {item.show?.network && (
+                <Text as="div" size="1" color="gray" weight="regular">
+                  {item.show.network}
+                </Text>
+              )}
+            </Table.RowHeaderCell>
+            {hasShows && hasMovies && (
+              <Table.Cell>
+                <Badge color={item.kind === "show" ? "violet" : "blue"}>{item.kind === "show" ? "Show" : "Movie"}</Badge>
+              </Table.Cell>
+            )}
+            <Table.Cell>{item.year ?? "-"}</Table.Cell>
             {showOwnership && (
               <Table.Cell>
-                {movie.libraries === null ? (
+                {item.libraries === null ? (
                   "-"
-                ) : movie.libraries.length === 0 ? (
+                ) : item.libraries.length === 0 ? (
                   <Badge color="gray">Not in Plex</Badge>
                 ) : (
                   <Flex direction="column" align="start" gap="1">
-                    {movie.libraries.map((library) => (
+                    {item.libraries.map((library) => (
                       <Badge key={library} color="green">
                         {library}
                       </Badge>
@@ -82,15 +127,16 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
                 )}
               </Table.Cell>
             )}
-            {showDetail && <Table.Cell>{movie.detail ?? movie.genres.join(", ")}</Table.Cell>}
-            {showRating && <Table.Cell>{movie.rating !== null ? movie.rating.toFixed(1) : "-"}</Table.Cell>}
+            {hasShows && <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>}
+            {showDetail && <Table.Cell>{item.detail ?? item.genres.join(", ")}</Table.Cell>}
+            {showRating && <Table.Cell>{item.rating !== null ? item.rating.toFixed(1) : "-"}</Table.Cell>}
           </Table.Row>
         ))}
       </Table.Body>
     </Table.Root>
     {collapsible && (
       <Button variant="soft" color="gray" size="1" mt="2" onClick={() => setExpanded((open) => !open)}>
-        {expanded ? `Show first ${PREVIEW_ROWS}` : `Show all ${movies.length} movies`}
+        {expanded ? `Show first ${PREVIEW_ROWS}` : `Show all ${media.length} ${noun}s`}
       </Button>
     )}
     </>
@@ -116,11 +162,11 @@ export function QueryPage() {
     try {
       const answer = await api.chatWithMovies(
         trimmed,
-        messages.map(({ role, text, movies }) => ({ role, text, movies })),
+        messages.map(({ role, text, media }) => ({ role, text, media })),
       );
       setMessages((prev) => [
         ...prev,
-        { role: "assistant", text: answer.text, images: answer.images, movies: answer.movies },
+        { role: "assistant", text: answer.text, images: answer.images, media: answer.media },
       ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
@@ -134,14 +180,14 @@ export function QueryPage() {
       <Card>
         <Flex direction="column" gap="4" style={{ minHeight: 200 }}>
           {messages.length === 0 && (
-            <Text color="gray">Ask about your movie library, e.g. &quot;Do I have the F1 movie?&quot; Follow-up questions keep the context of the conversation.</Text>
+            <Text color="gray">Ask about your movie and TV library, e.g. &quot;Do I have the F1 movie?&quot; or &quot;Which shows do I own with Bryan Cranston?&quot; Follow-up questions keep the context of the conversation.</Text>
           )}
           {messages.map((message, i) => (
             <Flex key={i} direction="column" gap="1" align={message.role === "user" ? "end" : "start"}>
               <Badge color={message.role === "user" ? "blue" : "gray"}>
                 {message.role === "user" ? "You" : "Assistant"}
               </Badge>
-              <Box style={{ maxWidth: message.movies?.length ? "100%" : "85%", width: message.movies?.length ? "100%" : undefined }}>
+              <Box style={{ maxWidth: message.media?.length ? "100%" : "85%", width: message.media?.length ? "100%" : undefined }}>
                 {message.role === "assistant" ? (
                   <ChatText text={message.text} />
                 ) : (
@@ -149,7 +195,7 @@ export function QueryPage() {
                     {message.text}
                   </Text>
                 )}
-                {message.movies && message.movies.length > 0 && <MovieTable movies={message.movies} />}
+                {message.media && message.media.length > 0 && <MediaTable media={message.media} />}
                 {message.images?.map((image, j) => (
                   <img
                     key={j}
