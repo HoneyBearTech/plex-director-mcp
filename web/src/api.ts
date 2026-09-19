@@ -150,15 +150,15 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
 }
 
 export const api = {
+  authStatus: () => getJson<AuthStatus>("/api/auth/status"),
+  login: (password: string) => postJson<{ ok: boolean }>("/api/auth/login", { password }),
+  logout: () => postJson<{ ok: boolean }>("/api/auth/logout", {}),
   chatWithMovies: (question: string) => postJson<ChatAnswer>("/api/chat/movies", { question }),
   plexActivity: () => getJson<PlexActivity>("/api/status/activity"),
   libraryAnalytics: () => getJson<LibraryAnalytics>("/api/status/library-analytics"),
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
-  authStatus: () => getJson<AuthStatus>("/api/auth/status"),
-  login: (password: string) => postJson<{ ok: boolean }>("/api/auth/login", { password }),
-  logout: () => postJson<{ ok: boolean }>("/api/auth/logout", {}),
   getSettings: () => getJson<SettingsResponse>("/api/settings"),
   updateSettings: (service: SettingsService, body: Record<string, string>) =>
     putJson(`/api/settings/${service}`, body),
