@@ -4,14 +4,23 @@ import { db } from "../db.js";
 import { tmdbClient, prowlarrClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { isConfigured } from "../settings.js";
-import { getOwnedTmdbIndex } from "./plex.js";
+import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
 
 const DEFAULT_FILMOGRAPHY_LIMIT = 15;
 
 // Registered through movieTools (src/tools/movies.ts) so the MCP client and the
 // web chat share it. TMDb knows every film an actor was in; Plex knows which of
 // them the user actually has, so when Plex is configured each title is marked.
-export async function resolveActorFilmography(actorName: string, limit = DEFAULT_FILMOGRAPHY_LIMIT) {
+export interface FilmographyOptions {
+  limit?: number;
+  yearFrom?: number;
+  yearTo?: number;
+  // Only meaningful when Plex is configured; otherwise everything is "all".
+  show?: "all" | "owned" | "missing";
+}
+
+export async function resolveActorFilmography(actorName: string, options: FilmographyOptions = {}) {
+  const { limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all" } = options;
   try {
     const personSearch = await tmdbClient.get(`/search/person?query=${encodeURIComponent(actorName)}`);
     const person = personSearch.data?.results?.[0];
@@ -52,19 +61,52 @@ export async function resolveActorFilmography(actorName: string, limit = DEFAULT
       const ownedCount = cleanFilmography.filter((movie: any) => owned.has(String(movie.id))).length;
       output += `In your Plex library: ${ownedCount} of ${cleanFilmography.length}.\n`;
     }
-    output += `${plexNote}\n`;
+    output += plexNote;
 
-    cleanFilmography.slice(0, limit).forEach((movie: any) => {
+    // Filters are applied here (not left to the model) so the table the web
+    // UI shows is exactly the set that was asked about.
+    const releaseYear = (movie: any): number | null =>
+      movie.release_date ? Number(String(movie.release_date).split("-")[0]) : null;
+    const matching = cleanFilmography.filter((movie: any) => {
+      const year = releaseYear(movie);
+      if (yearFrom !== undefined && (year === null || year < yearFrom)) return false;
+      if (yearTo !== undefined && (year === null || year > yearTo)) return false;
+      if (owned && show === "owned" && !owned.has(String(movie.id))) return false;
+      if (owned && show === "missing" && owned.has(String(movie.id))) return false;
+      return true;
+    });
+    if (matching.length !== cleanFilmography.length) {
+      const filters = [
+        yearFrom !== undefined || yearTo !== undefined ? `released ${yearFrom ?? "any"}-${yearTo ?? "any"}` : null,
+        owned && show !== "all" ? (show === "owned" ? "in Plex" : "not in Plex") : null,
+      ].filter(Boolean);
+      output += `Showing ${matching.length} titles (${filters.join(", ")}).\n`;
+    }
+    output += "\n";
+
+    matching.slice(0, limit).forEach((movie: any) => {
       const libraries = owned?.get(String(movie.id));
       const status = owned ? (libraries ? ` - ✅ In Plex (${libraries.join(", ")})` : " - ❌ Not in Plex") : "";
       output += `  ▪ ${movie.title} (${movie.release_date ? movie.release_date.split("-")[0] : "N/A"}) - As: ${movie.character || "Unknown"}${status}\n`;
     });
 
-    if (cleanFilmography.length > limit) {
-      output += `  ...and ${cleanFilmography.length - limit} additional titles.`;
+    if (matching.length > limit) {
+      output += `  ...and ${matching.length - limit} additional titles.`;
     }
 
-    return textReply(output);
+    // Same titles as the text list, for the web UI's results table. TMDb
+    // posters are public, so they can be loaded directly (unlike Plex's).
+    const movies: MovieRow[] = matching.slice(0, limit).map((movie: any) => ({
+      title: String(movie.title),
+      year: movie.release_date ? Number(movie.release_date.split("-")[0]) : null,
+      posterUrl: movie.poster_path ? `https://image.tmdb.org/t/p/w154${movie.poster_path}` : null,
+      libraries: owned ? (owned.get(String(movie.id)) ?? []) : null,
+      genres: [],
+      rating: movie.vote_average ? Number(movie.vote_average) : null,
+      detail: movie.character ? `As ${movie.character}` : null,
+    }));
+
+    return { ...textReply(output), structuredContent: { movies } };
   } catch (error: unknown) {
     return textReply(`TMDb Resolution failed: ${getErrorMessage(error)}`, true);
   }

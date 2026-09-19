@@ -42,6 +42,7 @@ This is not a generic Plex wrapper. It is specifically an operations assistant f
 - `update_job_status`
 - `plan_media_upgrade`
 - `execute_next_job_step`
+- `search_plex_library`
 - `resolve_actor_filmography`
 - `check_indexer_health`
 - `search_and_select_movies`
@@ -50,6 +51,12 @@ This is not a generic Plex wrapper. It is specifically an operations assistant f
 - `manage_stalled_downloads`
 - `get_cluster_infrastructure_health`
 - `get_cluster_hardware_analytics`
+
+### Plex search
+
+`search_plex_library` searches the movies actually in your Plex library — across every movie library, including 4K — by any combination of genre, actor, title, and year. `resolve_actor_filmography` lists an actor's TMDb filmography and, when Plex is configured, marks which of those movies you own and which you don't (optionally narrowed by year range or owned/missing). Both need `PLEX_URL` and `PLEX_TOKEN` (see below); ownership is matched by TMDb id, so it relies on Plex's TMDb metadata. In the web UI's Query page, the results appear as a table with posters.
+
+To find your Plex token: open any movie in Plex Web, choose **⋯ → Get Info → View XML**, and copy the `X-Plex-Token=` value from the URL. Treat it like a password.
 
 ## Claude Desktop setup
 
