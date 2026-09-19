@@ -2,6 +2,7 @@ import express from "express";
 import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { projectRoot } from "../env.js";
+import { authRouter, requireAuth, isAuthEnabled } from "./auth.js";
 import { statusRouter } from "./routes/status.js";
 import { nodesRouter } from "./routes/nodes.js";
 import { queuesRouter } from "./routes/queues.js";
@@ -28,6 +29,19 @@ export function createWebApp() {
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true });
   });
+
+  if (!isAuthEnabled()) {
+    console.error(
+      "WARNING: WEB_PASSWORD is not set - the web dashboard is open to anyone who can reach this port, " +
+        "including viewing and changing settings. Set WEB_PASSWORD in .env to require a login."
+    );
+  }
+
+  // The login endpoints are public; everything else under /api needs a session
+  // (a no-op while WEB_PASSWORD is unset). The static SPA stays public so the
+  // login page itself can load.
+  app.use("/api/auth", authRouter);
+  app.use("/api", requireAuth);
 
   app.use("/api/status", statusRouter);
   app.use("/api/nodes", nodesRouter);

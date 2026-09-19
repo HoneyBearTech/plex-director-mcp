@@ -95,6 +95,7 @@ SSH_KEY_PATH=/path/to/id_ed25519
 DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/...
 BACKUP_DIR=./backups
 WEB_PORT=3000
+WEB_PASSWORD=choose_a_dashboard_password
 ```
 
 Notes:
@@ -103,6 +104,7 @@ Notes:
 - `DISCORD_WEBHOOK_URL` is optional and used for rich job notifications when configured.
 - `UBUNTU_HOSTS` should be a comma-separated list of remote hosts to monitor.
 - `WEB_PORT` is optional (defaults to `3000`) and controls the web UI's port.
+- `WEB_PASSWORD` is optional but **strongly recommended**: when set, the web dashboard requires this password (a login page, then a signed 7-day session cookie). Leave it unset and the dashboard is open to anyone who can reach the port, and the server logs a warning at startup. It is read only from the environment, never from the Settings page. Changing it signs everyone out.
 - **Don't put inline comments on the same line as a value** (e.g. `TMDB_API_KEY=abc123 # my key`). Docker's `--env-file` flag doesn't strip these the way `dotenv` does - the comment becomes part of the value, silently breaking that credential when run via `docker run --env-file .env`. Put comments on their own line above the variable instead.
 
 ### 3) Add the server to Claude Desktop
@@ -145,7 +147,7 @@ The server runs via stdio and waits for MCP client connections; it also starts a
 
 ## Web UI
 
-Alongside the MCP stdio interface, the server hosts a small read-only browser dashboard on `WEB_PORT` (default `3000`, override via `.env`): movie search/status/diagnosis, Plex activity and library analytics, per-host CPU/RAM/Docker utilization (over SSH), and the SABnzbd/qBittorrent queues. It's intentionally read-only and has **no authentication** — anyone who can reach the port can use it, so don't expose it beyond a trusted network.
+Alongside the MCP stdio interface, the server hosts a small read-only browser dashboard on `WEB_PORT` (default `3000`, override via `.env`): movie search/status/diagnosis, Plex activity and library analytics, per-host CPU/RAM/Docker utilization (over SSH), and the SABnzbd/qBittorrent queues. It's intentionally read-only apart from the Settings page. **Set `WEB_PASSWORD` to require a login** — without it the dashboard has no authentication, so anyone who can reach the port can use it (including changing settings), and it shouldn't be exposed beyond a trusted network. The login is a single shared password (failed attempts are rate-limited); if you serve the dashboard over HTTPS the session cookie is marked `Secure` automatically.
 
 It's a separate npm project under `web/` (React + Vite + TypeScript, its own `package.json`) so its toolchain doesn't need to match the root project's. To work on it:
 

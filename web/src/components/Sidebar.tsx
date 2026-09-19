@@ -1,9 +1,12 @@
 import { NavLink } from "react-router-dom";
-import { Flex, Text } from "@radix-ui/themes";
+import { Button, Flex, Text } from "@radix-ui/themes";
 import { APP_ROUTES } from "../routes";
 import { Logo } from "./Logo";
+import { useAuth } from "./AuthGate";
 
 export function Sidebar() {
+  const { authRequired, logout } = useAuth();
+
   return (
     <Flex
       direction="column"
@@ -49,6 +52,14 @@ export function Sidebar() {
           </NavLink>
         ))}
       </Flex>
+
+      {authRequired && (
+        <Flex p="3" style={{ borderTop: "1px solid var(--gray-a4)" }}>
+          <Button variant="soft" color="gray" style={{ width: "100%" }} onClick={() => void logout()}>
+            Sign out
+          </Button>
+        </Flex>
+      )}
     </Flex>
   );
 }
