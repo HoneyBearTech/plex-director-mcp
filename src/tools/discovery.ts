@@ -1,10 +1,11 @@
 import { z } from "zod";
 import { server } from "../server.js";
 import { db } from "../db.js";
-import { tmdbClient, prowlarrClient, radarrClient } from "../clients.js";
+import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { isConfigured } from "../settings.js";
 import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
+import { getIndexerHealth } from "../indexers.js";
 
 const DEFAULT_FILMOGRAPHY_LIMIT = 15;
 
@@ -131,33 +132,38 @@ function radarrErrorMessage(error: unknown): string {
 export function registerDiscoveryTools() {
   server.tool(
     "check_indexer_health",
-    "Audits all Usenet indexers and torrent trackers configured in Prowlarr to flag connection failures or bans.",
+    "Audits all Usenet indexers and torrent trackers configured in Prowlarr to flag connection failures or bans, and reports Prowlarr's own system health warnings.",
     {},
     async () => {
       try {
-        const indexersResponse = await prowlarrClient.get("/api/v1/indexerstatus");
-        const statuses = indexersResponse.data || [];
-        const configResponse = await prowlarrClient.get("/api/v1/indexer");
-        const indexerConfigs = configResponse.data || [];
+        const { indexers, warnings } = await getIndexerHealth();
+        const problems = indexers.filter((i) => i.state === "backing-off" || i.state === "warning");
+        const disabled = indexers.filter((i) => i.state === "disabled");
 
-        if (statuses.length === 0) {
-          return textReply("✅ All indexers and trackers reporting healthy inside Prowlarr. Zero connection drops or backoffs detected.");
+        let report = "";
+        if (problems.length === 0) {
+          report += `✅ All ${indexers.length - disabled.length} enabled indexers and trackers reporting healthy inside Prowlarr. Zero connection drops or backoffs detected.\n`;
+        } else {
+          report += "⚠️ Prowlarr Indexer Health Warning:\n";
+          report += `Detected ${problems.length} indexer operational anomalies across your tracker network:\n\n`;
+          for (const indexer of problems) {
+            const failedAt = indexer.mostRecentFailure ? new Date(indexer.mostRecentFailure).toLocaleString() : "unknown";
+            report += `▪ Indexer: ${indexer.name} (${indexer.protocol})\n`;
+            report += `  ↳ Most Recent Failure: ${failedAt}\n`;
+            report += indexer.state === "backing-off"
+              ? `  ↳ Backing off until: ${new Date(indexer.disabledTill as string).toLocaleString()} (escalation level ${indexer.escalationLevel})\n\n`
+              : `  ↳ Not currently backed off, but has recent failures (escalation level ${indexer.escalationLevel})\n\n`;
+          }
         }
 
-        let diagnosticReport = "⚠️ Prowlarr Indexer Health Warning:\n";
-        diagnosticReport += `Detected ${statuses.length} indexer operational anomalies across your tracker network:\n\n`;
+        if (disabled.length > 0) {
+          report += `Disabled in Prowlarr: ${disabled.map((i) => i.name).join(", ")}\n`;
+        }
+        if (warnings.length > 0) {
+          report += `\nProwlarr system warnings:\n${warnings.map((w) => `  ▪ [${w.type}] ${w.message}`).join("\n")}\n`;
+        }
 
-        statuses.forEach((status: any) => {
-          const matchingConfig = indexerConfigs.find((config: any) => config.id === status.indexerId);
-          const name = matchingConfig ? matchingConfig.name : `Indexer ID ${status.indexerId}`;
-
-          diagnosticReport += `▪ Indexer: ${name}\n`;
-          diagnosticReport += `  ↳ Failure Mode: ${status.lastFailure || "Continuous API Timeout"}\n`;
-          diagnosticReport += `  ↳ Backoff Until: ${status.disabledTill ? new Date(status.disabledTill).toLocaleString() : "Manual intervention required"}\n`;
-          diagnosticReport += "  ↳ Operational State: Temporary Escape / Escalated Error\n\n";
-        });
-
-        return textReply(diagnosticReport);
+        return textReply(report);
       } catch (error: unknown) {
         return textReply(`Prowlarr cluster health scan failed: ${getErrorMessage(error)}`, true);
       }

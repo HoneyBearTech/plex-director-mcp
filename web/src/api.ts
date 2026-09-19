@@ -98,6 +98,26 @@ export interface ChatAnswer {
   movies: MovieRow[];
 }
 
+export type IndexerState = "healthy" | "warning" | "backing-off" | "disabled";
+
+// Mirrors IndexerRow / IndexerHealth in src/indexers.ts.
+export interface IndexerRow {
+  id: number;
+  name: string;
+  protocol: string;
+  priority: number;
+  enabled: boolean;
+  state: IndexerState;
+  mostRecentFailure: string | null;
+  disabledTill: string | null;
+  escalationLevel: number;
+}
+
+export interface IndexerHealth {
+  indexers: IndexerRow[];
+  warnings: { type: string; source: string; message: string }[];
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   const data = await response.json();
@@ -139,6 +159,7 @@ export const api = {
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
+  indexerHealth: () => getJson<IndexerHealth>("/api/indexers/health"),
   getSettings: () => getJson<SettingsResponse>("/api/settings"),
   updateSettings: (service: SettingsService, body: Record<string, string>) =>
     putJson(`/api/settings/${service}`, body),
