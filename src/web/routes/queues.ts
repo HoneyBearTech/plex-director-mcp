@@ -1,7 +1,7 @@
 import { Router } from "express";
-import { sabnzbdClient, qbitClient } from "../../clients.js";
+import { sabnzbdClient } from "../../clients.js";
 import { getErrorMessage } from "../../util.js";
-import { getSetting } from "../../settings.js";
+import { loginToQbittorrent, getDownloadingTorrents } from "../../qbittorrent.js";
 
 export const queuesRouter = Router();
 
@@ -27,17 +27,7 @@ queuesRouter.get("/sabnzbd", async (_req, res) => {
 
 queuesRouter.get("/qbittorrent", async (_req, res) => {
   try {
-    const loginResponse = await qbitClient.post(
-      "/api/v2/auth/login",
-      `username=${encodeURIComponent(getSetting("QBITTORRENT_USER"))}&password=${encodeURIComponent(getSetting("QBITTORRENT_PASS"))}`,
-      { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
-    );
-
-    const cookie = loginResponse.headers["set-cookie"];
-    const requestConfig = { headers: { Cookie: cookie ? cookie[0] : "" } };
-
-    const torrentsResponse = await qbitClient.get("/api/v2/torrents/info?filter=downloading", requestConfig);
-    const torrents = torrentsResponse.data || [];
+    const torrents = await getDownloadingTorrents(await loginToQbittorrent());
 
     res.json({
       items: torrents.map((torrent: any) => ({
