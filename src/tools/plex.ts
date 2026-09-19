@@ -356,21 +356,26 @@ function showSummary(item: any): string {
   return parts.join(", ") || "size unknown";
 }
 
-// Every movie Plex holds, keyed by TMDb id -> the libraries that hold it.
-// Matching on TMDb id (rather than filtering by actor tag) is exact: Plex only
-// tags an actor on the cast it lists, so a tag filter would call a minor role
-// "not owned". The whole index is ~1,400 movies / a few MB, so it's cached
-// briefly instead of re-fetched for every question.
+// Every movie (or show) Plex holds, keyed by TMDb id -> the libraries that hold
+// it. Matching on TMDb id (rather than filtering by actor tag) is exact: Plex
+// only tags an actor on the cast it lists, so a tag filter would call a minor
+// role "not owned". The movie index is ~1,400 titles / a few MB, so each kind
+// is cached briefly instead of re-fetched for every question. TMDb movie and TV
+// ids are separate id spaces, hence one index per kind. A show Plex has no TMDb
+// id for is not in the show index (TMDb credits carry no TVDB id to match by).
+// Unlike searches, the index ignores the "libraries to skip" setting: a title
+// in a skipped library is still owned.
 const OWNED_INDEX_TTL_MS = 5 * 60_000;
 const INDEX_PAGE_SIZE = 1000;
-let ownedIndexCache: { at: number; byTmdbId: Map<string, string[]> } | null = null;
+const ownedIndexCache: Partial<Record<MediaKind, { at: number; byTmdbId: Map<string, string[]> }>> = {};
 
-export async function getOwnedTmdbIndex(): Promise<Map<string, string[]>> {
-  if (ownedIndexCache && Date.now() - ownedIndexCache.at < OWNED_INDEX_TTL_MS) {
-    return ownedIndexCache.byTmdbId;
+export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<string, string[]>> {
+  const cached = ownedIndexCache[kind];
+  if (cached && Date.now() - cached.at < OWNED_INDEX_TTL_MS) {
+    return cached.byTmdbId;
   }
 
-  const sections = await getSections(["movie"]);
+  const sections = await getSections([kind]);
   const byTmdbId = new Map<string, string[]>();
 
   await Promise.all(
@@ -393,12 +398,12 @@ export async function getOwnedTmdbIndex(): Promise<Map<string, string[]>> {
     })
   );
 
-  ownedIndexCache = { at: Date.now(), byTmdbId };
+  ownedIndexCache[kind] = { at: Date.now(), byTmdbId };
   return byTmdbId;
 }
 
-// For tests: forget the cached index so the next call re-reads Plex.
+// For tests: forget the cached indexes so the next call re-reads Plex.
 export function resetOwnedTmdbIndexCache(): void {
-  ownedIndexCache = null;
+  delete ownedIndexCache.movie;
+  delete ownedIndexCache.show;
 }
-

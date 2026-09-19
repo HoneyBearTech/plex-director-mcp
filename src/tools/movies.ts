@@ -229,9 +229,11 @@ export const movieTools: MovieTool[] = [
   {
     name: "resolve_actor_filmography",
     description:
-      "Resolves an actor's name to their official TMDb filmography, filtering out talk shows, self-appearances, and uncredited roles. When Plex is configured, marks which of those movies the user already has in their Plex library and which they don't. Use this to answer which of an actor's movies the user is missing.",
+      "Resolves an actor's name to their official TMDb filmography (movies and TV shows), filtering out talk shows, news, self-appearances, and uncredited roles. When Plex is configured, marks which of those titles the user already has in their Plex library and which they don't. Use this to answer which of an actor's movies or shows the user is missing. " +
+      "Pass mediaType 'movie' when the user asks about movies/films, 'show' for TV/series, and leave it out (any) when the question is about the actor's work in general; keep the same mediaType on follow-ups.",
     zodSchema: {
       actorName: z.string().describe("The exact name of the actor (e.g., 'Harrison Ford')."),
+      mediaType: z.enum(["movie", "show", "any"]).optional().describe("Only movies, only TV shows, or both (default any)."),
       limit: z.number().int().min(1).max(100).optional().describe("How many titles to list, newest first (default 15)."),
       yearFrom: z.number().int().optional().describe("Only titles released in or after this year."),
       yearTo: z.number().int().optional().describe("Only titles released in or before this year."),
@@ -242,6 +244,7 @@ export const movieTools: MovieTool[] = [
       type: "object" as const,
       properties: {
         actorName: { type: "string", description: "The exact name of the actor (e.g., 'Harrison Ford')." },
+        mediaType: { type: "string", enum: ["movie", "show", "any"], description: "Only movies, only TV shows, or both (default any)." },
         limit: { type: "integer", description: "How many titles to list, newest first (default 15)." },
         yearFrom: { type: "integer", description: "Only titles released in or after this year." },
         yearTo: { type: "integer", description: "Only titles released in or before this year." },
