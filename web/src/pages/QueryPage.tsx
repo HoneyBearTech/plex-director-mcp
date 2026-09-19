@@ -38,8 +38,13 @@ function plural(count: number, one: string, many = `${one}s`) {
 }
 
 function ShowProgress({ show }: { show: NonNullable<MediaRow["show"]> }) {
-  const { seasons, episodes, watchedEpisodes } = show;
-  const percent = episodes && watchedEpisodes !== null ? Math.min(100, Math.round((watchedEpisodes / episodes) * 100)) : null;
+  const { seasons, episodes, ownedEpisodes } = show;
+  // Sonarr rows report how much is downloaded; Plex rows report how much is watched.
+  const downloads = ownedEpisodes !== undefined && ownedEpisodes !== null;
+  const watchedEpisodes = downloads ? ownedEpisodes : show.watchedEpisodes;
+  const incomplete = downloads && episodes !== null && watchedEpisodes !== null && watchedEpisodes < episodes;
+  // A bar must not read "full" while episodes are missing, so 99.7% shows as 99%.
+  const percent = episodes && watchedEpisodes !== null ? Math.min(incomplete ? 99 : 100, Math.round((watchedEpisodes / episodes) * 100)) : null;
   return (
     <Flex direction="column" align="start" gap="1">
       <Text size="1">
@@ -49,9 +54,15 @@ function ShowProgress({ show }: { show: NonNullable<MediaRow["show"]> }) {
       </Text>
       {percent !== null && watchedEpisodes !== null && (
         <>
-          <Progress value={percent} size="1" style={{ width: 90 }} aria-label={`${watchedEpisodes} of ${episodes} episodes watched`} />
+          <Progress
+            value={percent}
+            size="1"
+            color={incomplete ? "amber" : undefined}
+            style={{ width: 90 }}
+            aria-label={`${watchedEpisodes} of ${episodes} episodes ${downloads ? "downloaded" : "watched"}`}
+          />
           <Text size="1" color="gray">
-            {watchedEpisodes} of {episodes} watched
+            {watchedEpisodes} of {episodes} {downloads ? "downloaded" : "watched"}
           </Text>
         </>
       )}

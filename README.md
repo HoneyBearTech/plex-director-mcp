@@ -41,6 +41,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 ## What it can do
 
 - **Find what you own.** Search your Plex library, movies and TV shows, by genre, actor, title, year and library (for example just the 4K libraries) across every library at once. A title held in both HD and 4K is one result with both libraries shown, and shows come with their season and episode counts and how much you have watched. You can leave a library such as Sports out of searches unless you name it.
+- **Do I have every episode?** Ask about a show and Sonarr's episode list says how many aired episodes are downloaded and exactly which are missing, or ask which of your shows have gaps, ranked, including near-complete ones. Unaired episodes and specials are never counted as missing.
 - **Owned versus missing.** Look up an actor's TMDb filmography, movies and TV shows, and see which of those titles are in Plex and which are not, optionally narrowed to movies or shows, by year range, or by "in 4K". Talk-show and "Self" appearances are left out, and a title appears once even when the actor played several roles in it.
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
@@ -207,7 +208,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (17 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (19 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -237,7 +238,7 @@ Nothing is required to start the container: it boots with no configuration and l
 | :--- | :--- |
 | `RADARR_URL`, `RADARR_API_KEY` | Radarr. Used for movie status, diagnosis, adding movies, and batch jobs. |
 | `RADARR_DEFAULT_QUALITY_PROFILE` | *Optional.* The name of the quality profile new movies get when you add them. Leave it blank to use Radarr's first profile. Also on the Radarr tab of the Settings page. |
-| `SONARR_URL`, `SONARR_API_KEY` | Sonarr. Optional; used for backups. |
+| `SONARR_URL`, `SONARR_API_KEY` | Sonarr. Optional; used for TV episode completeness and backups. |
 | `PROWLARR_URL`, `PROWLARR_API_KEY` | Prowlarr, for indexer health and backups. |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | SABnzbd, for the queue and for diagnosing missing media. |
 | `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` | qBittorrent Web UI. |
@@ -406,7 +407,7 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Seventeen tools are available to Claude Desktop. The four marked ★ are also what the dashboard's Query chat uses.
+Nineteen tools are available to Claude Desktop. The six marked ★ are also what the dashboard's Query chat uses.
 
 **Your library**
 
@@ -414,6 +415,8 @@ Seventeen tools are available to Claude Desktop. The four marked ★ are also wh
 | :--- | :--- |
 | ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Paged for large results. |
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
+| ★ `check_series_completeness` | "Do I have every episode of this show?" From Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). Counts the episodes themselves rather than Sonarr's statistics, which treat a partly downloaded, unmonitored show as complete. It does not check what Plex has scanned. |
+| ★ `find_series_gaps` | Which TV shows are missing aired episodes, most missing first, with how many are downloaded and whether Sonarr is looking for the rest. Filter by monitored, not monitored or actively being searched for, by how many are missing (for "nearly complete" shows) and hide shows with nothing downloaded. |
 | ★ `check_movie_status` | Whether a movie is in Radarr, and its monitoring status, with artwork. |
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |
 | `search_and_select_movies` | Searches TMDb and shows a numbered grid of matches. |

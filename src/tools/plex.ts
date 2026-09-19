@@ -26,6 +26,9 @@ export interface MediaRow {
     seasons: number | null;
     episodes: number | null;
     watchedEpisodes: number | null;
+    // Set by the Sonarr tools instead of watchedEpisodes: how many of
+    // `episodes` (the aired ones) are downloaded.
+    ownedEpisodes?: number | null;
     network: string | null;
   };
 }

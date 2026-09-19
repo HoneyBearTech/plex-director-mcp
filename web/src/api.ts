@@ -99,6 +99,7 @@ export interface MediaRow {
     seasons: number | null;
     episodes: number | null;
     watchedEpisodes: number | null;
+    ownedEpisodes?: number | null;
     network: string | null;
   };
 }
