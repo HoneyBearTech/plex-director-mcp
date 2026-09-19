@@ -63,7 +63,7 @@ export type SecretField = { configured: boolean };
 
 export interface SettingsResponse {
   sonarr: { url: string; apiKey: SecretField };
-  radarr: { url: string; apiKey: SecretField };
+  radarr: { url: string; apiKey: SecretField; defaultQualityProfile: string };
   prowlarr: { url: string; apiKey: SecretField };
   sabnzbd: { url: string; apiKey: SecretField };
   qbittorrent: { url: string; username: string; password: SecretField };
