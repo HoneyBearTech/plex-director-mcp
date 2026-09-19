@@ -12,9 +12,10 @@ import { db } from "../db.js";
 // - A successful login sets a signed, HttpOnly, SameSite=Strict cookie. The
 //   session is stateless (an expiry timestamp plus an HMAC), so nothing is
 //   stored per login and sessions survive restarts.
-// - The signing key is derived from a random secret kept in the database
-//   (shared by every process using it) *and* the password, so changing the
-//   password signs everyone out.
+// - The signing key is derived from the password with scrypt, salted with a
+//   random secret kept in the database (shared by every process using it).
+//   Changing the password signs everyone out, and guessing the password from a
+//   captured cookie is as slow as guessing it at the login form.
 
 const COOKIE_NAME = "pd_session";
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000;
@@ -36,8 +37,22 @@ function getSessionSecret(): string {
   return (db.prepare("SELECT value FROM settings WHERE key = ?").get(SECRET_KEY) as { value: string }).value;
 }
 
+// scrypt is deliberately slow (~50 ms), so the derived key is computed once and
+// reused rather than on every request. It is recomputed if the password or
+// secret ever changes.
+let cachedKey: { password: string; secret: string; key: Buffer } | null = null;
+
+function deriveKey(password: string, secret: string): Buffer {
+  return crypto.scryptSync(password, secret, 32);
+}
+
 function signingKey(): Buffer {
-  return crypto.createHmac("sha256", getSessionSecret()).update(getWebPassword()).digest();
+  const password = getWebPassword();
+  const secret = getSessionSecret();
+  if (!cachedKey || cachedKey.password !== password || cachedKey.secret !== secret) {
+    cachedKey = { password, secret, key: deriveKey(password, secret) };
+  }
+  return cachedKey.key;
 }
 
 function sign(payload: string): string {
@@ -61,11 +76,12 @@ export function verifySessionToken(token: string | undefined, now = Date.now()):
   return Number(expiresAt) > now;
 }
 
-// Hash both sides first so the comparison is constant-time even when the
-// lengths differ.
+// Derive a key from the attempt exactly as for the real password and compare
+// the two fixed-length keys in constant time. Every attempt costs one scrypt
+// run, which is what makes online guessing slow; the limiter below caps how
+// many failed attempts get that far.
 export function passwordMatches(attempt: string): boolean {
-  const sha = (value: string) => crypto.createHash("sha256").update(value).digest();
-  return crypto.timingSafeEqual(sha(attempt), sha(getWebPassword()));
+  return crypto.timingSafeEqual(deriveKey(attempt, getSessionSecret()), signingKey());
 }
 
 function readSessionCookie(req: Request): string | undefined {
