@@ -128,6 +128,9 @@ describe("searchPlexLibrary: resolving genre and actor names", () => {
 });
 
 describe("searchPlexLibrary: results", () => {
+  const rowsOf = (r: any) => r.structuredContent.movies as any[];
+  const bullets = (r: { content: Array<{ text: string }> }) => textOf(r).split("\n").filter((l) => l.startsWith("- "));
+
   it("searches every movie library and no other kind", async () => {
     library["1"] = [movie("Heat", 1995)];
     library["2"] = [movie("Heat", 1995)];
@@ -137,7 +140,7 @@ describe("searchPlexLibrary: results", () => {
     assert.doesNotMatch(textOf(result), /Should Never Appear/);
   });
 
-  it("passes title, year and includeGuids through, and shows the TMDb id", async () => {
+  it("passes title and year through and asks Plex for GUIDs and every match", async () => {
     library["1"] = [movie("Heat", 1995)];
     plexFake();
     const result = await searchPlexLibrary({ title: "heat", year: 1995 });
@@ -145,26 +148,52 @@ describe("searchPlexLibrary: results", () => {
     assert.equal(call.params.title, "heat");
     assert.equal(call.params.year, 1995);
     assert.equal(call.params.includeGuids, 1);
-    assert.match(textOf(result), /\| Heat \| 1995 \| Movies \| Horror, Thriller \| 7\.4 \| 1995 \|/);
+    assert.equal(call.params["X-Plex-Container-Size"], 5000, "everything is fetched so movies can be grouped and counted correctly");
+    assert.deepEqual(bullets(result), ["- Heat (1995) - Movies - Horror, Thriller"]);
   });
 
-  it("merges libraries, sorts by Plex's sort title, and honours the limit", async () => {
-    library["1"] = [movie("Alien", 1979, { titleSort: "Alien" }), movie("The Thing", 1982, { titleSort: "Thing" })];
-    library["2"] = [movie("Blade Runner", 1982, { titleSort: "Blade Runner" })];
+  it("makes a movie held in several libraries ONE entry with its libraries stacked", async () => {
+    library["1"] = [movie("Heat", 1995), movie("Ronin", 1998)];
+    library["2"] = [movie("Heat", 1995)];
+    plexFake();
+    const result = await searchPlexLibrary({ title: "x" });
+    assert.deepEqual(rowsOf(result).map((r) => [r.title, r.libraries]), [["Heat", ["Movies", "4k Movies"]], ["Ronin", ["Movies"]]]);
+    assert.match(textOf(result), /2 matching movies\./);
+    assert.deepEqual(bullets(result), ["- Heat (1995) - Movies, 4k Movies - Horror, Thriller", "- Ronin (1998) - Movies - Horror, Thriller"]);
+  });
+
+  it("groups by TMDb id, so a remake with the same title is a separate movie", async () => {
+    library["1"] = [movie("Dune", 1984, { Guid: [{ id: "tmdb://841" }] }), movie("Dune", 2021, { Guid: [{ id: "tmdb://438631" }] })];
+    library["2"] = [movie("Dune", 2021, { Guid: [{ id: "tmdb://438631" }] })];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ title: "dune" }));
+    assert.deepEqual(rows.map((r) => [r.year, r.libraries]), [[1984, ["Movies"]], [2021, ["Movies", "4k Movies"]]]);
+  });
+
+  it("falls back to title and year when Plex has no TMDb id", async () => {
+    library["1"] = [{ title: "Home Movie", titleSort: "Home Movie", year: 2010 }];
+    library["2"] = [{ title: "Home Movie", titleSort: "Home Movie", year: 2010 }];
+    plexFake();
+    const rows = rowsOf(await searchPlexLibrary({ title: "home" }));
+    assert.equal(rows.length, 1);
+    assert.deepEqual(rows[0].libraries, ["Movies", "4k Movies"]);
+  });
+
+  it("sorts by Plex's sort title across libraries and honours the limit", async () => {
+    library["1"] = [movie("Alien", 1979, { titleSort: "Alien" }), movie("The Thing", 1982, { titleSort: "Thing", Guid: [{ id: "tmdb://1091" }] })];
+    library["2"] = [movie("Blade Runner", 1982, { titleSort: "Blade Runner", Guid: [{ id: "tmdb://78" }] })];
     plexFake();
     const result = await searchPlexLibrary({ year: 1982, limit: 2 });
-    const titles = ((result as any).structuredContent.movies as any[]).map((m) => m.title);
-    assert.deepEqual(titles, ["Alien", "Blade Runner"], "The Thing sorts under T, not 'The', and is cut by the limit");
-    assert.match(textOf(result), /3 matches \(showing 1-2\)\./);
-    assert.match(textOf(result), /1 more not shown: call again with offset 2/);
-    assert.equal(allCalls()[0]!.params["X-Plex-Container-Size"], 2);
+    assert.deepEqual(rowsOf(result).map((m) => m.title), ["Alien", "Blade Runner"], "The Thing sorts under T, not 'The', and is cut by the limit");
+    assert.match(textOf(result), /3 matching movies, listed 1-2\./);
+    assert.match(textOf(result), /1 more are not listed: call again with offset 2/);
   });
 
   it("attaches structured rows for the web table", async () => {
     library["2"] = [movie("Blade Runner 2049", 2017, { thumb: "/library/metadata/91684/thumb/123" })];
     plexFake();
     const result = await searchPlexLibrary({ title: "blade" });
-    assert.deepEqual((result as any).structuredContent.movies, [
+    assert.deepEqual(rowsOf(result), [
       {
         title: "Blade Runner 2049",
         year: 2017,
@@ -180,25 +209,26 @@ describe("searchPlexLibrary: results", () => {
   it("never puts the Plex token or a raw Plex URL in a poster URL", async () => {
     library["1"] = [movie("Heat", 1995)];
     plexFake();
-    const rows = ((await searchPlexLibrary({ title: "heat" })) as any).structuredContent.movies as any[];
+    const rows = rowsOf(await searchPlexLibrary({ title: "heat" }));
     assert.match(rows[0].posterUrl, /^\/api\/plex\/image\?path=/);
     assert.doesNotMatch(JSON.stringify(rows), /X-Plex-Token|http:\/\/plex/);
   });
 
-  it("escapes pipes and backslashes in titles so the table can't break", async () => {
+  it("shows titles containing pipes and backslashes verbatim", async () => {
     library["1"] = [movie("A|B", 2001), movie("Ends with \\", 2002)];
     plexFake();
-    const text = textOf(await searchPlexLibrary({ title: "x" }));
-    assert.match(text, /\| A\\\|B \|/);
-    assert.match(text, /\| Ends with \\\\ \|/);
+    const result = await searchPlexLibrary({ title: "x" });
+    assert.deepEqual(bullets(result).map((l) => l.split(" - ")[0]), ["- A|B (2001)", "- Ends with \\ (2002)"]);
+    assert.deepEqual(rowsOf(result).map((r) => r.title), ["A|B", "Ends with \\"]);
   });
 
   it("handles items with no rating, year or poster", async () => {
     library["1"] = [{ title: "Mystery", titleSort: "Mystery" }];
     plexFake();
     const result = await searchPlexLibrary({ title: "mystery" });
-    assert.match(textOf(result), /\| Mystery \| N\/A \| Movies \|  \| N\/A \| N\/A \|/);
-    assert.deepEqual(((result as any).structuredContent.movies as any[])[0].posterUrl, null);
+    assert.deepEqual(bullets(result), ["- Mystery (year unknown) - Movies"]);
+    assert.deepEqual(rowsOf(result)[0].posterUrl, null);
+    assert.equal(rowsOf(result)[0].rating, null);
   });
 
   it("says so when nothing matches", async () => {
@@ -213,6 +243,16 @@ describe("searchPlexLibrary: results", () => {
     const result = await searchPlexLibrary({ title: "heat" });
     assert.equal(result.isError, true);
     assert.match(textOf(result), /Failed to search Plex/);
+  });
+
+  // Regression: the reply once told the user "only the first 100 of 174 rows are shown",
+  // because the model was told the text was abbreviated. It now isn't.
+  it("never talks about rows, truncation or 'first N' in what the model reads", async () => {
+    library["1"] = Array.from({ length: 150 }, (_, i) => movie(`M${String(i).padStart(3, "0")}`, 2000, { Guid: [{ id: `tmdb://${i}` }] }));
+    plexFake();
+    const text = textOf(await searchPlexLibrary({ title: "m", limit: 150 }));
+    assert.doesNotMatch(text, /\brows?\b|only the first|abbreviat|to save space/i);
+    assert.equal(text.split("\n").filter((l) => l.startsWith("- ")).length, 150, "every returned movie is listed");
   });
 });
 
@@ -256,17 +296,17 @@ describe("searchPlexLibrary: library filter", () => {
 });
 
 describe("searchPlexLibrary: paging and large results", () => {
-  const many = (n: number) => Array.from({ length: n }, (_, i) => movie(`Movie ${String(i).padStart(3, "0")}`, 2000, { titleSort: `Movie ${String(i).padStart(3, "0")}` }));
+  const many = (n: number) =>
+    Array.from({ length: n }, (_, i) => movie(`Movie ${String(i).padStart(3, "0")}`, 2000, { titleSort: `Movie ${String(i).padStart(3, "0")}`, Guid: [{ id: `tmdb://${i}` }] }));
   const titles = (r: any) => (r.structuredContent.movies as any[]).map((m) => m.title);
 
-  it("allows up to 500 rows in one call (the old cap was 100) and clamps beyond that", async () => {
+  it("allows up to 500 movies in one call (the old cap was 100) and clamps beyond that", async () => {
     library["1"] = many(600);
     plexFake();
     const result = await searchPlexLibrary({ title: "movie", limit: 500 });
     assert.equal(titles(result).length, 500);
-    assert.match(textOf(result), /600 matches \(showing 1-500\)\. .*100 more not shown: call again with offset 500/);
-    const clamped = await searchPlexLibrary({ title: "movie", limit: 9999 });
-    assert.equal(titles(clamped).length, 500);
+    assert.match(textOf(result), /600 matching movies, listed 1-500\. 100 more are not listed: call again with offset 500/);
+    assert.equal(titles(await searchPlexLibrary({ title: "movie", limit: 9999 })).length, 500);
   });
 
   it("pages through a merged result with offset, without gaps or repeats", async () => {
@@ -276,13 +316,20 @@ describe("searchPlexLibrary: paging and large results", () => {
     const first = await searchPlexLibrary({ title: "m", limit: 60 });
     const second = await searchPlexLibrary({ title: "m", limit: 60, offset: 60 });
     const third = await searchPlexLibrary({ title: "m", limit: 60, offset: 120 });
-    const all = [...titles(first), ...titles(second), ...titles(third)];
-    assert.equal(all.length, 150);
-    assert.deepEqual(all, many(150).map((m) => m.title), "every title exactly once, in order");
+    assert.deepEqual([...titles(first), ...titles(second), ...titles(third)], many(150).map((m) => m.title), "every title exactly once, in order");
     assert.match(textOf(first), /offset 60/);
+    assert.match(textOf(second), /listed 61-120/);
     assert.match(textOf(second), /offset 120/);
     assert.doesNotMatch(textOf(third), /call again with offset/);
-    assert.match(textOf(second), /showing 61-120/);
+  });
+
+  it("counts and pages by movie, not by library entry", async () => {
+    library["1"] = many(10);
+    library["2"] = many(10); // the same ten movies again, in the other library
+    plexFake();
+    const result = await searchPlexLibrary({ title: "m", limit: 4 });
+    assert.match(textOf(result), /10 matching movies, listed 1-4\./, "10 movies, not 20 entries");
+    assert.deepEqual(titles(await searchPlexLibrary({ title: "m", limit: 4, offset: 8 })), ["Movie 008", "Movie 009"]);
   });
 
   it("flags continuation pages so the UI appends them, and fresh searches so it replaces", async () => {
@@ -292,21 +339,11 @@ describe("searchPlexLibrary: paging and large results", () => {
     assert.equal(((await searchPlexLibrary({ title: "m", limit: 10, offset: 10 })) as any).structuredContent.append, true);
   });
 
-  it("lists at most 100 rows in the text the model reads, while the table gets every row", async () => {
-    library["1"] = many(250);
-    plexFake();
-    const result = await searchPlexLibrary({ title: "m", limit: 250 });
-    assert.equal(titles(result).length, 250);
-    const tableRows = textOf(result).split("\n").filter((l) => l.startsWith("| Movie "));
-    assert.equal(tableRows.length, 100);
-    assert.match(textOf(result), /table already shows all 250 rows; only the first 100 are listed below.*do not request them again/);
-  });
-
   it("says so when the offset is past the end", async () => {
     library["1"] = many(5);
     plexFake();
     const result = await searchPlexLibrary({ title: "m", offset: 50 });
-    assert.match(textOf(result), /Offset 50 is past the end: there are only 5 matches/);
+    assert.match(textOf(result), /Offset 50 is past the end: there are only 5 matching movies/);
     assert.equal((result as any).structuredContent, undefined);
   });
 
@@ -314,28 +351,6 @@ describe("searchPlexLibrary: paging and large results", () => {
     library["1"] = many(3);
     plexFake();
     assert.equal(titles(await searchPlexLibrary({ title: "m", offset: -5 })).length, 3);
-  });
-});
-
-describe("searchPlexLibrary: distinct movie count", () => {
-  it("states how many distinct movies there are when a movie is in several libraries", async () => {
-    library["1"] = [movie("Heat", 1995), movie("Ronin", 1998)];
-    library["2"] = [movie("Heat", 1995)];
-    plexFake();
-    const text = textOf(await searchPlexLibrary({ title: "x" }));
-    assert.match(text, /3 matches\./);
-    assert.match(text, /That is 2 distinct movies: 1 of the 3 rows repeat a movie that is also held in another library\./);
-  });
-  it("says nothing about duplicates when there are none", async () => {
-    library["1"] = [movie("Heat", 1995)];
-    plexFake();
-    assert.doesNotMatch(textOf(await searchPlexLibrary({ title: "x" })), /distinct/);
-  });
-  it("doesn't claim a distinct count for a partial page, where it can't be known", async () => {
-    library["1"] = [movie("A", 2001), movie("B", 2002)];
-    library["2"] = [movie("A", 2001), movie("B", 2002)];
-    plexFake();
-    assert.doesNotMatch(textOf(await searchPlexLibrary({ title: "x", limit: 2 })), /distinct/);
   });
 });
 

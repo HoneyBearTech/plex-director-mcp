@@ -1,6 +1,6 @@
 import { plexClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
-import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
+import { textReply, getErrorMessage } from "../util.js";
 
 // One movie in a result list. Tools attach these as structuredContent so the
 // web UI can render a table with posters; the text reply stays for MCP clients
@@ -34,9 +34,9 @@ export interface PlexSearchArgs {
 
 const DEFAULT_LIMIT = 25;
 const MAX_LIMIT = 500;
-// The model reads the text reply, so it lists only this many rows; the full
-// set (up to `limit`) still goes to the UI table as structured rows.
-const TEXT_ROW_CAP = 100;
+// Plex is asked for everything that matches in one go; libraries here are
+// well under this, so it is effectively "all".
+const FETCH_ALL = 5000;
 
 interface PlexSection {
   key: string;
@@ -175,6 +175,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       described.push(`actor ${resolved.name}`);
     }
 
+    // Every match is fetched (not one page): a movie held in several libraries
+    // must be counted once and paged as one, which needs the whole set.
     const perSection = await Promise.all(
       sections.map(async (section) => {
         const response = await plexClient.get(`/library/sections/${section.key}/all`, {
@@ -182,71 +184,64 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
             ...filters,
             includeGuids: 1,
             "X-Plex-Container-Start": 0,
-            // Enough from each library to cover this page after merging.
-            "X-Plex-Container-Size": offset + limit,
+            "X-Plex-Container-Size": FETCH_ALL,
           },
         });
-        const container = response.data?.MediaContainer ?? {};
-        const items: any[] = container.Metadata ?? [];
-        return {
-          section,
-          total: Number(container.totalSize ?? items.length),
-          items,
-        };
+        const items: any[] = response.data?.MediaContainer?.Metadata ?? [];
+        return { section, items };
       })
     );
 
-    const total = perSection.reduce((sum, r) => sum + r.total, 0);
-    const rows = perSection
-      .flatMap((r) => r.items.map((item) => ({ item, library: r.section.title })))
-      .sort((a, b) => String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) || (a.item.year ?? 0) - (b.item.year ?? 0))
-      .slice(offset, offset + limit);
+    // One entry per movie, listing every library that holds it (HD and 4K
+    // copies are the same movie, not two results).
+    const byMovie = new Map<string, { item: any; libraries: string[] }>();
+    for (const { section, items } of perSection) {
+      for (const item of items) {
+        const key = tmdbIdOf(item) ?? `${item.title}|${item.year}`;
+        const existing = byMovie.get(key);
+        if (existing) existing.libraries.push(section.title);
+        else byMovie.set(key, { item, libraries: [section.title] });
+      }
+    }
+
+    const sorted = [...byMovie.values()].sort(
+      (a, b) =>
+        String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) ||
+        (a.item.year ?? 0) - (b.item.year ?? 0)
+    );
+    const total = sorted.length;
+    const rows = sorted.slice(offset, offset + limit);
 
     const heading = described.join(", ");
     if (rows.length === 0) {
       return textReply(
         total > 0
-          ? `Offset ${offset} is past the end: there are only ${total} matches for ${heading}.`
+          ? `Offset ${offset} is past the end: there are only ${total} matching movies for ${heading}.`
           : `No movies in Plex match ${heading}.`
       );
     }
 
     const shownEnd = offset + rows.length;
     let output = `## Plex library: ${heading}\n`;
-    output += `${total} match${total === 1 ? "" : "es"}`;
-    if (total > rows.length) output += ` (showing ${offset + 1}-${shownEnd})`;
-    output += `. Every row matches all of the filters; the same movie appears once per library that holds it.`;
-    // The distinct count is only knowable when every match is in hand, and the
-    // model shouldn't have to work it out (it guessed wrong when left to).
-    if (offset === 0 && total === rows.length) {
-      const distinct = new Set(rows.map(({ item }) => tmdbIdOf(item) ?? `${item.title}|${item.year}`)).size;
-      if (distinct < rows.length) {
-        output += ` That is ${distinct} distinct movies: ${rows.length - distinct} of the ${rows.length} rows repeat a movie that is also held in another library.`;
-      }
-    }
+    output += `${total} matching movie${total === 1 ? "" : "s"}`;
+    if (total > rows.length) output += `, listed ${offset + 1}-${shownEnd}`;
+    output += ".";
     if (total > shownEnd) {
-      output += ` ${total - shownEnd} more not shown: call again with offset ${shownEnd} for the next page (limit up to ${MAX_LIMIT}).`;
+      output += ` ${total - shownEnd} more are not listed: call again with offset ${shownEnd} for the next page (limit up to ${MAX_LIMIT}).`;
     }
-    output += "\n";
-    if (rows.length > TEXT_ROW_CAP) {
-      output += `The user's table already shows all ${rows.length} rows; only the first ${TEXT_ROW_CAP} are listed below to save space. The rest are on the user's screen, so do not request them again.\n`;
-    }
-    output += "\n";
-    output += "| Title | Year | Library | Genres | Rating | TMDb ID |\n";
-    output += "| :--- | :---: | :--- | :--- | :---: | :---: |\n";
-    for (const { item, library: libraryName } of rows.slice(0, TEXT_ROW_CAP)) {
+    output += " Each line is one movie with every Plex library that holds it; the user sees the same movies in a table below your reply.\n\n";
+    for (const { item, libraries } of rows) {
       const genres = (item.Genre ?? []).map((g: any) => g.tag).join(", ");
-      const rating = item.audienceRating ?? item.rating;
-      output += `| ${escapeTableCell(String(item.title))} | ${item.year ?? "N/A"} | ${escapeTableCell(libraryName)} | ${escapeTableCell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
+      output += `- ${item.title} (${item.year ?? "year unknown"}) - ${libraries.join(", ")}${genres ? ` - ${genres}` : ""}\n`;
     }
 
-    const movies: MovieRow[] = rows.map(({ item, library }) => {
+    const movies: MovieRow[] = rows.map(({ item, libraries }) => {
       const rating = item.audienceRating ?? item.rating;
       return {
         title: String(item.title),
         year: item.year ?? null,
         posterUrl: plexPosterUrl(item.thumb),
-        libraries: [library],
+        libraries,
         genres: (item.Genre ?? []).map((g: any) => String(g.tag)),
         rating: rating !== undefined ? Number(rating) : null,
         detail: null,
