@@ -79,6 +79,8 @@ function MediaTable({ media }: { media: MediaRow[] }) {
   const showDetail = media.some((m) => m.genres.length > 0 || m.detail);
   const hasShows = media.some((m) => m.kind === "show");
   const hasMovies = media.some((m) => m.kind === "movie");
+  const hasLastWatched = media.some((m) => m.lastWatched !== undefined);
+  const hasAdded = media.some((m) => (m.added ?? null) !== null);
   // Only Plex and Sonarr rows carry season/episode data (TMDb filmography and calendar rows do not).
   const hasShowDetail = media.some(
     (m) => m.show && (m.show.seasons !== null || m.show.episodes !== null || m.show.watchedEpisodes !== null || (m.show.ownedEpisodes ?? null) !== null)
@@ -102,6 +104,8 @@ function MediaTable({ media }: { media: MediaRow[] }) {
           {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
           {hasShowDetail && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
           {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
+          {hasLastWatched && <Table.ColumnHeaderCell>Last watched</Table.ColumnHeaderCell>}
+          {hasAdded && <Table.ColumnHeaderCell>Added</Table.ColumnHeaderCell>}
           {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
         </Table.Row>
       </Table.Header>
@@ -144,6 +148,8 @@ function MediaTable({ media }: { media: MediaRow[] }) {
             )}
             {hasShowDetail && <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>}
             {showDetail && <Table.Cell>{item.detail ?? item.genres.join(", ")}</Table.Cell>}
+            {hasLastWatched && <Table.Cell>{item.lastWatched === undefined ? "-" : (item.lastWatched ?? "Never")}</Table.Cell>}
+            {hasAdded && <Table.Cell>{item.added ?? "-"}</Table.Cell>}
             {showRating && <Table.Cell>{item.rating !== null ? item.rating.toFixed(1) : "-"}</Table.Cell>}
           </Table.Row>
         ))}

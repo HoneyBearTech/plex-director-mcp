@@ -14,7 +14,9 @@ import { jobsRouter } from "./routes/jobs.js";
 
 export function createWebApp() {
   const app = express();
-  app.use(express.json());
+  // Chat history carries earlier answers' tables, so requests can be sizeable;
+  // 1 MB is ample and still bounded (the default 100 KB rejected long chats).
+  app.use(express.json({ limit: "1mb" }));
   // Generous enough for normal dashboard polling (several endpoints polled
   // every 10-15s) while bounding repeated disk reads from the static/SPA
   // handlers below against abuse - flagged by CodeQL as unrate-limited
