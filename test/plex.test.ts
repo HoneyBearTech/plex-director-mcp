@@ -616,7 +616,7 @@ describe("searchPlexLibrary: watch state", () => {
       assert.equal((await search({ sort: "recentlyAdded" })).isError, undefined);
       const none = await search({ sort: "title" });
       assert.equal(none.isError, true);
-      assert.match(textOf(none), /Provide at least one of: .*watched, notWatchedInYears, sort/);
+      assert.match(textOf(none), /Provide at least one of: .*watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort/);
     });
   });
 
@@ -1017,6 +1017,102 @@ describe("getOnDeck", () => {
     const result = await getOnDeck();
     assert.equal(result.isError, true);
     assert.match(textOf(result), /Failed to read On Deck from Plex/);
+  });
+});
+
+describe("searchPlexLibrary: attribute filters", () => {
+  const NOW = Date.parse("2026-09-19T15:00:00Z");
+  const at = (iso: string) => Math.floor(Date.parse(`${iso}T12:00:00Z`) / 1000);
+  const rowsOf = (r: any) => (r.structuredContent?.media ?? []) as any[];
+  const titlesOf = (r: any) => rowsOf(r).map((m) => m.title);
+  const m = (n: number, title: string, year: number, extra: Record<string, unknown> = {}) => movie(title, year, { Guid: [{ id: `tmdb://${n}` }], ...extra });
+  const sh = (n: number, title: string, year: number, extra: Record<string, unknown> = {}) => show(title, year, { Guid: [{ id: `tmdb://${n}` }], ...extra });
+  const search = (args: Parameters<typeof searchPlexLibrary>[0]) => searchPlexLibrary(args, NOW);
+
+  beforeEach(() => {
+    library["1"] = [
+      m(1, "Alien", 1979, { studio: "20th Century Studios", contentRating: "R", audienceRating: 8.4, addedAt: at("2020-01-01") }),
+      m(2, "Toy Story", 1995, { studio: "Pixar", contentRating: "G", audienceRating: 8.3, addedAt: at("2026-09-10") }),
+      m(3, "Heat", 1995, { studio: "Warner Bros.", contentRating: "gb/15", audienceRating: 7.9, addedAt: at("2026-06-01") }),
+      m(4, "Unrated", 2001, { studio: undefined, contentRating: undefined, audienceRating: undefined, addedAt: undefined }),
+    ];
+    library["3"] = [
+      sh(5, "Succession", 2018, { studio: "HBO", contentRating: "TV-MA", audienceRating: 8.9, addedAt: at("2026-09-15") }),
+      sh(6, "Bluey", 2018, { studio: "ABC Kids", contentRating: "TV-G", audienceRating: 9.1, addedAt: at("2023-01-01") }),
+      sh(7, "Chernobyl", 2019, { studio: "HBO", contentRating: "TV-MA", audienceRating: 9.3, addedAt: at("2026-09-18") }),
+      sh(8, "Old Show", 1985, { studio: "NBC", contentRating: "TV-PG", audienceRating: 6.5, addedAt: at("2010-01-01") }),
+    ];
+    plexFake();
+  });
+
+  it("network matches part of a network or studio name, ignoring case and punctuation, for shows and movies", async () => {
+    assert.deepEqual(titlesOf(await search({ network: "hbo" })), ["Chernobyl", "Succession"]);
+    assert.deepEqual(titlesOf(await search({ network: "WARNER BROS" })), ["Heat"], "movie studios too, punctuation ignored");
+    assert.deepEqual(titlesOf(await search({ network: "kids", mediaType: "show" })), ["Bluey"]);
+    assert.deepEqual(titlesOf(await search({ network: "  ", contentRating: "gb/15" })), ["Heat"], "a blank network is no filter");
+  });
+
+  it("contentRating is an exact rating, ignoring case and a country prefix", async () => {
+    assert.deepEqual(titlesOf(await search({ contentRating: "tv-ma" })), ["Chernobyl", "Succession"]);
+    assert.deepEqual(titlesOf(await search({ contentRating: "R" })), ["Alien"], "R is not TV-MA or PG-13");
+    assert.deepEqual(titlesOf(await search({ contentRating: "15" })), ["Heat"], "gb/15 is a 15");
+    assert.deepEqual(titlesOf(await search({ contentRating: "TV-M" })), []);
+  });
+
+  it("minRating keeps titles rated at least that, and leaves out unrated ones", async () => {
+    assert.deepEqual(titlesOf(await search({ minRating: 9 })), ["Bluey", "Chernobyl"]);
+    assert.deepEqual(titlesOf(await search({ minRating: 8.4 })), ["Alien", "Bluey", "Chernobyl", "Succession"], "inclusive");
+    assert.equal(titlesOf(await search({ minRating: 0 })).includes("Unrated"), false, "no rating is not a rating of 0");
+  });
+
+  it("yearFrom / yearTo give a decade or a range, inclusive; titles with no year are left out", async () => {
+    assert.deepEqual(titlesOf(await search({ yearFrom: 1990, yearTo: 1999 })), ["Heat", "Toy Story"]);
+    assert.deepEqual(titlesOf(await search({ yearFrom: 2018, mediaType: "show" })), ["Bluey", "Chernobyl", "Succession"]);
+    assert.deepEqual(titlesOf(await search({ yearTo: 1985 })), ["Alien", "Old Show"]);
+    library["1"] = [m(9, "No Year", 2000, { year: undefined })];
+    assert.deepEqual(titlesOf(await search({ yearFrom: 1900, mediaType: "movie" })), []);
+  });
+
+  it("addedWithinDays keeps what was added recently, newest add first when sorted, and shows the Added column data", async () => {
+    const result = await search({ addedWithinDays: 10, sort: "recentlyAdded" });
+    assert.deepEqual(titlesOf(result), ["Chernobyl", "Succession", "Toy Story"]);
+    assert.deepEqual(rowsOf(result).map((r) => r.added), ["2026-09-18", "2026-09-15", "2026-09-10"], "dates are shown for an added query");
+    assert.deepEqual(titlesOf(await search({ addedWithinDays: 7 })), ["Chernobyl", "Succession"], "Toy Story was added 8 days before the fixed clock");
+    assert.deepEqual(rowsOf(await search({ addedWithinDays: 7 })).map((r) => r.added).sort(), ["2026-09-15", "2026-09-18"], "the Added dates come with the filter alone");
+    assert.deepEqual(titlesOf(await search({ addedWithinDays: 0.5 })), [], "half a day: nothing since 15:00 yesterday-ish");
+    assert.equal(titlesOf(await search({ addedWithinDays: 400 })).includes("Unrated"), false, "no add date is not recent");
+    assert.match((await search({ addedWithinDays: 7 })).content[0]!.text, /## Plex library: added in the last 7 days/);
+  });
+
+  it("combines with each other and with the older filters", async () => {
+    assert.deepEqual(titlesOf(await search({ network: "hbo", minRating: 9 })), ["Chernobyl"]);
+    assert.deepEqual(titlesOf(await search({ contentRating: "TV-MA", addedWithinDays: 2 })), ["Chernobyl"]);
+    assert.deepEqual(titlesOf(await search({ yearFrom: 1990, yearTo: 1999, minRating: 8, mediaType: "movie" })), ["Toy Story"]);
+    assert.deepEqual(titlesOf(await search({ genre: "Horror", network: "pixar" })), ["Toy Story"]);
+    assert.match(textOf(await search({ network: "hbo", contentRating: "tv-ma", minRating: 8, yearFrom: 2018, yearTo: 2019 })), /## Plex library: network\/studio "hbo", rated TV-MA, audience rating at least 8, released 2018-2019/);
+  });
+
+  it("is enough on its own to make a search, and applies before paging", async () => {
+    for (const args of [{ network: "x" }, { contentRating: "R" }, { minRating: 5 }, { yearFrom: 2000 }, { yearTo: 2000 }, { addedWithinDays: 3 }]) {
+      assert.equal((await search(args)).isError, undefined, JSON.stringify(args));
+    }
+    library["1"] = Array.from({ length: 60 }, (_, i) => m(100 + i, `Movie ${String(i).padStart(2, "0")}`, 2000, { audienceRating: 9 }));
+    assert.match(textOf(await search({ minRating: 9, mediaType: "movie", limit: 10 })), /60 matching movies, listed 1-10\./);
+  });
+
+  it("rejects values that cannot be right", async () => {
+    for (const [args, message] of [
+      [{ addedWithinDays: 0 }, /addedWithinDays must be greater than 0/],
+      [{ addedWithinDays: -3 }, /addedWithinDays must be greater than 0/],
+      [{ minRating: 11 }, /minRating must be between 0 and 10/],
+      [{ minRating: -1 }, /minRating must be between 0 and 10/],
+      [{ yearFrom: 2000, yearTo: 1990 }, /yearFrom is after yearTo/],
+    ] as const) {
+      const result = await search(args);
+      assert.equal(result.isError, true, JSON.stringify(args));
+      assert.match(textOf(result), message);
+    }
+    assert.equal(allCalls().length, 0);
   });
 });
 
