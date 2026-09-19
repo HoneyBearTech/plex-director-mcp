@@ -38,6 +38,12 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 
 EXPOSE 3000
 
+# The runtime image has no shell, curl or wget, so the check is Node itself:
+# GET /healthz (public, needs no login) on the port the dashboard listens on.
+# start-period covers the first boot, when the SQLite schema is created.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD ["/nodejs/bin/node", "-e", "fetch('http://127.0.0.1:'+(process.env.WEB_PORT||3000)+'/healthz').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+
 # The base image's ENTRYPOINT is already the node binary, so CMD is just
 # the script to run. The MCP server speaks stdio (run attached, e.g.
 # `docker run -i --rm -p 3000:3000 --env-file .env <image>`), while the web
