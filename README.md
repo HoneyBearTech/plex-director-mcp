@@ -42,6 +42,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 
 - **Find what you own.** Search your Plex library, movies and TV shows, by genre, actor, title, year and library (for example just the 4K libraries) across every library at once. A title held in both HD and 4K is one result with both libraries shown, and shows come with their season and episode counts and how much you have watched. You can leave a library such as Sports out of searches unless you name it.
 - **Do I have every episode?** Ask about a show and Sonarr's episode list says how many aired episodes are downloaded and exactly which are missing, or ask which of your shows have gaps, ranked, including near-complete ones. Unaired episodes and specials are never counted as missing. For a missing episode it can also say why, from Sonarr's history and download queue.
+- **What's on, and when does it return?** See which episodes air in the next few days, with premieres and finales flagged, or ask when a particular show comes back (or that no date has been announced yet).
 - **Owned versus missing.** Look up an actor's TMDb filmography, movies and TV shows, and see which of those titles are in Plex and which are not, optionally narrowed to movies or shows, by year range, or by "in 4K". Talk-show and "Self" appearances are left out, and a title appears once even when the actor played several roles in it.
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
@@ -208,7 +209,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (21 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (22 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -407,7 +408,7 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-one tools are available to Claude Desktop. The eight marked ★ are also what the dashboard's Query chat uses.
+Twenty-two tools are available to Claude Desktop. The nine marked ★ are also what the dashboard's Query chat uses.
 
 **Your library**
 
@@ -419,6 +420,7 @@ Twenty-one tools are available to Claude Desktop. The eight marked ★ are also 
 | ★ `find_series_gaps` | Which TV shows are missing aired episodes, most missing first, with how many are downloaded and whether Sonarr is looking for the rest. Filter by monitored, not monitored or actively being searched for, by how many are missing (for "nearly complete" shows) and hide shows with nothing downloaded. |
 | ★ `check_series_status` | What Sonarr knows about one show: monitored or not, its quality profile and location, when the next episode airs, when something was last downloaded, what is in the download queue, and how many aired episodes are downloaded. |
 | ★ `diagnose_missing_episodes` | *Why* aired episodes of a show have no file, from Sonarr's history and download queue: never grabbed, grabbed but never imported, a download that failed (with Sonarr's reason), a file that was removed, stuck in the queue, or simply not monitored so Sonarr never looks for it. Can be limited to a season or one episode. Read-only. |
+| ★ `get_upcoming_episodes` | What TV is coming, from Sonarr's calendar. With no title: "what's on this week?", every episode airing in the next few days (7 by default, up to 60) from the shows Sonarr monitors, by day, with season premieres and finales flagged and episodes already downloaded marked. With a title: "when does this show come back?", its next episodes, or that none is scheduled yet, or that it has ended. Shows Sonarr does not monitor are left out unless asked for, and their number is reported. |
 | ★ `check_movie_status` | Whether a movie is in Radarr, and its monitoring status, with artwork. |
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |
 | `search_and_select_movies` | Searches TMDb and shows a numbered grid of matches. |

@@ -79,8 +79,10 @@ function MediaTable({ media }: { media: MediaRow[] }) {
   const showDetail = media.some((m) => m.genres.length > 0 || m.detail);
   const hasShows = media.some((m) => m.kind === "show");
   const hasMovies = media.some((m) => m.kind === "movie");
-  // Only Plex search rows carry season/episode data (TMDb filmography rows do not).
-  const hasShowDetail = media.some((m) => m.show);
+  // Only Plex and Sonarr rows carry season/episode data (TMDb filmography and calendar rows do not).
+  const hasShowDetail = media.some(
+    (m) => m.show && (m.show.seasons !== null || m.show.episodes !== null || m.show.watchedEpisodes !== null || (m.show.ownedEpisodes ?? null) !== null)
+  );
   const noun = hasShows && hasMovies ? "title" : hasShows ? "show" : "movie";
 
   return (
