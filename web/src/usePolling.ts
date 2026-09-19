@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 interface PollState<T> {
   data: T | null;
@@ -6,10 +6,17 @@ interface PollState<T> {
   loading: boolean;
 }
 
+interface PollResult<T> extends PollState<T> {
+  // Fetch again now (e.g. after an action) instead of waiting for the next tick.
+  refresh: () => void;
+}
+
 // Simple client-side polling - good enough for a homelab dashboard without
 // pulling in WebSocket/SSE infrastructure for a handful of low-traffic pages.
-export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): PollState<T> {
+export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): PollResult<T> {
   const [state, setState] = useState<PollState<T>>({ data: null, error: null, loading: true });
+  const tickRef = useRef<() => void>(() => {});
+  const refresh = useCallback(() => tickRef.current(), []);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +34,7 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
       }
     }
 
+    tickRef.current = () => void tick();
     tick();
     const id = setInterval(tick, intervalMs);
     return () => {
@@ -37,5 +45,5 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
     // render, and including it would restart polling on every render.
   }, [intervalMs]);
 
-  return state;
+  return { ...state, refresh };
 }

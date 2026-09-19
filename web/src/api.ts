@@ -38,6 +38,9 @@ export interface NodeHealth {
   diskUsed?: string;
   diskTotal?: string;
   uptime?: string;
+  // Offline hosts only: why, and whether the SSH host key changed.
+  error?: string;
+  hostKeyChanged?: { expected: string; actual: string };
 }
 
 export interface SabnzbdItem {
@@ -196,6 +199,7 @@ export const api = {
   login: (password: string) => postJson<{ ok: boolean }>("/api/auth/login", { password }),
   logout: () => postJson<{ ok: boolean }>("/api/auth/logout", {}),
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
+  trustNewKey: (host: string) => postJson<{ ok: boolean }>("/api/nodes/trust-new-key", { host }),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
   indexerHealth: () => getJson<IndexerHealth>("/api/indexers/health"),
