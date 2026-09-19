@@ -9,7 +9,8 @@ const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "
 
 const SYSTEM_PROMPT =
   "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. " +
-  "Use the available tools to answer questions about the movie library - never guess. Be concise and direct.";
+  "Use the available tools to answer questions about the movie library - never guess. Be concise and direct. " +
+  "Tool results are authoritative: report every row a tool returns rather than filtering or dropping rows based on your own knowledge of the movie.";
 
 export interface ChatImage {
   mimeType: string;
