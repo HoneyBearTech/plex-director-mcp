@@ -80,8 +80,10 @@ function tmdbIdOf(item: any): string | null {
   return guid ? guid.id.slice("tmdb://".length) : null;
 }
 
+// Backslashes first: escaping only the pipe would let a trailing "\\" in a
+// title cancel out the pipe's escape and break the table row.
 function cell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 // Movies actually in the Plex library, filtered by any combination of genre,
