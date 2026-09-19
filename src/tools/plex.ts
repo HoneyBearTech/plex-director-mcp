@@ -25,11 +25,18 @@ export interface PlexSearchArgs {
   genre?: string;
   actor?: string;
   year?: number;
+  // Only libraries whose name contains this text (case-insensitive), e.g. "4k".
+  library?: string;
   limit?: number;
+  // How many matches to skip, for paging through a large result.
+  offset?: number;
 }
 
 const DEFAULT_LIMIT = 25;
-const MAX_LIMIT = 100;
+const MAX_LIMIT = 500;
+// The model reads the text reply, so it lists only this many rows; the full
+// set (up to `limit`) still goes to the UI table as structured rows.
+const TEXT_ROW_CAP = 100;
 
 interface PlexSection {
   key: string;
@@ -110,16 +117,28 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
   }
 
-  const { title, genre, actor, year } = args;
-  if (!title && !genre && !actor && year === undefined) {
-    return textReply("Provide at least one of: title, genre, actor, year.", true);
+  const { title, genre, actor, year, library } = args;
+  if (!title && !genre && !actor && year === undefined && !library) {
+    return textReply("Provide at least one of: title, genre, actor, year, library.", true);
   }
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
+  const offset = Math.max(args.offset ?? 0, 0);
 
   try {
-    const sections = await getMovieSections();
-    if (sections.length === 0) {
+    const allSections = await getMovieSections();
+    if (allSections.length === 0) {
       return textReply("No movie libraries found in Plex.", true);
+    }
+
+    // Genre and actor ids are server-wide, so they're resolved against every
+    // library; only the search itself is narrowed by the library filter.
+    let sections = allSections;
+    if (library) {
+      const wanted = library.trim().toLowerCase();
+      sections = allSections.filter((s) => s.title.toLowerCase().includes(wanted));
+      if (sections.length === 0) {
+        return textReply(`No movie library matching "${library}" in Plex. Movie libraries: ${allSections.map((s) => s.title).join(", ")}.`, true);
+      }
     }
 
     const filters: Record<string, string | number> = {};
@@ -133,8 +152,11 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       filters.year = year;
       described.push(`year ${year}`);
     }
+    if (library) {
+      described.push(`in ${sections.map((s) => `"${s.title}"`).join(", ")}`);
+    }
     if (genre) {
-      const resolved = await resolveGenre(genre, sections);
+      const resolved = await resolveGenre(genre, allSections);
       if ("available" in resolved) {
         return textReply(`No genre "${genre}" in Plex. Available genres: ${resolved.available.join(", ")}.`, true);
       }
@@ -160,7 +182,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
             ...filters,
             includeGuids: 1,
             "X-Plex-Container-Start": 0,
-            "X-Plex-Container-Size": limit,
+            // Enough from each library to cover this page after merging.
+            "X-Plex-Container-Size": offset + limit,
           },
         });
         const container = response.data?.MediaContainer ?? {};
@@ -177,21 +200,44 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
     const rows = perSection
       .flatMap((r) => r.items.map((item) => ({ item, library: r.section.title })))
       .sort((a, b) => String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) || (a.item.year ?? 0) - (b.item.year ?? 0))
-      .slice(0, limit);
+      .slice(offset, offset + limit);
 
     const heading = described.join(", ");
     if (rows.length === 0) {
-      return textReply(`No movies in Plex match ${heading}.`);
+      return textReply(
+        total > 0
+          ? `Offset ${offset} is past the end: there are only ${total} matches for ${heading}.`
+          : `No movies in Plex match ${heading}.`
+      );
     }
 
+    const shownEnd = offset + rows.length;
     let output = `## Plex library: ${heading}\n`;
-    output += `${total} match${total === 1 ? "" : "es"}${total > rows.length ? ` (showing ${rows.length})` : ""}. Every row below matches all of the filters; the same movie appears once per library that holds it.\n\n`;
+    output += `${total} match${total === 1 ? "" : "es"}`;
+    if (total > rows.length) output += ` (showing ${offset + 1}-${shownEnd})`;
+    output += `. Every row matches all of the filters; the same movie appears once per library that holds it.`;
+    // The distinct count is only knowable when every match is in hand, and the
+    // model shouldn't have to work it out (it guessed wrong when left to).
+    if (offset === 0 && total === rows.length) {
+      const distinct = new Set(rows.map(({ item }) => tmdbIdOf(item) ?? `${item.title}|${item.year}`)).size;
+      if (distinct < rows.length) {
+        output += ` That is ${distinct} distinct movies: ${rows.length - distinct} of the ${rows.length} rows repeat a movie that is also held in another library.`;
+      }
+    }
+    if (total > shownEnd) {
+      output += ` ${total - shownEnd} more not shown: call again with offset ${shownEnd} for the next page (limit up to ${MAX_LIMIT}).`;
+    }
+    output += "\n";
+    if (rows.length > TEXT_ROW_CAP) {
+      output += `The user's table already shows all ${rows.length} rows; only the first ${TEXT_ROW_CAP} are listed below to save space. The rest are on the user's screen, so do not request them again.\n`;
+    }
+    output += "\n";
     output += "| Title | Year | Library | Genres | Rating | TMDb ID |\n";
     output += "| :--- | :---: | :--- | :--- | :---: | :---: |\n";
-    for (const { item, library } of rows) {
+    for (const { item, library: libraryName } of rows.slice(0, TEXT_ROW_CAP)) {
       const genres = (item.Genre ?? []).map((g: any) => g.tag).join(", ");
       const rating = item.audienceRating ?? item.rating;
-      output += `| ${escapeTableCell(String(item.title))} | ${item.year ?? "N/A"} | ${escapeTableCell(library)} | ${escapeTableCell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
+      output += `| ${escapeTableCell(String(item.title))} | ${item.year ?? "N/A"} | ${escapeTableCell(libraryName)} | ${escapeTableCell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
     }
 
     const movies: MovieRow[] = rows.map(({ item, library }) => {
@@ -207,7 +253,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       };
     });
 
-    return { ...textReply(output), structuredContent: { movies } };
+    // append: this page continues the previous one (offset > 0) rather than replacing it.
+    return { ...textReply(output), structuredContent: { movies, append: offset > 0 } };
   } catch (error: unknown) {
     return textReply(`Failed to search Plex: ${getErrorMessage(error)}`, true);
   }

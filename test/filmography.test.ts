@@ -32,12 +32,14 @@ const CREDITS = [
 let tmdb: ReturnType<typeof fakeApi>;
 let plex: ReturnType<typeof fakeApi> | undefined;
 let plexOwns: number[]; // TMDb ids Plex holds in its "Movies" library
+let plex4k: number[]; // ... and in its "4k Movies" library
 let plexDown: boolean;
 
 beforeEach(async () => {
   await resetDb();
   resetOwnedTmdbIndexCache();
   plexOwns = [1, 3];
+  plex4k = [3];
   plexDown = false;
   tmdb = fakeApi(tmdbClient, (req) => {
     if (req.url.startsWith("/search/person")) {
@@ -49,9 +51,12 @@ beforeEach(async () => {
   setSetting("PLEX_URL", "http://plex:32400");
   plex = fakeApi(plexClient, (req) => {
     if (plexDown) throw new Error("connect ECONNREFUSED");
-    if (req.url === "/library/sections") return { data: { MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Movies" }] } } };
-    if (req.url === "/library/sections/1/all") {
-      const items = plexOwns.map((id) => ({ title: `T${id}`, Guid: [{ id: `tmdb://${id}` }] }));
+    if (req.url === "/library/sections") {
+      return { data: { MediaContainer: { Directory: [{ key: "1", type: "movie", title: "Movies" }, { key: "2", type: "movie", title: "4k Movies" }] } } };
+    }
+    const all = req.url.match(/^\/library\/sections\/(\d)\/all$/);
+    if (all) {
+      const items = (all[1] === "1" ? plexOwns : plex4k).map((id) => ({ title: `T${id}`, Guid: [{ id: `tmdb://${id}` }] }));
       return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
     }
     return { status: 404 };
@@ -77,7 +82,7 @@ describe("resolveActorFilmography", () => {
     const byTitle = Object.fromEntries(rows(result).map((m) => [m.title, m]));
     assert.deepEqual(byTitle.Newest.libraries, ["Movies"]);
     assert.deepEqual(byTitle.Middle.libraries, []);
-    assert.deepEqual(byTitle.Oldest.libraries, ["Movies"]);
+    assert.deepEqual(byTitle.Oldest.libraries, ["Movies", "4k Movies"], "held in both libraries");
     assert.match(text(result), /In your Plex library: 2 of 4\./);
     assert.match(text(result), /Newest \(2023\) - As: Role in Newest - ✅ In Plex \(Movies\)/);
     assert.match(text(result), /Middle \(1999\) - As: Role in Middle - ❌ Not in Plex/);
@@ -100,6 +105,7 @@ describe("resolveActorFilmography", () => {
 
   it("combines year and ownership filters (the '1980s I'm missing' question)", async () => {
     plexOwns = [1];
+    plex4k = [];
     const result = await resolveActorFilmography("Some Actor", { yearFrom: 1980, yearTo: 1989, show: "missing" });
     assert.deepEqual(rows(result).map((m) => m.title), ["Oldest"]);
   });
@@ -143,4 +149,31 @@ describe("resolveActorFilmography", () => {
     assert.ok(rows(result).length > 0);
     assert.ok(rows(result).every((m) => m.libraries === null));
   });
+
+  describe("library filter", () => {
+    it("judges ownership only against matching libraries", async () => {
+      const result = await resolveActorFilmography("Some Actor", { library: "4k", limit: 50 });
+      const byTitle = Object.fromEntries(rows(result).map((m) => [m.title, m]));
+      assert.deepEqual(byTitle.Oldest.libraries, ["4k Movies"], "held in 4K");
+      assert.deepEqual(byTitle.Newest.libraries, [], "in Plex, but only in the non-4K library, so not owned in 4K");
+      assert.match(text(result), /In your Plex libraries matching "4k": 1 of 4\./);
+    });
+
+    it("with show=missing lists what isn't in 4K, including titles owned in HD", async () => {
+      const result = await resolveActorFilmography("Some Actor", { library: "4k", show: "missing", limit: 50 });
+      assert.deepEqual(rows(result).map((m) => m.title).sort(), ["Middle", "Newest", "No Poster Or Date"]);
+    });
+
+    it("with show=owned lists only what is in a matching library", async () => {
+      const result = await resolveActorFilmography("Some Actor", { library: "4K", show: "owned" });
+      assert.deepEqual(rows(result).map((m) => m.title), ["Oldest"]);
+    });
+
+    it("reports a library name that matches nothing, listing the real ones", async () => {
+      const result = await resolveActorFilmography("Some Actor", { library: "anime" });
+      assert.equal(result.isError, true);
+      assert.match(text(result), /No Plex movie library matching "anime"\. Movie libraries with titles: .*Movies/);
+    });
+  });
 });
+

@@ -18,10 +18,14 @@ export interface FilmographyOptions {
   yearTo?: number;
   // Only meaningful when Plex is configured; otherwise everything is "all".
   show?: "all" | "owned" | "missing";
+  // Judge ownership only against Plex libraries whose name contains this text
+  // (case-insensitive), e.g. "4k": "owned" then means held in a matching
+  // library and "missing" means not held in any of them.
+  library?: string;
 }
 
 export async function resolveActorFilmography(actorName: string, options: FilmographyOptions = {}) {
-  const { limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all" } = options;
+  const { limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all", library } = options;
   try {
     const personSearch = await tmdbClient.get(`/search/person?query=${encodeURIComponent(actorName)}`);
     const person = personSearch.data?.results?.[0];
@@ -51,6 +55,19 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
     if (isConfigured("PLEX")) {
       try {
         owned = await getOwnedTmdbIndex();
+
+        if (library) {
+          const wanted = library.trim().toLowerCase();
+          const libraryNames = [...new Set([...owned.values()].flat())];
+          if (!libraryNames.some((name) => name.toLowerCase().includes(wanted))) {
+            return textReply(`No Plex movie library matching "${library}". Movie libraries with titles: ${libraryNames.join(", ")}.`, true);
+          }
+          owned = new Map(
+            [...owned]
+              .map(([id, names]): [string, string[]] => [id, names.filter((name) => name.toLowerCase().includes(wanted))])
+              .filter(([, names]) => names.length > 0)
+          );
+        }
       } catch (error: unknown) {
         plexNote = `(Couldn't check Plex ownership: ${getErrorMessage(error)})\n`;
       }
@@ -60,7 +77,9 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
     output += `Filtered filmography to ${cleanFilmography.length} structural movie targets (removed docs/uncredited/self):\n`;
     if (owned) {
       const ownedCount = cleanFilmography.filter((movie: any) => owned.has(String(movie.id))).length;
-      output += `In your Plex library: ${ownedCount} of ${cleanFilmography.length}.\n`;
+      output += library
+        ? `In your Plex libraries matching "${library}": ${ownedCount} of ${cleanFilmography.length}.\n`
+        : `In your Plex library: ${ownedCount} of ${cleanFilmography.length}.\n`;
     }
     output += plexNote;
 
