@@ -8,6 +8,7 @@ import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
 import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js";
 import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "./series.js";
 import { checkSeriesStatus, diagnoseMissingEpisodes, type DiagnoseOptions } from "./seriesDiagnosis.js";
+import { getUpcomingEpisodes, type UpcomingOptions } from "./upcoming.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -343,6 +344,29 @@ export const movieTools: MovieTool[] = [
       required: ["title"],
     },
     handler: async ({ title, ...options }: { title: string } & DiagnoseOptions) => diagnoseMissingEpisodes(title, options),
+  },
+  {
+    name: "get_upcoming_episodes",
+    description:
+      "What TV episodes are coming, from Sonarr's calendar. With no title it answers 'what's on this week?': every episode airing in the next few days (default 7, up to 60) from the shows Sonarr monitors, by day, with season premieres and finales flagged and episodes already downloaded marked. " +
+      "With a title it answers 'when does <show> come back?': that show's next episodes, or that none is scheduled yet (or that it has ended). Only shows Sonarr monitors are listed by default and the number left out is reported; use monitored 'unmonitored' when the user asks about shows they do not monitor, or 'any' for everything (express that as the filter, because the table shown to the user is exactly the rows returned). Dates are the network's own air dates.",
+    zodSchema: {
+      days: z.number().int().min(1).max(60).optional().describe("How many days ahead to list when no title is given (default 7, max 60)."),
+      title: z.string().optional().describe("A show to ask about instead, e.g. 'Severance': its next episodes or that none is scheduled."),
+      year: z.number().int().optional().describe("First air year, only needed to tell same-named shows apart."),
+      monitored: z.enum(["monitored", "unmonitored", "any"]).optional().describe("Only shows Sonarr monitors (default), only ones it does not monitor, or all."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        days: { type: "integer", description: "How many days ahead to list when no title is given (default 7, max 60)." },
+        title: { type: "string", description: "A show to ask about instead, e.g. 'Severance': its next episodes or that none is scheduled." },
+        year: { type: "integer", description: "First air year, only needed to tell same-named shows apart." },
+        monitored: { type: "string", enum: ["monitored", "unmonitored", "any"], description: "Only shows Sonarr monitors (default), only ones it does not monitor, or all." },
+      },
+      required: [] as string[],
+    },
+    handler: async (options: UpcomingOptions) => getUpcomingEpisodes(options),
   },
 ];
 
