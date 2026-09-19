@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { server } from "../server.js";
 import { db } from "../db.js";
-import { tmdbClient } from "../clients.js";
+import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { isConfigured } from "../settings.js";
 import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
@@ -113,6 +113,21 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
   }
 }
 
+// Used when confirm_selected_choices isn't told which quality profile to use.
+// Matches the profile most of the library already uses; looked up by name so
+// it survives Radarr profile IDs changing.
+const DEFAULT_RADARR_QUALITY_PROFILE = "Remux + WEB 1080p";
+
+// Radarr validation failures come back as an array of { errorMessage }, which
+// getErrorMessage() (built for a single { message }) would flatten to "Bad Request".
+function radarrErrorMessage(error: unknown): string {
+  const data = (error as any)?.response?.data;
+  if (Array.isArray(data) && data.length > 0) {
+    return data.map((d: any) => d.errorMessage || d.message).filter(Boolean).join("; ");
+  }
+  return getErrorMessage(error);
+}
+
 // TMDb discovery, indexer health, and interactive movie selection.
 export function registerDiscoveryTools() {
   server.tool(
@@ -186,7 +201,7 @@ export function registerDiscoveryTools() {
         choices.forEach((movie: any, index: number) => {
           const choiceId = index + 1;
           const year = movie.release_date ? movie.release_date.split("-")[0] : "N/A";
-          const posterUrl = movie.poster_path ? `https://image.tmdb.org/t/p/w500${movie.poster_path}` : "https://placeholder.com";
+          const poster = movie.poster_path ? `![${movie.title}](https://image.tmdb.org/t/p/w500${movie.poster_path})` : "*No poster*";
 
           insertStmt.run(choiceId, movie.id, movie.title, year);
 
@@ -195,7 +210,7 @@ export function registerDiscoveryTools() {
             : "No overview available.";
           const truncatedOverview = cleanOverview.length > 180 ? `${cleanOverview.slice(0, 180)}...` : cleanOverview;
 
-          markdownOutput += `| **[ Choice ${choiceId} ]** | ![${movie.title}](${posterUrl}) | **${movie.title} (${year})**  <br> *TMDb ID: ${movie.id}* <br><br> ${truncatedOverview} |\n`;
+          markdownOutput += `| **[ Choice ${choiceId} ]** | ${poster} | **${movie.title} (${year})**  <br> *TMDb ID: ${movie.id}* <br><br> ${truncatedOverview} |\n`;
         });
 
         return textReply(markdownOutput);
@@ -207,11 +222,13 @@ export function registerDiscoveryTools() {
 
   server.tool(
     "confirm_selected_choices",
-    "Processes the user's specific numbered choices validated from the active selection context queue.",
+    "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the 'Remux + WEB 1080p' quality profile and Radarr's first root folder unless told otherwise.",
     {
       chosenIndexes: z.array(z.number()).describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
+      qualityProfile: z.string().optional().describe("Radarr quality profile name to use instead of the default."),
+      rootFolder: z.string().optional().describe("Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids')."),
     },
-    async ({ chosenIndexes }) => {
+    async ({ chosenIndexes, qualityProfile, rootFolder }) => {
       try {
         const stmt = db.prepare("SELECT * FROM interaction_context WHERE selection_index = ?");
         const matchedSelections: any[] = [];
@@ -228,15 +245,60 @@ export function registerDiscoveryTools() {
           );
         }
 
-        let successReport = "🚀 **Processing Selected Media Assets:**\n";
-        for (const selection of matchedSelections) {
-          // Hook this into Radarr acquisition later if you want to create a real import task.
-          successReport += `  ✓ Handled execution queue for **Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]\n`;
+        const profiles: Array<{ id: number; name: string }> = (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
+        const wantedProfile = (qualityProfile ?? DEFAULT_RADARR_QUALITY_PROFILE).trim().toLowerCase();
+        const profile = profiles.find((p) => p.name.toLowerCase() === wantedProfile);
+        if (!profile) {
+          return textReply(
+            `❌ No Radarr quality profile named "${qualityProfile ?? DEFAULT_RADARR_QUALITY_PROFILE}". Available: ${profiles.map((p) => p.name).join(", ")}.`,
+            true
+          );
         }
 
-        return textReply(successReport);
+        const rootFolders: Array<{ path: string }> = (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
+        const folder = rootFolder
+          ? rootFolders.find((f) => f.path.replace(/\/+$/, "") === rootFolder.replace(/\/+$/, ""))
+          : rootFolders[0];
+        if (!folder) {
+          return textReply(
+            rootFolder
+              ? `❌ No Radarr root folder "${rootFolder}". Available: ${rootFolders.map((f) => f.path).join(", ")}.`
+              : "❌ Radarr has no root folders configured.",
+            true
+          );
+        }
+
+        let report = `🚀 **Adding selected movies to Radarr** (profile: ${profile.name}, folder: ${folder.path})\n`;
+        for (const selection of matchedSelections) {
+          const label = `**Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]`;
+          try {
+            const existing = (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } })).data ?? [];
+            if (existing.length > 0) {
+              const state = existing[0].hasFile ? "already downloaded" : "monitored but not downloaded yet";
+              report += `  ⏭️ ${label} - already in Radarr (${state}); not added again.\n`;
+              continue;
+            }
+
+            // Radarr wants the full resolved movie record, not just an id, so start
+            // from its own TMDb lookup and layer our choices on top.
+            const lookup = (await radarrClient.get("/api/v3/movie/lookup/tmdb", { params: { tmdbId: selection.tmdb_id } })).data;
+            await radarrClient.post("/api/v3/movie", {
+              ...lookup,
+              qualityProfileId: profile.id,
+              rootFolderPath: folder.path,
+              monitored: true,
+              minimumAvailability: "released",
+              addOptions: { searchForMovie: true },
+            });
+            report += `  ✅ ${label} - added and download search started.\n`;
+          } catch (error: unknown) {
+            report += `  ❌ ${label} - failed: ${radarrErrorMessage(error)}\n`;
+          }
+        }
+
+        return textReply(report);
       } catch (error: unknown) {
-        return textReply(`Execution failed during confirmation: ${getErrorMessage(error)}`, true);
+        return textReply(`Execution failed during confirmation: ${radarrErrorMessage(error)}`, true);
       }
     }
   );
