@@ -6,6 +6,7 @@ import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
 import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js";
+import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "./series.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -254,6 +255,51 @@ export const movieTools: MovieTool[] = [
       required: ["actorName"],
     },
     handler: async ({ actorName, ...options }: { actorName: string } & FilmographyOptions) => resolveActorFilmography(actorName, options),
+  },
+  {
+    name: "check_series_completeness",
+    description:
+      "Answers 'do I have every episode of <show>?' from Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). " +
+      "Use this for one specific TV show; use find_series_gaps to see which shows have gaps. It does not check what Plex has scanned.",
+    zodSchema: {
+      title: z.string().describe("The show's title, e.g. 'Breaking Bad'."),
+      year: z.number().int().optional().describe("First air year, only needed to tell same-named shows apart."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        title: { type: "string", description: "The show's title, e.g. 'Breaking Bad'." },
+        year: { type: "integer", description: "First air year, only needed to tell same-named shows apart." },
+      },
+      required: ["title"],
+    },
+    handler: async ({ title, year }: { title: string; year?: number }) => checkSeriesCompleteness(title, year),
+  },
+  {
+    name: "find_series_gaps",
+    description:
+      "Lists the TV shows in Sonarr that are missing aired episodes, most missing first, with how many are downloaded, whether Sonarr is monitoring each show, and whether it is actively looking for the rest. " +
+      "Use it for 'which of my shows have gaps?', 'what am I missing?' or 'which shows are only missing a few episodes?'. Use monitored 'searching' for 'what is Sonarr still looking for?'. Express any narrowing as a filter (monitored, minMissing, maxMissing, hideEmpty) rather than filtering the result yourself, because the table shown to the user is exactly the rows returned. " +
+      "Most gaps are in shows that are deliberately not monitored or only partly kept; 'hideEmpty' drops shows with nothing downloaded and 'maxMissing' finds near-complete ones. For one show use check_series_completeness.",
+    zodSchema: {
+      monitored: z.enum(["any", "monitored", "unmonitored", "searching"]).optional().describe("Only shows Sonarr is monitoring, only ones it is not, only ones it is actively searching missing episodes for ('searching'), or all (default any)."),
+      minMissing: z.number().int().min(1).optional().describe("Only shows missing at least this many episodes."),
+      maxMissing: z.number().int().min(1).optional().describe("Only shows missing at most this many episodes, e.g. 5 for nearly complete shows."),
+      hideEmpty: z.boolean().optional().describe("Skip shows with no episodes downloaded at all."),
+      limit: z.number().int().min(1).max(200).optional().describe("How many shows to list (default 15, max 200)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        monitored: { type: "string", enum: ["any", "monitored", "unmonitored", "searching"], description: "Only shows Sonarr is monitoring, only ones it is not, only ones it is actively searching missing episodes for ('searching'), or all (default any)." },
+        minMissing: { type: "integer", description: "Only shows missing at least this many episodes." },
+        maxMissing: { type: "integer", description: "Only shows missing at most this many episodes, e.g. 5 for nearly complete shows." },
+        hideEmpty: { type: "boolean", description: "Skip shows with no episodes downloaded at all." },
+        limit: { type: "integer", description: "How many shows to list (default 15, max 200)." },
+      },
+      required: [] as string[],
+    },
+    handler: async (options: SeriesGapOptions) => findSeriesGaps(options),
   },
 ];
 
