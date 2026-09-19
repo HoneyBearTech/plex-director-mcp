@@ -1,11 +1,12 @@
 import { Fragment, useState } from "react";
-import { Badge, Box, Button, Callout, Card, Code, Flex, Text, TextField } from "@radix-ui/themes";
-import { api, type ChatImage } from "../api";
+import { Badge, Box, Button, Callout, Card, Code, Flex, Table, Text, TextField } from "@radix-ui/themes";
+import { api, type ChatImage, type MovieRow } from "../api";
 
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   images?: ChatImage[];
+  movies?: MovieRow[];
 }
 
 // Claude's replies use light markdown (bold and inline code, mostly) -
@@ -21,6 +22,75 @@ function renderInlineMarkdown(text: string) {
     }
     return <Fragment key={i}>{part}</Fragment>;
   });
+}
+
+function PosterThumb({ src, title }: { src: string | null; title: string }) {
+  if (!src) {
+    return <Flex width="40px" height="60px" flexShrink="0" style={{ borderRadius: 4, background: "var(--gray-a4)" }} />;
+  }
+  return (
+    <img
+      src={src}
+      alt={`${title} poster`}
+      width={40}
+      height={60}
+      loading="lazy"
+      style={{ borderRadius: 4, objectFit: "cover", display: "block" }}
+    />
+  );
+}
+
+// Search results as a table with the poster next to each movie. "In Plex"
+// only appears when a tool actually checked ownership (libraries !== null).
+function MovieTable({ movies }: { movies: MovieRow[] }) {
+  const showOwnership = movies.some((m) => m.libraries !== null);
+  const showRating = movies.some((m) => m.rating !== null);
+  const showDetail = movies.some((m) => m.genres.length > 0 || m.detail);
+
+  return (
+    <Table.Root size="1" variant="surface" style={{ marginTop: 8 }}>
+      <Table.Header>
+        <Table.Row>
+          <Table.ColumnHeaderCell width="56px" />
+          <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
+          <Table.ColumnHeaderCell>Year</Table.ColumnHeaderCell>
+          {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
+          {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
+          {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {movies.map((movie, i) => (
+          <Table.Row key={i} align="center">
+            <Table.Cell>
+              <PosterThumb src={movie.posterUrl} title={movie.title} />
+            </Table.Cell>
+            <Table.RowHeaderCell>{movie.title}</Table.RowHeaderCell>
+            <Table.Cell>{movie.year ?? "-"}</Table.Cell>
+            {showOwnership && (
+              <Table.Cell>
+                {movie.libraries === null ? (
+                  "-"
+                ) : movie.libraries.length === 0 ? (
+                  <Badge color="gray">Not in Plex</Badge>
+                ) : (
+                  <Flex gap="1" wrap="wrap">
+                    {movie.libraries.map((library) => (
+                      <Badge key={library} color="green">
+                        {library}
+                      </Badge>
+                    ))}
+                  </Flex>
+                )}
+              </Table.Cell>
+            )}
+            {showDetail && <Table.Cell>{movie.detail ?? movie.genres.join(", ")}</Table.Cell>}
+            {showRating && <Table.Cell>{movie.rating !== null ? movie.rating.toFixed(1) : "-"}</Table.Cell>}
+          </Table.Row>
+        ))}
+      </Table.Body>
+    </Table.Root>
+  );
 }
 
 export function QueryPage() {
@@ -41,7 +111,10 @@ export function QueryPage() {
 
     try {
       const answer = await api.chatWithMovies(trimmed);
-      setMessages((prev) => [...prev, { role: "assistant", text: answer.text, images: answer.images }]);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", text: answer.text, images: answer.images, movies: answer.movies },
+      ]);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong.");
     } finally {
@@ -61,10 +134,11 @@ export function QueryPage() {
               <Badge color={message.role === "user" ? "blue" : "gray"}>
                 {message.role === "user" ? "You" : "Assistant"}
               </Badge>
-              <Box style={{ maxWidth: "85%" }}>
+              <Box style={{ maxWidth: message.movies?.length ? "100%" : "85%", width: message.movies?.length ? "100%" : undefined }}>
                 <Text as="p" size="2" style={{ whiteSpace: "pre-wrap" }}>
                   {renderInlineMarkdown(message.text)}
                 </Text>
+                {message.movies && message.movies.length > 0 && <MovieTable movies={message.movies} />}
                 {message.images?.map((image, j) => (
                   <img
                     key={j}

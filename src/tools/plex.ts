@@ -2,6 +2,24 @@ import { plexClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 
+// One movie in a result list. Tools attach these as structuredContent so the
+// web UI can render a table with posters; the text reply stays for MCP clients
+// and for the model. posterUrl is always something the browser can load
+// directly (a same-origin proxy URL or a public image URL), never a raw Plex
+// URL, which would need the token.
+export interface MovieRow {
+  title: string;
+  year: number | null;
+  posterUrl: string | null;
+  // Libraries holding it in Plex. Empty array = known not to be in Plex;
+  // null = ownership wasn't checked.
+  libraries: string[] | null;
+  genres: string[];
+  rating: number | null;
+  // Extra per-row context, e.g. the role an actor played.
+  detail: string | null;
+}
+
 export interface PlexSearchArgs {
   title?: string;
   genre?: string;
@@ -82,6 +100,10 @@ function tmdbIdOf(item: any): string | null {
 
 // Backslashes first: escaping only the pipe would let a trailing "\\" in a
 // title cancel out the pipe's escape and break the table row.
+function plexPosterUrl(thumb: unknown): string | null {
+  return typeof thumb === "string" && thumb ? `/api/plex/image?path=${encodeURIComponent(thumb)}` : null;
+}
+
 function cell(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
@@ -178,7 +200,20 @@ export async function searchPlexLibrary(args: PlexSearchArgs) {
       output += `| ${cell(String(item.title))} | ${item.year ?? "N/A"} | ${cell(library)} | ${cell(genres)} | ${rating !== undefined ? Number(rating).toFixed(1) : "N/A"} | ${tmdbIdOf(item) ?? "N/A"} |\n`;
     }
 
-    return textReply(output);
+    const movies: MovieRow[] = rows.map(({ item, library }) => {
+      const rating = item.audienceRating ?? item.rating;
+      return {
+        title: String(item.title),
+        year: item.year ?? null,
+        posterUrl: plexPosterUrl(item.thumb),
+        libraries: [library],
+        genres: (item.Genre ?? []).map((g: any) => String(g.tag)),
+        rating: rating !== undefined ? Number(rating) : null,
+        detail: null,
+      };
+    });
+
+    return { ...textReply(output), structuredContent: { movies } };
   } catch (error: unknown) {
     return textReply(`Failed to search Plex: ${getErrorMessage(error)}`, true);
   }
