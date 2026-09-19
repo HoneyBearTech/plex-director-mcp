@@ -25,6 +25,7 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     fields: [
       { name: "url", label: "URL", placeholder: "http://radarr:7878" },
       { name: "apiKey", label: "API Key", secret: true },
+      { name: "defaultQualityProfile", label: "Default quality profile for new movies", placeholder: "Leave blank to use Radarr's first profile" },
     ],
   },
   {

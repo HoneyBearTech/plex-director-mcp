@@ -52,6 +52,15 @@ describe("settings API", () => {
     assert.deepEqual(body.sonarr.apiKey, { configured: false });
   });
 
+  it("saves and returns the default quality profile as a plain (non-secret) field", async () => {
+    await send("PUT", "/api/settings/radarr", { defaultQualityProfile: "  Remux + WEB 1080p  " });
+    assert.equal(getSetting("RADARR_DEFAULT_QUALITY_PROFILE"), "Remux + WEB 1080p");
+    const body = (await (await get("/api/settings")).json()) as any;
+    assert.equal(body.radarr.defaultQualityProfile, "Remux + WEB 1080p");
+    await send("PUT", "/api/settings/radarr", { defaultQualityProfile: "" });
+    assert.equal(((await (await get("/api/settings")).json()) as any).radarr.defaultQualityProfile, "", "it can be cleared back to 'first profile'");
+  });
+
   it("saves trimmed values", async () => {
     const res = await send("PUT", "/api/settings/radarr", { url: "  http://radarr:7878  ", apiKey: "  k  " });
     assert.equal(res.status, 200);

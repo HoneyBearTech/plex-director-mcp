@@ -3,7 +3,7 @@ import { server } from "../server.js";
 import { db } from "../db.js";
 import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
-import { isConfigured } from "../settings.js";
+import { getSetting, isConfigured } from "../settings.js";
 import { getOwnedTmdbIndex, type MovieRow } from "./plex.js";
 import { getIndexerHealth } from "../indexers.js";
 
@@ -132,11 +132,6 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
   }
 }
 
-// Used when confirm_selected_choices isn't told which quality profile to use.
-// Matches the profile most of the library already uses; looked up by name so
-// it survives Radarr profile IDs changing.
-const DEFAULT_RADARR_QUALITY_PROFILE = "Remux + WEB 1080p";
-
 // Radarr validation failures come back as an array of { errorMessage }, which
 // getErrorMessage() (built for a single { message }) would flatten to "Bad Request".
 function radarrErrorMessage(error: unknown): string {
@@ -145,6 +140,107 @@ function radarrErrorMessage(error: unknown): string {
     return data.map((d: any) => d.errorMessage || d.message).filter(Boolean).join("; ");
   }
   return getErrorMessage(error);
+}
+
+type ProfileChoice = { profile: { id: number; name: string }; source: "requested" | "setting" | "first" } | { error: string };
+
+// Which Radarr quality profile new movies get: the one the caller names, else
+// the default saved on the Settings page (RADARR_DEFAULT_QUALITY_PROFILE), else
+// Radarr's own first profile - which is also what Radarr's UI preselects, so a
+// fresh install works without any setup.
+function chooseQualityProfile(profiles: Array<{ id: number; name: string }>, requested: string | undefined): ProfileChoice {
+  const asked = requested?.trim() || "";
+  const saved = getSetting("RADARR_DEFAULT_QUALITY_PROFILE").trim();
+  const wanted = asked || saved;
+
+  if (!wanted) {
+    const first = profiles[0];
+    return first ? { profile: first, source: "first" } : { error: "❌ Radarr has no quality profiles configured." };
+  }
+
+  const match = profiles.find((p) => p.name.toLowerCase() === wanted.toLowerCase());
+  if (match) return { profile: match, source: asked ? "requested" : "setting" };
+
+  const origin = asked ? "" : " (that is the default set on the Settings page)";
+  return { error: `❌ No Radarr quality profile named "${wanted}"${origin}. Available: ${profiles.map((p) => p.name).join(", ")}.` };
+}
+
+export interface ConfirmChoicesArgs {
+  chosenIndexes: number[];
+  qualityProfile?: string | undefined;
+  rootFolder?: string | undefined;
+}
+
+// Adds the movies the user picked from the last search_and_select_movies grid
+// to Radarr and starts a download search for each.
+export async function confirmSelectedChoices({ chosenIndexes, qualityProfile, rootFolder }: ConfirmChoicesArgs) {
+  try {
+    const stmt = db.prepare("SELECT * FROM interaction_context WHERE selection_index = ?");
+    const matchedSelections: any[] = [];
+
+    chosenIndexes.forEach((index: number) => {
+      const record = stmt.get(index) as any;
+      if (record) matchedSelections.push(record);
+    });
+
+    if (matchedSelections.length === 0) {
+      return textReply(
+        "❌ Selection processing failed. The specified choices do not exist in the current interface view context.",
+        true
+      );
+    }
+
+    const profiles: Array<{ id: number; name: string }> = (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
+    const choice = chooseQualityProfile(profiles, qualityProfile);
+    if ("error" in choice) return textReply(choice.error, true);
+    const { profile, source } = choice;
+
+    const rootFolders: Array<{ path: string }> = (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
+    const folder = rootFolder
+      ? rootFolders.find((f) => f.path.replace(/\/+$/, "") === rootFolder.replace(/\/+$/, ""))
+      : rootFolders[0];
+    if (!folder) {
+      return textReply(
+        rootFolder
+          ? `❌ No Radarr root folder "${rootFolder}". Available: ${rootFolders.map((f) => f.path).join(", ")}.`
+          : "❌ Radarr has no root folders configured.",
+        true
+      );
+    }
+
+    const profileNote = source === "first" ? `${profile.name} - Radarr's first profile; set a default on the Settings page` : profile.name;
+    let report = `🚀 **Adding selected movies to Radarr** (profile: ${profileNote}, folder: ${folder.path})\n`;
+    for (const selection of matchedSelections) {
+      const label = `**Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]`;
+      try {
+        const existing = (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } })).data ?? [];
+        if (existing.length > 0) {
+          const state = existing[0].hasFile ? "already downloaded" : "monitored but not downloaded yet";
+          report += `  ⏭️ ${label} - already in Radarr (${state}); not added again.\n`;
+          continue;
+        }
+
+        // Radarr wants the full resolved movie record, not just an id, so start
+        // from its own TMDb lookup and layer our choices on top.
+        const lookup = (await radarrClient.get("/api/v3/movie/lookup/tmdb", { params: { tmdbId: selection.tmdb_id } })).data;
+        await radarrClient.post("/api/v3/movie", {
+          ...lookup,
+          qualityProfileId: profile.id,
+          rootFolderPath: folder.path,
+          monitored: true,
+          minimumAvailability: "released",
+          addOptions: { searchForMovie: true },
+        });
+        report += `  ✅ ${label} - added and download search started.\n`;
+      } catch (error: unknown) {
+        report += `  ❌ ${label} - failed: ${radarrErrorMessage(error)}\n`;
+      }
+    }
+
+    return textReply(report);
+  } catch (error: unknown) {
+    return textReply(`Execution failed during confirmation: ${radarrErrorMessage(error)}`, true);
+  }
 }
 
 // TMDb discovery, indexer health, and interactive movie selection.
@@ -241,84 +337,12 @@ export function registerDiscoveryTools() {
 
   server.tool(
     "confirm_selected_choices",
-    "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the 'Remux + WEB 1080p' quality profile and Radarr's first root folder unless told otherwise.",
+    "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Settings page, otherwise Radarr's first quality profile; and Radarr's first root folder unless told otherwise.",
     {
       chosenIndexes: z.array(z.number()).describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
       qualityProfile: z.string().optional().describe("Radarr quality profile name to use instead of the default."),
       rootFolder: z.string().optional().describe("Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids')."),
     },
-    async ({ chosenIndexes, qualityProfile, rootFolder }) => {
-      try {
-        const stmt = db.prepare("SELECT * FROM interaction_context WHERE selection_index = ?");
-        const matchedSelections: any[] = [];
-
-        chosenIndexes.forEach((index: number) => {
-          const record = stmt.get(index) as any;
-          if (record) matchedSelections.push(record);
-        });
-
-        if (matchedSelections.length === 0) {
-          return textReply(
-            "❌ Selection processing failed. The specified choices do not exist in the current interface view context.",
-            true
-          );
-        }
-
-        const profiles: Array<{ id: number; name: string }> = (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
-        const wantedProfile = (qualityProfile ?? DEFAULT_RADARR_QUALITY_PROFILE).trim().toLowerCase();
-        const profile = profiles.find((p) => p.name.toLowerCase() === wantedProfile);
-        if (!profile) {
-          return textReply(
-            `❌ No Radarr quality profile named "${qualityProfile ?? DEFAULT_RADARR_QUALITY_PROFILE}". Available: ${profiles.map((p) => p.name).join(", ")}.`,
-            true
-          );
-        }
-
-        const rootFolders: Array<{ path: string }> = (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
-        const folder = rootFolder
-          ? rootFolders.find((f) => f.path.replace(/\/+$/, "") === rootFolder.replace(/\/+$/, ""))
-          : rootFolders[0];
-        if (!folder) {
-          return textReply(
-            rootFolder
-              ? `❌ No Radarr root folder "${rootFolder}". Available: ${rootFolders.map((f) => f.path).join(", ")}.`
-              : "❌ Radarr has no root folders configured.",
-            true
-          );
-        }
-
-        let report = `🚀 **Adding selected movies to Radarr** (profile: ${profile.name}, folder: ${folder.path})\n`;
-        for (const selection of matchedSelections) {
-          const label = `**Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]`;
-          try {
-            const existing = (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } })).data ?? [];
-            if (existing.length > 0) {
-              const state = existing[0].hasFile ? "already downloaded" : "monitored but not downloaded yet";
-              report += `  ⏭️ ${label} - already in Radarr (${state}); not added again.\n`;
-              continue;
-            }
-
-            // Radarr wants the full resolved movie record, not just an id, so start
-            // from its own TMDb lookup and layer our choices on top.
-            const lookup = (await radarrClient.get("/api/v3/movie/lookup/tmdb", { params: { tmdbId: selection.tmdb_id } })).data;
-            await radarrClient.post("/api/v3/movie", {
-              ...lookup,
-              qualityProfileId: profile.id,
-              rootFolderPath: folder.path,
-              monitored: true,
-              minimumAvailability: "released",
-              addOptions: { searchForMovie: true },
-            });
-            report += `  ✅ ${label} - added and download search started.\n`;
-          } catch (error: unknown) {
-            report += `  ❌ ${label} - failed: ${radarrErrorMessage(error)}\n`;
-          }
-        }
-
-        return textReply(report);
-      } catch (error: unknown) {
-        return textReply(`Execution failed during confirmation: ${radarrErrorMessage(error)}`, true);
-      }
-    }
+    async (args) => confirmSelectedChoices(args)
   );
 }

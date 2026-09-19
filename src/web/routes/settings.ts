@@ -19,6 +19,7 @@ const SERVICES: Record<string, FieldDef[]> = {
   radarr: [
     { field: "url", key: "RADARR_URL" },
     { field: "apiKey", key: "RADARR_API_KEY", secret: true },
+    { field: "defaultQualityProfile", key: "RADARR_DEFAULT_QUALITY_PROFILE" },
   ],
   prowlarr: [
     { field: "url", key: "PROWLARR_URL" },
