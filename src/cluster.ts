@@ -1,5 +1,7 @@
 import { runRemoteCommand } from "./ssh.js";
 import { getSetting } from "./settings.js";
+import { HostKeyMismatchError } from "./hostKeys.js";
+import { getErrorMessage } from "./util.js";
 
 // The one place that knows how to read a cluster host's health over SSH. Used
 // by the web dashboard's Node Utilization page and by both cluster MCP tools,
@@ -50,6 +52,10 @@ export interface OfflineHostHealth {
   host: string;
   hostname: string;
   online: false;
+  // Why the probe failed (connection refused, bad key, ...), for the dashboard.
+  error: string;
+  // Set when the host presented a different SSH key than the one remembered.
+  hostKeyChanged?: { expected: string; actual: string };
 }
 
 export type HostHealth = OnlineHostHealth | OfflineHostHealth;
@@ -112,8 +118,11 @@ export function parseProbeOutput(host: string, output: string): OnlineHostHealth
 export async function probeHost(host: string): Promise<HostHealth> {
   try {
     return parseProbeOutput(host, await runRemoteCommand(host, combinedCmd));
-  } catch {
-    return { host, hostname: host, online: false };
+  } catch (error: unknown) {
+    if (error instanceof HostKeyMismatchError) {
+      return { host, hostname: host, online: false, error: error.message, hostKeyChanged: { expected: error.expected, actual: error.actual } };
+    }
+    return { host, hostname: host, online: false, error: getErrorMessage(error) };
   }
 }
 

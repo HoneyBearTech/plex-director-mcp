@@ -46,4 +46,15 @@ db.exec(`
   );
 `);
 
+// SSH host keys, remembered the first time each host is contacted (trust on
+// first use) so a changed key - a rebuilt host, or someone in the middle - is
+// noticed instead of silently accepted.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS ssh_host_keys (
+    host TEXT PRIMARY KEY,
+    fingerprint TEXT NOT NULL,
+    first_seen DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 console.error(`📦 SQLite database initialized safely at: ${dbPath}`);

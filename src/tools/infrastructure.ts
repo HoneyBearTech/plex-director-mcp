@@ -115,7 +115,10 @@ export function registerInfrastructureTools() {
 
       for (const node of await probeAllHosts(hosts)) {
         if (!node.online) {
-          systemsReport += `| **${node.host}** | ❌ Offline | ❌ Offline | N/A | 🔴 SSH Connection Dropped |\n`;
+          const why = node.hostKeyChanged
+            ? "Host key changed - if the host was rebuilt, choose 'Trust new key' on the dashboard's Node Utilization page"
+            : node.error;
+          systemsReport += `| **${node.host}** | ❌ Offline | ❌ Offline | N/A | 🔴 ${why.replace(/\|/g, "/")} |\n`;
           continue;
         }
 

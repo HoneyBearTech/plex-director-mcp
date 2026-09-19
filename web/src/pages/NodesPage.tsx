@@ -1,4 +1,5 @@
-import { Badge, Box, Callout, Card, Flex, Progress, Table, Text } from "@radix-ui/themes";
+import { useState } from "react";
+import { Badge, Box, Button, Callout, Card, Flex, Progress, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
 import { usePolling } from "../usePolling";
 
@@ -10,6 +11,25 @@ function loadColor(percent: number): "red" | "amber" | "blue" {
 
 export function NodesPage() {
   const nodes = usePolling(api.nodeHealth, 15_000);
+  const [trusting, setTrusting] = useState<string | null>(null);
+  const [trustError, setTrustError] = useState<string | null>(null);
+
+  // A host's SSH key changed. Only the person who knows whether it was rebuilt
+  // can say, so this asks first, then forgets the old key so the next check
+  // remembers whatever the host presents now.
+  async function trustNewKey(host: string) {
+    if (!window.confirm(`Trust the new SSH key for ${host}?\n\nOnly do this if you rebuilt or reinstalled it. An unexpected key change can mean someone is impersonating the host.`)) return;
+    setTrusting(host);
+    setTrustError(null);
+    try {
+      await api.trustNewKey(host);
+      nodes.refresh();
+    } catch (err) {
+      setTrustError(err instanceof Error ? err.message : "Could not update the host key.");
+    } finally {
+      setTrusting(null);
+    }
+  }
 
   return (
     <Flex direction="column" gap="4">
@@ -17,6 +37,11 @@ export function NodesPage() {
         {nodes.error && (
           <Callout.Root color="red">
             <Callout.Text>{nodes.error}</Callout.Text>
+          </Callout.Root>
+        )}
+        {trustError && (
+          <Callout.Root color="red" mb="3">
+            <Callout.Text>{trustError}</Callout.Text>
           </Callout.Root>
         )}
         {nodes.data && nodes.data.hosts.length === 0 && (
@@ -93,6 +118,24 @@ export function NodesPage() {
                   </Table.Cell>
                   <Table.Cell>
                     <Badge color={node.online ? "green" : "red"}>{node.online ? "Online" : "Offline"}</Badge>
+                    {!node.online && node.hostKeyChanged && (
+                      <Flex direction="column" gap="1" mt="2" align="start">
+                        <Text size="1" color="red">
+                          SSH host key changed
+                        </Text>
+                        <Text size="1" color="gray" style={{ maxWidth: 220, overflowWrap: "anywhere" }}>
+                          Now presents {node.hostKeyChanged.actual}
+                        </Text>
+                        <Button size="1" variant="soft" color="red" loading={trusting === node.host} onClick={() => void trustNewKey(node.host)}>
+                          Trust new key
+                        </Button>
+                      </Flex>
+                    )}
+                    {!node.online && !node.hostKeyChanged && node.error && (
+                      <Text as="div" size="1" color="gray" mt="1" style={{ maxWidth: 220, overflowWrap: "anywhere" }}>
+                        {node.error}
+                      </Text>
+                    )}
                   </Table.Cell>
                 </Table.Row>
               ))}
