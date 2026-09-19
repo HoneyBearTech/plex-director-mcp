@@ -1,27 +1,13 @@
-import { Fragment, useState } from "react";
-import { Badge, Box, Button, Callout, Card, Code, Flex, Table, Text, TextField } from "@radix-ui/themes";
+import { useState } from "react";
+import { Badge, Box, Button, Callout, Card, Flex, Table, Text, TextField } from "@radix-ui/themes";
 import { api, type ChatImage, type MovieRow } from "../api";
+import { ChatText } from "../components/ChatText";
 
 interface ChatMessage {
   role: "user" | "assistant";
   text: string;
   images?: ChatImage[];
   movies?: MovieRow[];
-}
-
-// Claude's replies use light markdown (bold and inline code, mostly) -
-// render just enough of it to avoid showing raw "**F1**" / `path` markers
-// in the chat bubble.
-function renderInlineMarkdown(text: string) {
-  return text.split(/(\*\*[^*]+\*\*|`[^`]+`)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={i}>{part.slice(2, -2)}</strong>;
-    }
-    if (part.startsWith("`") && part.endsWith("`")) {
-      return <Code key={i}>{part.slice(1, -1)}</Code>;
-    }
-    return <Fragment key={i}>{part}</Fragment>;
-  });
 }
 
 function PosterThumb({ src, title }: { src: string | null; title: string }) {
@@ -42,8 +28,13 @@ function PosterThumb({ src, title }: { src: string | null; title: string }) {
 
 // Search results as a table with the poster next to each movie. "In Plex"
 // only appears when a tool actually checked ownership (libraries !== null).
+// A long result starts as a preview; the rest is one click away.
+const PREVIEW_ROWS = 50;
+
 function MovieTable({ movies }: { movies: MovieRow[] }) {
-  const distinctCount = new Set(movies.map((m) => `${m.title}|${m.year}`)).size;
+  const [expanded, setExpanded] = useState(false);
+  const collapsible = movies.length > PREVIEW_ROWS;
+  const visible = collapsible && !expanded ? movies.slice(0, PREVIEW_ROWS) : movies;
   const showOwnership = movies.some((m) => m.libraries !== null);
   const showRating = movies.some((m) => m.rating !== null);
   const showDetail = movies.some((m) => m.genres.length > 0 || m.detail);
@@ -51,9 +42,9 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
   return (
     <>
     <Text as="p" size="1" color="gray" mt="2">
-      {distinctCount === movies.length
-        ? `${movies.length} ${movies.length === 1 ? "movie" : "movies"}`
-        : `${movies.length} rows · ${distinctCount} distinct movies (some are held in more than one library)`}
+      {visible.length < movies.length
+        ? `Showing ${visible.length} of ${movies.length} movies`
+        : `${movies.length} ${movies.length === 1 ? "movie" : "movies"}`}
     </Text>
     <Table.Root size="1" variant="surface" style={{ marginTop: 4 }}>
       <Table.Header>
@@ -67,7 +58,7 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
         </Table.Row>
       </Table.Header>
       <Table.Body>
-        {movies.map((movie, i) => (
+        {visible.map((movie, i) => (
           <Table.Row key={i} align="center">
             <Table.Cell>
               <PosterThumb src={movie.posterUrl} title={movie.title} />
@@ -81,7 +72,7 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
                 ) : movie.libraries.length === 0 ? (
                   <Badge color="gray">Not in Plex</Badge>
                 ) : (
-                  <Flex gap="1" wrap="wrap">
+                  <Flex direction="column" align="start" gap="1">
                     {movie.libraries.map((library) => (
                       <Badge key={library} color="green">
                         {library}
@@ -97,6 +88,11 @@ function MovieTable({ movies }: { movies: MovieRow[] }) {
         ))}
       </Table.Body>
     </Table.Root>
+    {collapsible && (
+      <Button variant="soft" color="gray" size="1" mt="2" onClick={() => setExpanded((open) => !open)}>
+        {expanded ? `Show first ${PREVIEW_ROWS}` : `Show all ${movies.length} movies`}
+      </Button>
+    )}
     </>
   );
 }
@@ -146,9 +142,13 @@ export function QueryPage() {
                 {message.role === "user" ? "You" : "Assistant"}
               </Badge>
               <Box style={{ maxWidth: message.movies?.length ? "100%" : "85%", width: message.movies?.length ? "100%" : undefined }}>
-                <Text as="p" size="2" style={{ whiteSpace: "pre-wrap" }}>
-                  {renderInlineMarkdown(message.text)}
-                </Text>
+                {message.role === "assistant" ? (
+                  <ChatText text={message.text} />
+                ) : (
+                  <Text as="p" size="2" style={{ whiteSpace: "pre-wrap" }}>
+                    {message.text}
+                  </Text>
+                )}
                 {message.movies && message.movies.length > 0 && <MovieTable movies={message.movies} />}
                 {message.images?.map((image, j) => (
                   <img
