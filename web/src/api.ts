@@ -137,6 +137,7 @@ export interface IndexerHealth {
 
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
+  notifyIfUnauthorized(url, response);
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data?.error ?? `Request failed: ${response.status}`);
@@ -162,11 +163,27 @@ async function postJson<T>(url: string, body: Record<string, unknown>): Promise<
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
+  notifyIfUnauthorized(url, response);
   const data = await response.json();
   if (!response.ok) {
     throw new Error(data?.error ?? `Request failed: ${response.status}`);
   }
   return data as T;
+}
+
+// Fired when an API call comes back 401 (e.g. the session expired), so the app
+// can show the login page instead of a page full of errors.
+export const AUTH_REQUIRED_EVENT = "plex-director:auth-required";
+
+function notifyIfUnauthorized(url: string, response: Response) {
+  if (response.status === 401 && !url.startsWith("/api/auth/")) {
+    window.dispatchEvent(new Event(AUTH_REQUIRED_EVENT));
+  }
+}
+
+export interface AuthStatus {
+  authRequired: boolean;
+  authenticated: boolean;
 }
 
 export const api = {
@@ -175,6 +192,9 @@ export const api = {
     postJson<ChatAnswer>("/api/chat/movies", { question, history }),
   plexActivity: () => getJson<PlexActivity>("/api/status/activity"),
   libraryAnalytics: () => getJson<LibraryAnalytics>("/api/status/library-analytics"),
+  authStatus: () => getJson<AuthStatus>("/api/auth/status"),
+  login: (password: string) => postJson<{ ok: boolean }>("/api/auth/login", { password }),
+  logout: () => postJson<{ ok: boolean }>("/api/auth/logout", {}),
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
