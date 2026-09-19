@@ -5,6 +5,7 @@ import { server } from "../server.js";
 import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { searchPlexLibrary, type PlexSearchArgs } from "./plex.js";
+import { resolveActorFilmography } from "./discovery.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -150,7 +151,17 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
 // (registerMovieTools, below) and the web chat assistant
 // (src/web/chat.ts), so a fix in one place applies everywhere and an
 // LLM driving the web UI calls the exact same logic as an MCP client.
-export const movieTools = [
+// Explicit shape so tools with different argument types (and required vs.
+// optional fields) can live in one list that both surfaces iterate.
+interface MovieTool {
+  name: string;
+  description: string;
+  zodSchema: z.ZodRawShape;
+  inputSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] };
+  handler: (args: any) => Promise<CallToolResult>;
+}
+
+export const movieTools: MovieTool[] = [
   {
     name: "check_movie_status",
     description: "Checks if a specific movie exists in the Radarr library on the Ubuntu cluster and returns its monitoring status with artwork.",
@@ -204,6 +215,24 @@ export const movieTools = [
       required: [] as string[],
     },
     handler: async (args: PlexSearchArgs) => searchPlexLibrary(args),
+  },
+  {
+    name: "resolve_actor_filmography",
+    description:
+      "Resolves an actor's name to their official TMDb filmography, filtering out talk shows, self-appearances, and uncredited roles. When Plex is configured, marks which of those movies the user already has in their Plex library and which they don't. Use this to answer which of an actor's movies the user is missing.",
+    zodSchema: {
+      actorName: z.string().describe("The exact name of the actor (e.g., 'Harrison Ford')."),
+      limit: z.number().int().min(1).max(100).optional().describe("How many titles to list, newest first (default 15)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        actorName: { type: "string", description: "The exact name of the actor (e.g., 'Harrison Ford')." },
+        limit: { type: "integer", description: "How many titles to list, newest first (default 15)." },
+      },
+      required: ["actorName"],
+    },
+    handler: async ({ actorName, limit }: { actorName: string; limit?: number }) => resolveActorFilmography(actorName, limit),
   },
 ];
 
