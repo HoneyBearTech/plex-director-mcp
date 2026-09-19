@@ -1,45 +1,21 @@
-import fs from "node:fs";
 import { z } from "zod";
 import { server } from "../server.js";
-import { radarrClient, sonarrClient } from "../clients.js";
 import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
 import { getConfiguredHosts, probeAllHosts } from "../cluster.js";
-import { getSetting, isConfigured } from "../settings.js";
+import { runServarrBackups } from "../backups.js";
+import { textReply } from "../util.js";
 
 // Backups, download-client remediation, and remote host/cluster telemetry.
 export function registerInfrastructureTools() {
-  // Trigger native Servarr backups and verify that the local backup directory is
-  // available. The Servarr applications create their own internal backup files.
+  // Trigger each Servarr app's own native backup and confirm a new file appeared
+  // (see src/backups.ts).
   server.tool(
     "run_cluster_backup",
-    "Triggers a configuration snapshot for Radarr, Sonarr, and Prowlarr appdata volumes, verifying archival integrity.",
+    "Asks each configured Servarr app (Radarr, Sonarr, Prowlarr) to create its built-in database backup, waits for each to finish, and confirms a new backup file appeared, reporting the file's name, size and time. The backups stay in each app's own backup folder; nothing is copied.",
     {},
     async () => {
-      const backupDir = process.env.BACKUP_DIR || "./backups";
-
-      try {
-        // Ensure the verification target exists before triggering remote backups.
-        if (!fs.existsSync(backupDir)) {
-          fs.mkdirSync(backupDir, { recursive: true });
-        }
-
-        // These commands ask each configured Servarr application to create its
-        // native database backup in that application's appdata directory.
-        await radarrClient.post("/api/v3/command", { name: "Backup" });
-        if (isConfigured("SONARR")) {
-          await sonarrClient.post("/api/v3/command", { name: "Backup" });
-        }
-
-        let verificationSummary = `💾 **Cluster Backup Execution Logs:**\n`;
-        verificationSummary += `✓ Successfully signaled remote Radarr and Sonarr internal database dumps.\n`;
-        fs.statSync(backupDir);
-        verificationSummary += `✓ Backup repository verified at: \`${backupDir}\`\n`;
-        verificationSummary += `✓ System state snapshot confirmed healthy. Storage node check completed with zero corruption flags.`;
-
-        return { content: [{ type: "text", text: verificationSummary }] };
-      } catch (error: any) {
-        return { content: [{ type: "text", text: `Backup process failed to conclude safely: ${error.message}` }], isError: true };
-      }
+      const { text, isError } = await runServarrBackups();
+      return textReply(text, isError);
     }
   );
 
