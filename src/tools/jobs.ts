@@ -2,8 +2,8 @@ import { z } from "zod";
 import { server } from "../server.js";
 import { db } from "../db.js";
 import { radarrClient } from "../clients.js";
-import { textReply, getErrorMessage, safeJsonParse } from "../util.js";
-import { sendDiscordNotification } from "../notify.js";
+import { textReply, getErrorMessage } from "../util.js";
+import { stepJob } from "../jobs.js";
 
 // Durable batch-job planning, execution, and status management.
 export function registerJobTools() {
@@ -125,76 +125,13 @@ export function registerJobTools() {
 
   server.tool(
     "execute_next_job_step",
-    "Processes a single sequential block item from an active background batch queue entry to prevent API flooding.",
+    "Processes a single sequential block item from an active background batch queue entry to prevent API flooding. (Jobs that have been started are also advanced automatically, one item per minute, by the job runner.)",
     {
       jobId: z.number().describe("The unique tracking ID of the active job array to step execute."),
     },
     async ({ jobId }) => {
-      const selectStmt = db.prepare("SELECT * FROM system_jobs WHERE id = ?");
-      const job = selectStmt.get(jobId) as any;
-
-      if (!job) {
-        return textReply(`Job #${jobId} does not exist.`, true);
-      }
-
-      if (job.status === "COMPLETED" || job.status === "CANCELLED") {
-        return textReply(`Job #${jobId} is already marked as ${job.status}.`);
-      }
-
-      const payloadIds: number[] = safeJsonParse<number[]>(job.payload, []);
-      const currentIndex = Number(job.processed_items ?? 0);
-
-      // A job can reach this branch when a previous invocation completed the
-      // final item but the caller asks for another step.
-      if (currentIndex >= payloadIds.length) {
-        db.prepare("UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(jobId);
-        return textReply(`✓ Job #${jobId} has successfully completed processing all structural items.`);
-      }
-
-      if (job.status === "PENDING" || job.status === "PAUSED") {
-        db.prepare("UPDATE system_jobs SET status = 'RUNNING' WHERE id = ?").run(jobId);
-      }
-
-      const targetMovieId = payloadIds[currentIndex];
-
-      try {
-        await radarrClient.post("/api/v3/command", {
-          name: "MoviesSearch",
-          movieIds: [targetMovieId],
-        });
-
-        const nextIndex = currentIndex + 1;
-        const isNowFinished = nextIndex >= payloadIds.length;
-        const finalStatus = isNowFinished ? "COMPLETED" : "RUNNING";
-
-        db.prepare(`
-          UPDATE system_jobs
-          SET processed_items = ?, status = ?, updated_at = CURRENT_TIMESTAMP
-          WHERE id = ?
-        `).run(nextIndex, finalStatus, jobId);
-
-        if (isNowFinished) {
-          // Keep completion durable before notifying external systems.
-          db.prepare("UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(jobId);
-
-          // The helper absorbs webhook failures so a completed job remains a
-          // successful MCP operation even when Discord is temporarily offline.
-          await sendDiscordNotification(
-            "✅ Plex Director Batch Job Completed",
-            `**Job Details:** ${job.task_name}\n` +
-              `**Total Processed Items:** ${payloadIds.length}/${payloadIds.length}\n` +
-              "**Target Nodes:** Managed Servarr Docker Cluster Architecture",
-            3066993
-          );
-        }
-
-        return textReply(
-          `⚡ Step Complete: Successfully triggered rate-limited search command for item array index [${currentIndex}] (Movie ID: ${targetMovieId}).\n` +
-            `Progress: ${nextIndex}/${payloadIds.length} items completed inside Job #${jobId}.`
-        );
-      } catch (error: unknown) {
-        return textReply(`Failed processing step element index [${currentIndex}]: ${getErrorMessage(error)}`, true);
-      }
+      const result = await stepJob(jobId);
+      return textReply(result.message, result.outcome === "failed");
     }
   );
 }

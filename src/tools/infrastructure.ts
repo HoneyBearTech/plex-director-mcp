@@ -3,7 +3,7 @@ import { z } from "zod";
 import { server } from "../server.js";
 import { radarrClient, sonarrClient } from "../clients.js";
 import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
-import { runRemoteCommand } from "../ssh.js";
+import { getConfiguredHosts, probeAllHosts } from "../cluster.js";
 import { getSetting, isConfigured } from "../settings.js";
 
 // Backups, download-client remediation, and remote host/cluster telemetry.
@@ -104,8 +104,8 @@ export function registerInfrastructureTools() {
     "Collects real-time CPU utilization, RAM usage, and active Docker container counts across all configured Ubuntu hosts.",
     {},
     async () => {
-      const hosts = getSetting("UBUNTU_HOSTS").split(",");
-      if (hosts.length === 0 || !hosts[0]) {
+      const hosts = getConfiguredHosts();
+      if (hosts.length === 0) {
         return { content: [{ type: "text", text: "No remote Ubuntu hosts defined in configuration metadata mappings." }], isError: true };
       }
 
@@ -113,27 +113,20 @@ export function registerInfrastructureTools() {
       systemsReport += `| Host Node IP | CPU Load | Memory Status | Active Containers | Docker Status |\n`;
       systemsReport += `| :--- | :--- | :--- | :---: | :--- |\n`;
 
-      for (const host of hosts) {
-        const cleanHost = host.trim();
-        try {
-          // Keep these commands small so one failed metric does not hang the host.
-          const cpuCmd = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1\"%\"}'";
-          const ramCmd = "free -m | awk 'NR==2{printf \"%.2f%% (%dMB/%dMB)\", $3*100/$2, $3, $2}'";
-          const dockerCountCmd = "docker ps --format '{{.Names}}' | wc -l";
-          const dockerDownCmd = "docker ps -a --filter 'status=exited' --filter 'status=dead' --format '{{.Names}}' | tr '\\n' ','";
-
-          const cpuLoad = await runRemoteCommand(cleanHost, cpuCmd);
-          const ramStatus = await runRemoteCommand(cleanHost, ramCmd);
-          const dockerCount = await runRemoteCommand(cleanHost, dockerCountCmd);
-          const deadContainers = await runRemoteCommand(cleanHost, dockerDownCmd);
-
-          const healthEmoji = deadContainers.length > 0 ? "⚠️ Issues Found" : "🟢 All Healthy";
-          const containerNote = deadContainers.length > 0 ? `${dockerCount} running <br> *Stopped: [${deadContainers.slice(0, 30)}...]*` : `${dockerCount} running`;
-
-          systemsReport += `| **${cleanHost}** | ${cpuLoad} | ${ramStatus} | ${containerNote} | ${healthEmoji} |\n`;
-        } catch (error: any) {
-          systemsReport += `| **${cleanHost}** | ❌ Offline | ❌ Offline | N/A | 🔴 SSH Connection Dropped |\n`;
+      for (const node of await probeAllHosts(hosts)) {
+        if (!node.online) {
+          systemsReport += `| **${node.host}** | ❌ Offline | ❌ Offline | N/A | 🔴 SSH Connection Dropped |\n`;
+          continue;
         }
+
+        const hasStopped = node.deadContainers.length > 0;
+        const healthEmoji = hasStopped ? "⚠️ Issues Found" : "🟢 All Healthy";
+        const containerNote = hasStopped
+          ? `${node.containersRunning} running <br> *Stopped: [${node.deadContainers.join(", ")}]*`
+          : `${node.containersRunning} running`;
+        const ramStatus = `${node.ramPercent.toFixed(2)}% (${node.ramUsedMb}MB/${node.ramTotalMb}MB)`;
+
+        systemsReport += `| **${node.host}** | ${node.cpuPercent.toFixed(1)}% | ${ramStatus} | ${containerNote} | ${healthEmoji} |\n`;
       }
 
       return { content: [{ type: "text", text: systemsReport }] };
@@ -143,33 +136,25 @@ export function registerInfrastructureTools() {
   // Cluster telemetry data for clients that render charts from the response.
   server.tool(
     "get_cluster_hardware_analytics",
-    "Fetches real-time CPU Load and Memory allocation metrics across all active cluster host nodes, returning a visual multi-series chart visualization.",
+    "Fetches real-time CPU load and memory allocation for every configured cluster host over SSH, as a Markdown table.",
     {},
     async () => {
+      const hosts = getConfiguredHosts();
+      if (hosts.length === 0) {
+        return { content: [{ type: "text", text: "No remote Ubuntu hosts defined in configuration metadata mappings." }], isError: true };
+      }
+
       try {
-        // Replace these sample values with Prometheus, Netdata, or SSH data when
-        // a live telemetry source is available.
-        const clusterMetrics = [
-          { ip: process.env.CLUSTER_NODE_1 || "192.168.1.50", cpu: 42.5, ram: 78.2 },
-          { ip: process.env.CLUSTER_NODE_2 || "192.168.1.51", cpu: 18.1, ram: 45.6 },
-          { ip: process.env.CLUSTER_NODE_3 || "192.168.1.52", cpu: 89.4, ram: 91.3 },
-          { ip: process.env.CLUSTER_NODE_4 || "192.168.1.53", cpu: 31.0, ram: 62.8 }
-        ];
+        let report = `### 📊 Real-Time Cluster Resource Telemetry\n\n`;
+        report += `| Host Node | CPU Load | Memory Allocation |\n`;
+        report += `| :--- | :---: | :---: |\n`;
+        for (const node of await probeAllHosts(hosts)) {
+          report += node.online
+            ? `| \`${node.hostname}\` (${node.host}) | ${node.cpuPercent.toFixed(1)}% | ${node.ramPercent.toFixed(1)}% |\n`
+            : `| \`${node.host}\` | ❌ Offline | ❌ Offline |\n`;
+        }
 
-        // Keep a markdown fallback for clients that cannot render chart content.
-        let markdownFallback = `### 📊 Real-Time Cluster Resource Telemetry\n\n`;
-        markdownFallback += `| Host Node IP | CPU Load | Memory Allocation |\n`;
-        markdownFallback += `| :--- | :---: | :---: |\n`;
-        clusterMetrics.forEach(node => {
-          markdownFallback += `| \`${node.ip}\` | ${node.cpu}% | ${node.ram}% |\n`;
-        });
-        markdownFallback += `\n*Generating hardware utilization graph below...*\n\n`;
-
-        return {
-          content: [
-            { type: "text", text: markdownFallback }
-          ]
-        };
+        return { content: [{ type: "text", text: report }] };
       } catch (error: any) {
         return { content: [{ type: "text", text: `Failed to compile host telemetry metrics: ${error.message}` }], isError: true };
       }
