@@ -10,6 +10,7 @@ import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "
 import { checkSeriesStatus, diagnoseMissingEpisodes, type DiagnoseOptions } from "./seriesDiagnosis.js";
 import { getUpcomingEpisodes, type UpcomingOptions } from "./upcoming.js";
 import { searchEpisodes, type EpisodeSearchArgs } from "./plexEpisodes.js";
+import { findSeriesByQuality, type QualityOptions } from "./seriesQuality.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -293,6 +294,33 @@ export const movieTools: MovieTool[] = [
       required: [] as string[],
     },
     handler: async (args: EpisodeSearchArgs) => searchEpisodes(args),
+  },
+  {
+    name: "find_series_by_quality",
+    description:
+      "Finds TV shows by the video quality Sonarr downloaded: 'which shows do I only have in 720p?' (bestAtMost 720), 'which shows have 1080p or better?' (bestAtLeast 1080), 'which shows mix qualities?' (mixedOnly, useful as upgrade candidates). Lists the shows with the lowest best quality first, each with how many files are at each resolution, and opens with how many shows are at each level. " +
+      "It only sees what Sonarr downloaded, so a 4K copy in a separate Plex 4K library that Sonarr does not manage is not counted: for 4K use search_plex_library with library '4k'. Use folder to narrow to a kind of show by its Sonarr folder ('kids', 'anime', 'sports'). The first call reads every show's files (about 15 seconds) and is then cached for 5 minutes. Read-only.",
+    zodSchema: {
+      bestAtMost: z.number().positive().optional().describe("Only shows whose best quality is at most this many lines, e.g. 720."),
+      bestAtLeast: z.number().positive().optional().describe("Only shows whose best quality is at least this many lines, e.g. 1080 or 2160."),
+      mixedOnly: z.boolean().optional().describe("Only shows whose files are not all the same resolution."),
+      monitored: z.enum(["any", "monitored", "unmonitored"]).optional().describe("Only shows Sonarr monitors, only ones it does not, or both (default any)."),
+      folder: z.string().optional().describe("Only shows in a Sonarr folder whose path contains this text, e.g. 'kids', 'anime', 'sports'."),
+      limit: z.number().int().min(1).max(200).optional().describe("How many shows to list (default 15, max 200)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        bestAtMost: { type: "number", description: "Only shows whose best quality is at most this many lines, e.g. 720." },
+        bestAtLeast: { type: "number", description: "Only shows whose best quality is at least this many lines, e.g. 1080 or 2160." },
+        mixedOnly: { type: "boolean", description: "Only shows whose files are not all the same resolution." },
+        monitored: { type: "string", enum: ["any", "monitored", "unmonitored"], description: "Only shows Sonarr monitors, only ones it does not, or both (default any)." },
+        folder: { type: "string", description: "Only shows in a Sonarr folder whose path contains this text, e.g. 'kids', 'anime', 'sports'." },
+        limit: { type: "integer", description: "How many shows to list (default 15, max 200)." },
+      },
+      required: [] as string[],
+    },
+    handler: async (options: QualityOptions) => findSeriesByQuality(options),
   },
   {
     name: "resolve_actor_filmography",

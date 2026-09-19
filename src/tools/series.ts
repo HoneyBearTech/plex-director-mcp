@@ -306,7 +306,7 @@ export interface SeriesGapOptions {
 
 // Runs `task` over `items` with at most `limit` in flight; the first failure
 // rejects the whole thing (a ranking with silent holes would mislead).
-async function mapWithLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapWithLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   await Promise.all(
