@@ -98,6 +98,17 @@ export interface ChatAnswer {
   movies: MovieRow[];
 }
 
+// Mirrors the /api/jobs response in src/web/routes/jobs.ts.
+export interface BackgroundJob {
+  id: number;
+  taskName: string;
+  status: string;
+  totalItems: number;
+  processedItems: number;
+  createdAt: string | null;
+  updatedAt: string | null;
+}
+
 async function getJson<T>(url: string): Promise<T> {
   const response = await fetch(url);
   const data = await response.json();
@@ -139,6 +150,7 @@ export const api = {
   nodeHealth: () => getJson<{ hosts: NodeHealth[] }>("/api/nodes/health"),
   sabnzbdQueue: () => getJson<{ items: SabnzbdItem[] }>("/api/queues/sabnzbd"),
   qbittorrentQueue: () => getJson<{ items: QbittorrentItem[] }>("/api/queues/qbittorrent"),
+  backgroundJobs: () => getJson<{ jobs: BackgroundJob[] }>("/api/jobs"),
   getSettings: () => getJson<SettingsResponse>("/api/settings"),
   updateSettings: (service: SettingsService, body: Record<string, string>) =>
     putJson(`/api/settings/${service}`, body),
