@@ -2,7 +2,7 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { plexClient } from "../src/clients.js";
-import { getOwnedTmdbIndex, resetOwnedTmdbIndexCache, searchPlexLibrary } from "../src/tools/plex.js";
+import { getOnDeck, getOwnedTmdbIndex, resetOwnedTmdbIndexCache, searchPlexLibrary } from "../src/tools/plex.js";
 import { setSetting } from "../src/settings.js";
 import { fakeApi, resetDb, type RecordedRequest } from "./helpers.js";
 
@@ -788,6 +788,235 @@ describe("searchPlexLibrary: watch state", () => {
       const added = bullets(await search({ sort: "recentlyAdded", title: "dated" }));
       assert.match(added.find((l) => l.startsWith("- Dated"))!, / - watched 2026-02-21, added 2024-11-16$/);
     });
+  });
+});
+
+describe("getOnDeck", () => {
+  const at = (iso: string) => Math.floor(Date.parse(`${iso}T12:00:00Z`) / 1000);
+  let deck: any[];
+  const deckFake = (overrides?: (req: RecordedRequest) => any) =>
+    plexFake((req) => overrides?.(req) ?? (req.url === "/library/onDeck" ? { data: { MediaContainer: { size: deck.length, Metadata: deck } } } : undefined));
+
+  const episode = (show: string, season: number, number: number, title: string, extra: Record<string, unknown> = {}) => ({
+    type: "episode",
+    title,
+    grandparentTitle: show,
+    grandparentGuid: `plex://show/${show}`,
+    parentIndex: season,
+    index: number,
+    librarySectionTitle: "TV Shows",
+    viewOffset: 1_643_463,
+    duration: 2_862_900,
+    lastViewedAt: at("2026-09-19"),
+    year: 2026,
+    thumb: `/library/metadata/${number}/thumb/1`,
+    grandparentThumb: `/library/metadata/${show.length}/thumb/9`,
+    ...extra,
+  });
+  const film = (title: string, year: number, extra: Record<string, unknown> = {}) => ({
+    type: "movie",
+    title,
+    year,
+    guid: `plex://movie/${title}`,
+    librarySectionTitle: "Movies",
+    viewOffset: 4_793_507,
+    duration: 6_859_136,
+    lastViewedAt: at("2026-09-16"),
+    thumb: `/library/metadata/${year}/thumb/3`,
+    ...extra,
+  });
+  const lines = (r: any) => textOf(r).split("\n").filter((l) => l.startsWith("- "));
+  const rows = (r: any) => (r.structuredContent?.media ?? []) as any[];
+  const titles = (r: any) => rows(r).map((m) => m.title);
+
+  beforeEach(() => {
+    deck = [];
+  });
+
+  it("lists episodes and movies in Plex's order, saying how far through each one is", async () => {
+    deck = [episode("Ted Lasso", 4, 5, "Riches of Embarrassment"), film("Scream", 2022), episode("Lioness", 3, 2, "No Sorrow Like the Survivor", { viewOffset: 609_874, duration: 3_162_451, lastViewedAt: at("2026-09-17") })];
+    deckFake();
+    const result = await getOnDeck();
+    assert.match(textOf(result), /^## On deck in Plex \(the "continue watching" list\): 3 items\n/);
+    assert.deepEqual(lines(result), [
+      '- Ted Lasso S4E05 "Riches of Embarrassment" - TV Shows - 57% watched, last watched 2026-09-19',
+      "- Scream (2022) - Movies - 70% watched, last watched 2026-09-16",
+      '- Lioness S3E02 "No Sorrow Like the Survivor" - TV Shows - 19% watched, last watched 2026-09-17',
+    ]);
+    assert.match(textOf(result), /Watch state is for the Plex account the app is connected with\./);
+  });
+
+  it("asks Plex for up to 50 items", async () => {
+    deckFake();
+    await getOnDeck();
+    assert.equal(fake.calls[0]!.params["X-Plex-Container-Size"], 50);
+  });
+
+  it("calls an episode nothing has been played of 'next up', with the last activity date", async () => {
+    deck = [episode("Dark Matter (2024)", 2, 1, "A Quiet Life", { viewOffset: undefined, lastViewedAt: at("2026-08-28") })];
+    deckFake();
+    const result = await getOnDeck();
+    assert.deepEqual(lines(result), ['- Dark Matter (2024) S2E01 "A Quiet Life" - TV Shows - next up, last activity 2026-08-28']);
+    assert.equal(rows(result)[0].lastWatched, undefined, "a next-up episode has not been watched, so no 'last watched' cell");
+  });
+
+  it("copes with a next-up episode with no dates, and a movie with no duration or year", async () => {
+    deck = [episode("Bare Show", 1, 1, "", { viewOffset: undefined, lastViewedAt: undefined }), film("Mystery", 0, { duration: undefined, year: undefined })];
+    deckFake();
+    const result = await getOnDeck();
+    assert.deepEqual(lines(result), ["- Bare Show S1E01 - TV Shows - next up", "- Mystery - Movies - partly watched, last watched 2026-09-16"]);
+  });
+
+  it("never reports 100% for something not finished", async () => {
+    deck = [film("Nearly", 2020, { viewOffset: 6_850_000, duration: 6_859_136 }), film("Over", 2021, { viewOffset: 9_000_000, duration: 6_859_136 })];
+    deckFake();
+    assert.deepEqual(lines(await getOnDeck()).map((l) => l.split(" - ").pop()!.split(",")[0]), ["99% watched", "99% watched"]);
+  });
+
+  it("shows a movie held in HD and 4K once, listing both libraries", async () => {
+    deck = [film("F1: The Movie", 2025, { librarySectionTitle: "4k Movies" }), film("Scream", 2022), film("F1: The Movie", 2025, { librarySectionTitle: "Movies", viewOffset: 100 })];
+    deckFake();
+    const result = await getOnDeck();
+    assert.deepEqual(titles(result), ["F1: The Movie", "Scream"]);
+    assert.deepEqual(rows(result)[0].libraries, ["4k Movies", "Movies"]);
+    assert.match(lines(result)[0]!, /^- F1: The Movie \(2025\) - 4k Movies, Movies - 70% watched/, "the first (most recent) entry's progress is the one shown, not the later copy's 1%");
+  });
+
+  it("shows a show held in two libraries once, and tells same-titled shows apart by their Plex id", async () => {
+    deck = [
+      episode("Andor", 2, 3, "Ep", { librarySectionTitle: "4k TV Shows" }),
+      episode("Andor", 2, 3, "Ep", { librarySectionTitle: "TV Shows" }),
+      episode("Fargo", 3, 1, "Old Fargo", { grandparentGuid: "plex://show/fargo-1996" }),
+      episode("Fargo", 1, 1, "New Fargo", { grandparentGuid: "plex://show/fargo-2014" }),
+    ];
+    deckFake();
+    const result = await getOnDeck();
+    assert.deepEqual(rows(result).map((r) => [r.title, r.libraries]), [["Andor", ["4k TV Shows", "TV Shows"]], ["Fargo", ["TV Shows"]], ["Fargo", ["TV Shows"]]]);
+  });
+
+  it("falls back to the title when Plex gives no guid", async () => {
+    deck = [film("No Guid", 2020, { guid: undefined, librarySectionTitle: "Movies" }), film("No Guid", 2020, { guid: undefined, librarySectionTitle: "4k Movies" }), episode("Guidless", 1, 1, "x", { grandparentGuid: undefined }), episode("Guidless", 1, 1, "x", { grandparentGuid: undefined, librarySectionTitle: "Kid's TV Shows" })];
+    deckFake();
+    assert.deepEqual(rows(await getOnDeck()).map((r) => [r.title, r.libraries]), [["No Guid", ["Movies", "4k Movies"]], ["Guidless", ["TV Shows", "Kid's TV Shows"]]]);
+  });
+
+  it("does not merge different movies just because Plex gives them no guid", async () => {
+    deck = [film("Movie A", 2020, { guid: undefined }), film("Movie B", 2021, { guid: undefined }), film("Movie A", 2019, { guid: undefined })];
+    deckFake();
+    assert.deepEqual(titles(await getOnDeck()), ["Movie A", "Movie B", "Movie A"], "same title in a different year is a different movie");
+  });
+
+  it("returns rows for the table: show poster for an episode, no year for an episode, the movie's year for a movie", async () => {
+    deck = [episode("Ted Lasso", 4, 5, "Riches of Embarrassment"), film("Scream", 2022)];
+    deckFake();
+    assert.deepEqual(rows(await getOnDeck()), [
+      {
+        kind: "show",
+        title: "Ted Lasso",
+        year: null,
+        posterUrl: "/api/plex/image?path=%2Flibrary%2Fmetadata%2F9%2Fthumb%2F9",
+        libraries: ["TV Shows"],
+        genres: [],
+        rating: null,
+        detail: 'S4E05 "Riches of Embarrassment" - 57% watched, last watched 2026-09-19',
+        lastWatched: "2026-09-19",
+      },
+      {
+        kind: "movie",
+        title: "Scream",
+        year: 2022,
+        posterUrl: "/api/plex/image?path=%2Flibrary%2Fmetadata%2F2022%2Fthumb%2F3",
+        libraries: ["Movies"],
+        genres: [],
+        rating: null,
+        detail: "70% watched, last watched 2026-09-16",
+        lastWatched: "2026-09-16",
+      },
+    ]);
+    assert.doesNotMatch(JSON.stringify(rows(await getOnDeck())), /X-Plex-Token|http:\/\/plex/);
+  });
+
+  it("filters by media type", async () => {
+    deck = [episode("Ted Lasso", 4, 5, "x"), film("Scream", 2022), episode("Lioness", 3, 2, "y")];
+    deckFake();
+    assert.deepEqual(titles(await getOnDeck({ mediaType: "show" })), ["Ted Lasso", "Lioness"]);
+    assert.deepEqual(titles(await getOnDeck({ mediaType: "movie" })), ["Scream"]);
+    assert.equal(rows(await getOnDeck({ mediaType: "any" })).length, 3);
+    deck = [film("Scream", 2022)];
+    assert.match(textOf(await getOnDeck({ mediaType: "show" })), /^Nothing is on deck in Plex for shows\.$/);
+  });
+
+  it("filters by title, so a question about one show gets one row (found in the browser)", async () => {
+    deck = [episode("Ted Lasso", 4, 5, "x"), episode("Dark Matter (2024)", 2, 1, "A Quiet Life", { viewOffset: undefined }), film("Dark Water", 2005), film("Scream", 2022), film("Matter of Time", 2010)];
+    deckFake();
+    assert.deepEqual(titles(await getOnDeck({ title: "dark matter" })), ["Dark Matter (2024)"]);
+    assert.deepEqual(titles(await getOnDeck({ title: "  DARK  " })), ["Dark Matter (2024)", "Dark Water"], "case-insensitive, trimmed, matches shows and movies");
+    assert.deepEqual(titles(await getOnDeck({ title: "matter", mediaType: "show" })), ["Dark Matter (2024)"]);
+    assert.equal(rows(await getOnDeck({ title: "   " })).length, 5, "a blank title is no filter");
+    const none = await getOnDeck({ title: "Severance" });
+    assert.match(textOf(none), /^Nothing on deck matches "Severance"\. Plex lists a show here only once it has been started/);
+    assert.equal(none.isError, undefined);
+  });
+
+  it("says it is not the complete list of unfinished titles", async () => {
+    deck = [film("Scream", 2022)];
+    deckFake();
+    assert.match(textOf(await getOnDeck()), /NOT every unfinished title: for a complete list of what is unwatched or unfinished use search_plex_library with its watched filter/);
+  });
+
+  it("filters by library name, and lists the libraries that have something when none match", async () => {
+    deck = [episode("Jessie", 2, 22, "x", { librarySectionTitle: "Kid's TV Shows" }), film("Sing 2", 2021, { librarySectionTitle: "Kid's Movies" }), film("Scream", 2022, { librarySectionTitle: "Movies" })];
+    deckFake();
+    assert.deepEqual(titles(await getOnDeck({ library: "KID" })), ["Jessie", "Sing 2"]);
+    const none = await getOnDeck({ library: "anime" });
+    assert.match(textOf(none), /^Nothing on deck in a library matching "anime"\. Libraries with something on deck: Kid's TV Shows, Kid's Movies, Movies\.$/);
+    assert.equal(none.isError, undefined);
+  });
+
+  it("limits the list (default 10, at most 50, at least 1) and says how many were left out", async () => {
+    deck = Array.from({ length: 30 }, (_, i) => film(`Movie ${i}`, 2000 + i));
+    deckFake();
+    const first = await getOnDeck();
+    assert.equal(rows(first).length, 10);
+    assert.match(textOf(first), /: 30 items\n/);
+    assert.match(textOf(first), /Listed the first 10; 20 more are not listed \(limit up to 50\)\./);
+    assert.equal(rows(await getOnDeck({ limit: 500 })).length, 30);
+
+    assert.equal(rows(await getOnDeck({ limit: 0 })).length, 1);
+    assert.equal(rows(await getOnDeck({ limit: 3 })).length, 3);
+    assert.doesNotMatch(textOf(await getOnDeck({ limit: 50 })), /more are not listed/);
+    deck = Array.from({ length: 60 }, (_, i) => film(`Movie ${i}`, 2000 + i));
+    assert.equal(rows(await getOnDeck({ limit: 500 })).length, 50, "never more than 50, whatever is asked for");
+  });
+
+  it("ignores things that are neither a movie nor an episode", async () => {
+    deck = [{ type: "track", title: "A Song" }, film("Scream", 2022), { type: "clip", title: "Trailer" }];
+    deckFake();
+    assert.deepEqual(titles(await getOnDeck()), ["Scream"]);
+  });
+
+  it("says so when nothing is on deck", async () => {
+    deckFake();
+    const result = await getOnDeck();
+    assert.equal(result.isError, undefined);
+    assert.match(textOf(result), /^Nothing is on deck in Plex\.$/);
+    assert.equal((result as any).structuredContent, undefined);
+  });
+
+  it("says so when Plex isn't configured, without calling it", async () => {
+    setSetting("PLEX_URL", "");
+    deckFake();
+    const result = await getOnDeck();
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /Plex isn't configured/);
+    assert.equal(fake.calls.length, 0);
+  });
+
+  it("reports a Plex outage as an error", async () => {
+    deckFake(() => ({ status: 500 }));
+    const result = await getOnDeck();
+    assert.equal(result.isError, true);
+    assert.match(textOf(result), /Failed to read On Deck from Plex/);
   });
 });
 

@@ -43,6 +43,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 - **Find what you own.** Search your Plex library, movies and TV shows, by genre, actor, title, year and library (for example just the 4K libraries) across every library at once. A title held in both HD and 4K is one result with both libraries shown, and shows come with their season and episode counts and how much you have watched. You can leave a library such as Sports out of searches unless you name it.
 - **Do I have every episode?** Ask about a show and Sonarr's episode list says how many aired episodes are downloaded and exactly which are missing, or ask which of your shows have gaps, ranked, including near-complete ones. Unaired episodes and specials are never counted as missing. For a missing episode it can also say why, from Sonarr's history and download queue.
 - **What's on, and when does it return?** See which episodes air in the next few days, with premieres and finales flagged, or ask when a particular show comes back (or that no date has been announced yet).
+- **What should I watch next?** Ask for what is on deck: the next episode of each show you are following and the movies you did not finish, with how far through each one is.
 - **What have I watched, and what have I let go stale?** Ask for unwatched shows, ones you started but never finished, movies you have not watched in years, or the newest additions, alone or combined with genre, library and the rest. Titles Plex says were watched but holds no date for are set aside and counted, not guessed at.
 - **Owned versus missing.** Look up an actor's TMDb filmography, movies and TV shows, and see which of those titles are in Plex and which are not, optionally narrowed to movies or shows, by year range, or by "in 4K". Talk-show and "Self" appearances are left out, and a title appears once even when the actor played several roles in it.
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
@@ -210,7 +211,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (22 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (23 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -409,13 +410,14 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-two tools are available to Claude Desktop. The nine marked ★ are also what the dashboard's Query chat uses.
+Twenty-three tools are available to Claude Desktop. The ten marked ★ are also what the dashboard's Query chat uses.
 
 **Your library**
 
 | Tool | What it does |
 | :--- | :--- |
 | ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Filter by watch state (unwatched, in progress, watched) or "not watched in N years" (a never-watched title counts from when it was added), and sort by recently added or last watched. Watch state is for the Plex account the app is connected with. Paged for large results. |
+| ★ `get_on_deck` | "What should I watch next?" from Plex's On Deck (Continue Watching): the movies you have partly played and, for each show you are following, the episode to watch next (or the one you are part way through), most recently active first, with how far through each is. A movie held in HD and 4K is one entry. Can be limited to movies or shows, or to a library such as `kids`. Plex reports at most 50 items; the watch state is for the Plex account the app is connected with. |
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
 | ★ `check_series_completeness` | "Do I have every episode of this show?" From Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). Counts the episodes themselves rather than Sonarr's statistics, which treat a partly downloaded, unmonitored show as complete. It does not check what Plex has scanned. |
 | ★ `find_series_gaps` | Which TV shows are missing aired episodes, most missing first, with how many are downloaded and whether Sonarr is looking for the rest. Filter by monitored, not monitored or actively being searched for, by how many are missing (for "nearly complete" shows) and hide shows with nothing downloaded. |
