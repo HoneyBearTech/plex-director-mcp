@@ -20,7 +20,7 @@
   },
   "homepage": "https://github.com/HoneyBearTech/plex-director-mcp#readme",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.126.0",
+    "@anthropic-ai/sdk": "^0.127.0",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "axios": "^1.20.0",
     "better-sqlite3": "^13.0.3",
@@ -33,9 +33,9 @@
   "devDependencies": {
     "@types/better-sqlite3": "^9.6.0",
     "@types/express": "^5.0.6",
-    "@types/node": "^26.5.1",
+    "@types/node": "^26.6.2",
     "@types/ssh2": "^1.15.6",
-    "tsx": "^4.23.13",
+    "tsx": "^4.23.15",
     "typescript": "^7.0.2"
   },
   "allowScripts": {
