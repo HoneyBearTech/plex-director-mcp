@@ -1,0 +1,90 @@
+name: Bug report
+description: Something in Plex Director doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug.
+
+        **Never paste API keys, tokens or passwords here.** That includes your Plex token, your Radarr,
+        Sonarr, Prowlarr, SABnzbd, Tautulli, TMDb and Anthropic keys, your qBittorrent password, your
+        `WEB_PASSWORD` and your Discord webhook URL. Redact them from logs, config and screenshots (replace
+        them with `REDACTED`). If one has been posted by mistake, revoke it in the app it belongs to.
+
+        **Found a security problem?** Don't open an issue. Report it privately, as described in
+        [SECURITY.md](https://github.com/HoneyBearTech/plex-director-mcp/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What you did, what you expected, and what happened instead.
+      placeholder: |
+        I asked the Query chat "Which of Harrison Ford's movies do I have in 4K?" and expected a table, but...
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: The smallest set of steps that shows the problem.
+      placeholder: |
+        1. Open the Settings page
+        2. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: The image tag (for example `1.1.0`, `latest` or `sha-<commit>`), or the commit if you run it with Node.
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How do you run it?
+      options:
+        - Docker Compose
+        - Docker CLI
+        - Claude Desktop through Docker
+        - Claude Desktop with Node (no Docker)
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - An MCP tool in Claude Desktop
+        - The dashboard's Query chat
+        - Another dashboard page
+        - Settings
+        - Batch jobs or the job runner
+        - SSH host monitoring
+        - Installing, starting or updating the container
+        - Not sure
+  - type: input
+    id: services
+    attributes:
+      label: Which services are involved?
+      description: For example Plex, Radarr, Sonarr, Prowlarr, SABnzbd, qBittorrent, Tautulli or TMDb, and their versions if you know them.
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        Relevant output from `docker logs plex-director`, or the error you saw. **Redact every key, token,
+        password and webhook URL first.** This is rendered as code, so no backticks are needed.
+      render: text
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I removed all API keys, tokens, passwords and webhook URLs from this report.
+          required: true
+        - label: I searched the existing issues and this hasn't been reported yet.
+          required: true

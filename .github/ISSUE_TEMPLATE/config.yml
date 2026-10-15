@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/HoneyBearTech/plex-director-mcp/security/advisories/new
+    about: Please report security problems privately through GitHub's private vulnerability reporting, as described in SECURITY.md, never in a public issue.
+  - name: Security policy
+    url: https://github.com/HoneyBearTech/plex-director-mcp/blob/main/SECURITY.md
+    about: How vulnerabilities are handled, and what is in scope.
+  - name: Setup and usage guide
+    url: https://github.com/HoneyBearTech/plex-director-mcp#readme
+    about: Installing with Docker or Node, every environment variable, the dashboard and each MCP tool.

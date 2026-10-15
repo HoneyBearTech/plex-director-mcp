@@ -31,7 +31,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 # package.json must stay - Node needs its "type": "module" field to know
 # dist/*.js should be parsed as ESM.
-COPY package.json package-lock.json ./
+COPY package.json package-lock.json LICENSE ./
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=frontend-builder /app/web/dist ./web/dist
