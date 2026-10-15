@@ -432,6 +432,8 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 Twenty-five tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
 
+The server also sends MCP clients short usage instructions: which tool answers which kind of question, and to confirm before anything that changes your services. The same guidance is in an [Agent Skill](skills/plex-director/SKILL.md) for agents that load skills (such as Claude Code), and in the Query chat's prompt. It is written once in [`src/guidance.ts`](src/guidance.ts).
+
 **Your library**
 
 | Tool | What it does |

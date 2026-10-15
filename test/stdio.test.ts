@@ -6,6 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { describe, it } from "node:test";
+import { ROUTES, SERVER_INSTRUCTIONS } from "../src/guidance.js";
 
 const repo = path.resolve(import.meta.dirname, "..");
 
@@ -93,6 +94,12 @@ describe("stdout stays clean for MCP", () => {
       for (const name of ["check_series_completeness", "find_series_gaps", "check_series_status", "diagnose_missing_episodes", "get_upcoming_episodes", "get_on_deck", "search_episodes", "find_series_by_quality"]) {
         assert.ok(tools.includes(name), `missing ${name}; tools: ${tools}`);
       }
+      // The shared guidance (src/guidance.ts) reaches MCP clients and maps every tool.
+      const init = JSON.parse(lines.find((l) => l.includes('"id":1'))!).result;
+      assert.equal(init.instructions, SERVER_INSTRUCTIONS);
+      const routed = new Set(ROUTES.flatMap((r) => r.tools));
+      assert.deepEqual([...routed].filter((t) => !tools.includes(t)), [], "guidance names a tool that doesn't exist");
+      assert.deepEqual(tools.filter((t: string) => !routed.has(t)), [], "a tool is missing from the guidance's ROUTES");
       // README.md states this number ("25 tools", "Twenty-five tools"); change them together.
       assert.equal(tools.length, 25, `tool count changed - update the counts in README.md too. tools: ${tools}`);
     } finally {

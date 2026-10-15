@@ -18,7 +18,9 @@ produces, and where it is specified. Which of these should be reachable from whe
 ### MCP tools
 
 The server speaks the Model Context Protocol (JSON-RPC 2.0 over stdio) with the official MCP SDK and
-reports itself as `plex-director` with the version from `package.json`. Arguments are validated against
+reports itself as `plex-director` with the version from `package.json`. Its `initialize` result carries
+`instructions`: usage guidance from `src/guidance.ts`, also published as the Agent Skill in
+`skills/plex-director/SKILL.md`. Arguments are validated against
 each tool's zod schema. Replies are Markdown text, sometimes with images (posters), and search tools also
 attach `structuredContent` rows. The 12 tools marked ★ are also the only tools the dashboard's Query chat
 can use. **Changes** marks tools that change something in your services.

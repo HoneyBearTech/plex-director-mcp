@@ -53,9 +53,9 @@ What works today:
   answers.
 
 **Working with other AI clients**
-- **Planned:** routing guidance for the tools written once and shared by the MCP server's `instructions`,
-  a `SKILL.md` in the Agent Skills format, and the Query chat's system prompt, so the three cannot drift
-  apart.
+- **Done (October 2026):** routing guidance for the tools written once (`src/guidance.ts`) and shared by
+  the MCP server's `instructions`, a [`SKILL.md`](../skills/plex-director/SKILL.md) in the Agent Skills
+  format, and the Query chat's system prompt, so the three cannot drift apart.
 - **Planned:** a listing in the [official MCP registry](https://registry.modelcontextprotocol.io/): a
   `server.json` describing the Docker image, the registry label on the image, and a release job that
   publishes each new version.

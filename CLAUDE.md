@@ -37,7 +37,8 @@ Update these as work lands: tick roadmap checkboxes, add a Pass-Map row, add a d
 - `npm ci` — install root deps; `cd web && npm ci` for the frontend
 - `npm start` — run the MCP server + dashboard (`tsx src/index.ts`; dashboard on `WEB_PORT`, default 3000)
 - `cd web && npm run dev` — frontend dev server; `npm run build` — production build to `web/dist`
-- `npm test` — full test suite (node:test via tsx)
+- `npm test` — full test suite (node:test via tsx); `npm run test:coverage` is what CI runs (80% line floor)
+- `npm run build:skill` — regenerate `skills/plex-director/SKILL.md` after editing `src/guidance.ts` (a test fails if it's stale)
 - `npx tsc --noEmit` — typecheck (run in root and in `web/`)
 - `npm audit --audit-level=high` — the CI audit gate (run in root and in `web/`)
 - Lint / format: not set up yet (planned; see roadmap)

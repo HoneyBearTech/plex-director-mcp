@@ -3,14 +3,18 @@ import type { MessageParam, TextBlock, ToolResultBlockParam, ToolUnion, ToolUseB
 import { movieTools } from "../tools/movies.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { MediaRow } from "../tools/plex.js";
+import { chatGuidance } from "../guidance.js";
 
 const MODEL = "claude-sonnet-5";
 const MAX_TOOL_ROUNDS = 4;
 
 const SUPPORTED_IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/gif", "image/webp"]);
 
-const SYSTEM_PROMPT = [
+export const SYSTEM_PROMPT = [
   "You are a media-library assistant for a home Plex/Radarr/Sonarr stack. Use the available tools to answer questions about the movie and TV library - never guess. Tool results are authoritative: report what a tool returns rather than dropping or second-guessing rows based on your own knowledge of a movie.",
+
+  // Shared with the MCP server's instructions and the Agent Skill.
+  chatGuidance(new Set(movieTools.map((t) => t.name))),
 
   "HOW RESULTS ARE SHOWN: when a search tool returns movies or shows, the interface displays them to the user as a table with posters directly BELOW your reply, one row per title with the Plex libraries that hold it (shows also get season and episode counts and watch progress; Sonarr completeness results show how many aired episodes are downloaded instead of libraries). The table always contains everything the tool returned, so never say anything is missing from it, never mention rows, limits, paging, offsets or 'the first N', and refer to it as \"the table below\" (never \"above\").",
 

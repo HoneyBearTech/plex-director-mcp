@@ -1,7 +1,9 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { buildHistoryMessages, mergeToolRows } from "../src/web/chat.js";
+import { buildHistoryMessages, mergeToolRows, SYSTEM_PROMPT } from "../src/web/chat.js";
+import { chatGuidance, ROUTES } from "../src/guidance.js";
+import { movieTools } from "../src/tools/movies.js";
 import type { MediaRow } from "../src/tools/plex.js";
 
 const row = (title: string, libraries: string[] | null, year: number | null = 2000): MediaRow => ({
@@ -122,3 +124,14 @@ describe("mergeToolRows", () => {
   });
 });
 
+
+describe("chat system prompt", () => {
+  it("carries the shared guidance, limited to the chat's own read-only tools", () => {
+    const chatTools = new Set(movieTools.map((t) => t.name));
+    assert.ok(SYSTEM_PROMPT.includes(chatGuidance(chatTools)), "shared guidance from src/guidance.ts");
+    const named = new Set(ROUTES.flatMap((r) => r.tools).filter((t) => SYSTEM_PROMPT.includes(t)));
+    assert.deepEqual([...named].filter((t) => !chatTools.has(t)), [], "the prompt names a tool the chat can't call");
+    for (const tool of chatTools) assert.ok(named.has(tool), `${tool} is missing from the chat's guidance`);
+    assert.doesNotMatch(SYSTEM_PROMPT, /PURGE_STALLED|confirm_selected_choices/);
+  });
+});
