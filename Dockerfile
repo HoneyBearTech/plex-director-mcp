@@ -38,6 +38,10 @@ COPY --from=frontend-builder /app/web/dist ./web/dist
 
 EXPOSE 3000
 
+# Proves to the official MCP registry that this image belongs to the
+# server.json entry of the same name (see .github/workflows/ci.yml).
+LABEL io.modelcontextprotocol.server.name="io.github.HoneyBearTech/plex-director-mcp"
+
 # The runtime image has no shell, curl or wget, so the check is Node itself:
 # GET /healthz (public, needs no login) on the port the dashboard listens on.
 # start-period covers the first boot, when the SQLite schema is created.

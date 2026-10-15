@@ -9,6 +9,10 @@ a security problem.
 
 ### Added
 
+- **Official MCP registry listing.** `server.json` describes the Docker image for the
+  [MCP registry](https://registry.modelcontextprotocol.io/), the image carries the registry's
+  `io.modelcontextprotocol.server.name` label, and each version tag publishes the listing from CI using
+  GitHub OIDC (no stored token). CI also checks on every pull request that the label matches `server.json`.
 - **TV shows.** The Plex search finds TV shows as well as movies, with their season and episode counts and
   how much you have watched (#44), and an actor's filmography includes TV shows, matched to Plex by TMDb id
   (#45).
