@@ -1,0 +1,1009 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Plex Director dashboard API",
+    "version": "1.1.0",
+    "summary": "The JSON API behind the Plex Director web dashboard.",
+    "description": "The HTTP API served by the Plex Director web dashboard (src/web/app.ts and src/web/routes/). It is the dashboard's own API, served on the same origin as the dashboard, and may change between versions.\n\nAuthentication: when the WEB_PASSWORD environment variable is set, every /api route except /api/auth/status, /api/auth/login and /api/auth/logout requires the pd_session cookie set by POST /api/auth/login, and answers 401 without it. When WEB_PASSWORD is unset, no route requires authentication. /healthz and the static dashboard files are always public.\n\nAll requests share a rate limit of 300 per minute per client address (429 when exceeded). JSON request bodies are limited to 1 MB (413 when exceeded). Errors are {\"error\": \"...\"}. Any other path under /api returns 404 {\"error\": \"Not found\"}.",
+    "license": {
+      "name": "MIT",
+      "identifier": "MIT"
+    }
+  },
+  "externalDocs": {
+    "description": "External interfaces",
+    "url": "https://github.com/HoneyBearTech/plex-director-mcp/blob/main/docs/interfaces.md"
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "The dashboard's own origin, e.g. http://<host>:3000 (WEB_PORT)"
+    }
+  ],
+  "security": [
+    {
+      "sessionCookie": []
+    }
+  ],
+  "tags": [
+    { "name": "health", "description": "Liveness check." },
+    { "name": "auth", "description": "Sign-in with the shared WEB_PASSWORD." },
+    { "name": "status", "description": "Plex streams and watch statistics, via Tautulli." },
+    { "name": "nodes", "description": "Linux host health over SSH, and SSH host key approval." },
+    { "name": "queues", "description": "SABnzbd and qBittorrent download queues." },
+    { "name": "indexers", "description": "Prowlarr indexer health." },
+    { "name": "jobs", "description": "Background batch jobs (read-only)." },
+    { "name": "settings", "description": "Service connection settings. Secrets are write-only." },
+    { "name": "chat", "description": "The Query chat, answered by Claude with read-only tools." },
+    { "name": "plex", "description": "Plex artwork proxy." }
+  ],
+  "paths": {
+    "/healthz": {
+      "get": {
+        "tags": ["health"],
+        "operationId": "getHealth",
+        "summary": "Health check",
+        "description": "Always public. Used by the image's built-in Docker health check.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "The server is up.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/auth/status": {
+      "get": {
+        "tags": ["auth"],
+        "operationId": "getAuthStatus",
+        "summary": "Whether sign-in is required, and whether this browser is signed in",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Authentication state.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/AuthStatus" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "login",
+        "summary": "Sign in with WEB_PASSWORD",
+        "description": "On success sets the pd_session cookie (HttpOnly, SameSite=Strict, Path=/, Max-Age 7 days, Secure when the request arrived over HTTPS). When WEB_PASSWORD is unset it answers 200 without setting a cookie. Failed attempts are limited to 10 per 15 minutes per client address.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/LoginRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Signed in.",
+            "headers": {
+              "Set-Cookie": {
+                "description": "pd_session=<expiry>.<signature>; HttpOnly; SameSite=Strict; Path=/",
+                "schema": { "type": "string" }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "401": {
+            "description": "Incorrect password. No cookie is set.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Incorrect password." }
+              }
+            }
+          },
+          "429": {
+            "description": "Too many failed sign-ins from this address.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Too many failed login attempts. Try again in a few minutes." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "tags": ["auth"],
+        "operationId": "logout",
+        "summary": "Sign out in this browser",
+        "description": "Clears the pd_session cookie. Sessions are stateless, so this does not revoke a copied cookie; changing WEB_PASSWORD ends every session.",
+        "security": [],
+        "responses": {
+          "200": {
+            "description": "Cookie cleared.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/status/activity": {
+      "get": {
+        "tags": ["status"],
+        "operationId": "getPlexActivity",
+        "summary": "Live Plex streams, via Tautulli",
+        "responses": {
+          "200": {
+            "description": "Current streams.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/PlexActivity" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/status/library-analytics": {
+      "get": {
+        "tags": ["status"],
+        "operationId": "getLibraryAnalytics",
+        "summary": "Watch statistics, via Tautulli",
+        "description": "Tautulli's home statistics categories, each with up to 5 rows.",
+        "responses": {
+          "200": {
+            "description": "Watch statistics.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/LibraryAnalytics" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/status/image": {
+      "get": {
+        "tags": ["status"],
+        "operationId": "getTautulliImage",
+        "summary": "Artwork through Tautulli's image proxy",
+        "description": "Fetches a 150x225 image through Tautulli's pms_image_proxy so the Tautulli API key stays on the server. Only Plex metadata thumb or art paths are accepted; anything else is rejected before any request is made.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "description": "A Plex artwork path, e.g. /library/metadata/12345/thumb/167834923.",
+            "schema": {
+              "type": "string",
+              "pattern": "^/library/metadata/\\d+/(thumb|art)/\\d+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Image" },
+          "400": { "$ref": "#/components/responses/InvalidImagePath" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/nodes/health": {
+      "get": {
+        "tags": ["nodes"],
+        "operationId": "getNodeHealth",
+        "summary": "Health of each configured SSH host",
+        "description": "Probes every host in UBUNTU_HOSTS over SSH (one connection per host). A host that cannot be probed is returned with online=false and the reason; a host whose SSH key changed also carries hostKeyChanged. An empty list when no hosts are configured.",
+        "responses": {
+          "200": {
+            "description": "One entry per configured host.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["hosts"],
+                  "properties": {
+                    "hosts": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/HostHealth" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/nodes/trust-new-key": {
+      "post": {
+        "tags": ["nodes"],
+        "operationId": "trustNewHostKey",
+        "summary": "Forget a host's remembered SSH key",
+        "description": "For a host whose key legitimately changed (rebuilt or reinstalled): forgets the remembered fingerprint so the next probe trusts whatever key the host presents. Only a host in the configured host list can be named.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["host"],
+                "properties": {
+                  "host": {
+                    "type": "string",
+                    "description": "The host exactly as configured in UBUNTU_HOSTS, including any :port.",
+                    "examples": ["192.168.1.10", "192.168.1.11:2222"]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The remembered key, if any, was forgotten.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["ok", "hadRememberedKey"],
+                  "properties": {
+                    "ok": { "type": "boolean", "const": true },
+                    "hadRememberedKey": {
+                      "type": "boolean",
+                      "description": "Whether a key had been remembered for the host."
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": {
+            "description": "The host is not in the configured host list.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/queues/sabnzbd": {
+      "get": {
+        "tags": ["queues"],
+        "operationId": "getSabnzbdQueue",
+        "summary": "SABnzbd download queue",
+        "responses": {
+          "200": {
+            "description": "Queue slots.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/SabnzbdItem" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/queues/qbittorrent": {
+      "get": {
+        "tags": ["queues"],
+        "operationId": "getQbittorrentQueue",
+        "summary": "qBittorrent downloading torrents",
+        "responses": {
+          "200": {
+            "description": "Torrents in the downloading state.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["items"],
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": { "$ref": "#/components/schemas/QbittorrentItem" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/indexers/health": {
+      "get": {
+        "tags": ["indexers"],
+        "operationId": "getIndexerHealth",
+        "summary": "Prowlarr indexer health",
+        "description": "Every Prowlarr indexer with its state, most troubled first, and Prowlarr's own health warnings.",
+        "responses": {
+          "200": {
+            "description": "Indexers and warnings.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/IndexerHealth" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    },
+    "/api/jobs": {
+      "get": {
+        "tags": ["jobs"],
+        "operationId": "listJobs",
+        "summary": "The 50 most recent background jobs",
+        "description": "Read-only. Jobs are created, started, paused and cancelled through the MCP tools, never through this API.",
+        "responses": {
+          "200": {
+            "description": "Jobs, newest first.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": ["jobs"],
+                  "properties": {
+                    "jobs": {
+                      "type": "array",
+                      "maxItems": 50,
+                      "items": { "$ref": "#/components/schemas/Job" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "500": {
+            "description": "The database could not be read.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "tags": ["settings"],
+        "operationId": "getSettings",
+        "summary": "Current service settings",
+        "description": "Plain fields are returned as strings (empty when unset). Secret fields (API keys, tokens, the qBittorrent password) are never returned; only whether they are set.",
+        "responses": {
+          "200": {
+            "description": "Settings for every service.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/SettingsResponse" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/settings/{service}": {
+      "put": {
+        "tags": ["settings"],
+        "operationId": "updateServiceSettings",
+        "summary": "Save one service's settings",
+        "description": "Only the fields listed for that service are read; others are ignored. A field that is omitted or not a string is left unchanged. Values are trimmed. A blank secret keeps the stored secret; a blank plain field clears it. Saved values override the environment from then on, and the service clients pick them up immediately.\n\nFields per service: sonarr, prowlarr, sabnzbd, tautulli: url, apiKey (secret). radarr: url, apiKey (secret), defaultQualityProfile. qbittorrent: url, username, password (secret). plex: url, token (secret), skipLibraries. tmdb: apiKey (secret). nodes: hosts, sshUser.",
+        "parameters": [
+          {
+            "name": "service",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["sonarr", "radarr", "prowlarr", "sabnzbd", "qbittorrent", "tautulli", "plex", "tmdb", "nodes"]
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ServiceSettingsUpdate" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Saved.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Ok" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "404": {
+            "description": "Unknown service.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "Unknown service: lidarr" }
+              }
+            }
+          },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" }
+        }
+      }
+    },
+    "/api/chat/movies": {
+      "post": {
+        "tags": ["chat"],
+        "operationId": "askQueryChat",
+        "summary": "Ask the Query chat a question",
+        "description": "Sends the question and recent history to the Anthropic API with the 12 read-only library tools, runs the tools the model asks for (at most 4 rounds), and returns the answer. History is untrusted input: only well-formed turns are kept, at most the last 12, each cut to 4,000 characters. Needs ANTHROPIC_API_KEY on the server.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatRequest" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The answer.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatAnswer" }
+              }
+            }
+          },
+          "400": {
+            "description": "No question was given.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "question is required" }
+              }
+            }
+          },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": {
+            "description": "The Anthropic API or a tool failed, or ANTHROPIC_API_KEY is not configured.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" },
+                "example": { "error": "ANTHROPIC_API_KEY is not configured on the server." }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/plex/image": {
+      "get": {
+        "tags": ["plex"],
+        "operationId": "getPlexImage",
+        "summary": "Poster thumbnail through Plex's transcoder",
+        "description": "Fetches a 150x225 thumbnail through Plex's /photo/:/transcode so the Plex token stays on the server. Only Plex metadata thumb paths are accepted; anything else is rejected before any request is made.",
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": true,
+            "description": "A Plex poster path, e.g. /library/metadata/91684/thumb/1789285096.",
+            "schema": {
+              "type": "string",
+              "pattern": "^/library/metadata/\\d+/thumb/\\d+$"
+            }
+          }
+        ],
+        "responses": {
+          "200": { "$ref": "#/components/responses/Image" },
+          "400": { "$ref": "#/components/responses/InvalidImagePath" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "429": { "$ref": "#/components/responses/TooManyRequests" },
+          "502": { "$ref": "#/components/responses/UpstreamError" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "sessionCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "pd_session",
+        "description": "Set by POST /api/auth/login. Required only when WEB_PASSWORD is set. The value is <expiry in ms>.<base64url HMAC-SHA-256>, valid for 7 days."
+      }
+    },
+    "responses": {
+      "Unauthorized": {
+        "description": "WEB_PASSWORD is set and the request has no valid session cookie.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "Authentication required" }
+          }
+        }
+      },
+      "TooManyRequests": {
+        "description": "More than 300 requests in a minute from this address. The body is a short text message; RateLimit headers describe the limit.",
+        "content": {
+          "text/html": {
+            "schema": { "type": "string" }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "The JSON body is larger than 1 MB."
+      },
+      "UpstreamError": {
+        "description": "The service behind this route failed, timed out (10 seconds) or is not configured.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" }
+          }
+        }
+      },
+      "InvalidImagePath": {
+        "description": "The path is not an accepted Plex artwork path.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": "invalid image path" }
+          }
+        }
+      },
+      "Image": {
+        "description": "The image, with the content type the upstream server reported (image/jpeg by default) and Cache-Control: public, max-age=86400.",
+        "content": {
+          "image/*": {
+            "schema": { "type": "string", "contentMediaType": "image/*" }
+          }
+        }
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": { "type": "string" }
+        }
+      },
+      "Ok": {
+        "type": "object",
+        "required": ["ok"],
+        "properties": {
+          "ok": { "type": "boolean", "const": true }
+        }
+      },
+      "AuthStatus": {
+        "type": "object",
+        "required": ["authRequired", "authenticated"],
+        "properties": {
+          "authRequired": { "type": "boolean", "description": "Whether WEB_PASSWORD is set." },
+          "authenticated": { "type": "boolean", "description": "True when no sign-in is required or the session cookie is valid." }
+        }
+      },
+      "LoginRequest": {
+        "type": "object",
+        "required": ["password"],
+        "properties": {
+          "password": { "type": "string", "format": "password" }
+        }
+      },
+      "PlexActivity": {
+        "type": "object",
+        "required": ["streamCount", "transcodeCount", "directPlayCount", "sessions"],
+        "properties": {
+          "streamCount": { "type": "integer" },
+          "transcodeCount": { "type": "integer" },
+          "directPlayCount": { "type": "integer" },
+          "sessions": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/StreamSession" }
+          }
+        }
+      },
+      "StreamSession": {
+        "type": "object",
+        "properties": {
+          "user": { "type": "string" },
+          "userThumb": { "type": ["string", "null"], "description": "The viewer's avatar URL as Tautulli reports it." },
+          "title": { "type": "string" },
+          "year": { "type": ["integer", "string", "null"] },
+          "resolution": { "type": ["string", "null"] },
+          "container": { "type": ["string", "null"] },
+          "transcoding": { "type": "boolean" },
+          "progress": { "type": "number", "description": "Percent played." },
+          "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/status/image URL." }
+        }
+      },
+      "LibraryAnalytics": {
+        "type": "object",
+        "required": ["categories"],
+        "properties": {
+          "categories": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["title", "rows"],
+              "properties": {
+                "title": { "type": "string" },
+                "rows": {
+                  "type": "array",
+                  "maxItems": 5,
+                  "items": {
+                    "type": "object",
+                    "required": ["label", "plays", "posterUrl", "userThumb"],
+                    "properties": {
+                      "label": { "type": "string" },
+                      "plays": { "type": "number" },
+                      "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/status/image URL, for media categories." },
+                      "userThumb": { "type": ["string", "null"], "description": "An avatar URL, for the top users category." }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "HostHealth": {
+        "oneOf": [
+          { "$ref": "#/components/schemas/OnlineHostHealth" },
+          { "$ref": "#/components/schemas/OfflineHostHealth" }
+        ],
+        "description": "online tells the two shapes apart."
+      },
+      "OnlineHostHealth": {
+        "type": "object",
+        "required": ["host", "hostname", "online", "cpuPercent", "ramPercent", "ramUsedMb", "ramTotalMb", "containersRunning", "deadContainers", "diskPercent", "diskUsed", "diskTotal", "uptime"],
+        "properties": {
+          "host": { "type": "string", "description": "As configured, including any :port." },
+          "hostname": { "type": "string" },
+          "online": { "type": "boolean", "const": true },
+          "cpuPercent": { "type": "number" },
+          "ramPercent": { "type": "number" },
+          "ramUsedMb": { "type": "number" },
+          "ramTotalMb": { "type": "number" },
+          "containersRunning": { "type": "integer" },
+          "deadContainers": { "type": "array", "items": { "type": "string" }, "description": "Names of exited or dead containers." },
+          "diskPercent": { "type": "number", "description": "Root filesystem use." },
+          "diskUsed": { "type": "string", "examples": ["55G"] },
+          "diskTotal": { "type": "string", "examples": ["115G"] },
+          "uptime": { "type": "string", "examples": ["2w 1d"] }
+        }
+      },
+      "OfflineHostHealth": {
+        "type": "object",
+        "required": ["host", "hostname", "online", "error"],
+        "properties": {
+          "host": { "type": "string" },
+          "hostname": { "type": "string" },
+          "online": { "type": "boolean", "const": false },
+          "error": { "type": "string", "description": "Why the probe failed." },
+          "hostKeyChanged": {
+            "type": "object",
+            "description": "Present when the host presented a different SSH key than the one remembered.",
+            "required": ["expected", "actual"],
+            "properties": {
+              "expected": { "type": "string", "description": "Remembered fingerprint, SHA256:<base64>." },
+              "actual": { "type": "string", "description": "Presented fingerprint, SHA256:<base64>." }
+            }
+          }
+        }
+      },
+      "SabnzbdItem": {
+        "type": "object",
+        "required": ["percentage", "sizeMb", "sizeLeftMb"],
+        "properties": {
+          "filename": { "type": "string" },
+          "status": { "type": "string" },
+          "percentage": { "type": "number" },
+          "timeleft": { "type": "string" },
+          "sizeMb": { "type": "number" },
+          "sizeLeftMb": { "type": "number" }
+        }
+      },
+      "QbittorrentItem": {
+        "type": "object",
+        "required": ["progress", "dlspeedKbps", "sizeBytes", "seeders", "stalled"],
+        "properties": {
+          "name": { "type": "string" },
+          "state": { "type": "string" },
+          "progress": { "type": "number", "description": "0 to 1." },
+          "dlspeedKbps": { "type": "number" },
+          "sizeBytes": { "type": "number" },
+          "seeders": { "type": "integer" },
+          "stalled": { "type": "boolean", "description": "True when qBittorrent reports stalledDL." }
+        }
+      },
+      "IndexerHealth": {
+        "type": "object",
+        "required": ["indexers", "warnings"],
+        "properties": {
+          "indexers": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/IndexerRow" }
+          },
+          "warnings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["type", "source", "message"],
+              "properties": {
+                "type": { "type": "string" },
+                "source": { "type": "string" },
+                "message": { "type": "string" }
+              }
+            }
+          }
+        }
+      },
+      "IndexerRow": {
+        "type": "object",
+        "required": ["id", "name", "protocol", "priority", "enabled", "state", "mostRecentFailure", "disabledTill", "escalationLevel"],
+        "properties": {
+          "id": { "type": "integer" },
+          "name": { "type": "string" },
+          "protocol": { "type": "string" },
+          "priority": { "type": "number" },
+          "enabled": { "type": "boolean" },
+          "state": { "type": "string", "enum": ["healthy", "warning", "backing-off", "disabled"] },
+          "mostRecentFailure": { "type": ["string", "null"], "format": "date-time" },
+          "disabledTill": { "type": ["string", "null"], "format": "date-time", "description": "Set only while Prowlarr is backing off." },
+          "escalationLevel": { "type": "number" }
+        }
+      },
+      "Job": {
+        "type": "object",
+        "required": ["id", "taskName", "status", "totalItems", "processedItems", "createdAt", "updatedAt"],
+        "properties": {
+          "id": { "type": "integer" },
+          "taskName": { "type": "string" },
+          "status": { "type": "string", "enum": ["PENDING", "RUNNING", "PAUSED", "COMPLETED", "CANCELLED"] },
+          "totalItems": { "type": "integer" },
+          "processedItems": { "type": "integer" },
+          "createdAt": { "type": ["string", "null"], "format": "date-time" },
+          "updatedAt": { "type": ["string", "null"], "format": "date-time" }
+        }
+      },
+      "SecretStatus": {
+        "type": "object",
+        "required": ["configured"],
+        "properties": {
+          "configured": { "type": "boolean", "description": "Whether a value is stored. The value itself is never returned." }
+        }
+      },
+      "SettingsResponse": {
+        "type": "object",
+        "required": ["sonarr", "radarr", "prowlarr", "sabnzbd", "qbittorrent", "tautulli", "plex", "tmdb", "nodes"],
+        "properties": {
+          "sonarr": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "radarr": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" },
+              "defaultQualityProfile": { "type": "string" }
+            }
+          },
+          "prowlarr": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "sabnzbd": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "qbittorrent": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "username": { "type": "string" },
+              "password": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "tautulli": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "plex": {
+            "type": "object",
+            "properties": {
+              "url": { "type": "string" },
+              "token": { "$ref": "#/components/schemas/SecretStatus" },
+              "skipLibraries": { "type": "string", "description": "Comma-separated Plex library names left out of searches." }
+            }
+          },
+          "tmdb": {
+            "type": "object",
+            "properties": {
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+            }
+          },
+          "nodes": {
+            "type": "object",
+            "properties": {
+              "hosts": { "type": "string", "description": "Comma-separated SSH hosts, each optionally with :port." },
+              "sshUser": { "type": "string" }
+            }
+          }
+        }
+      },
+      "ServiceSettingsUpdate": {
+        "type": "object",
+        "description": "Any subset of the fields for the service in the path. Fields that do not belong to that service are ignored.",
+        "properties": {
+          "url": { "type": "string", "description": "All services except tmdb and nodes." },
+          "apiKey": { "type": "string", "format": "password", "description": "Secret. sonarr, radarr, prowlarr, sabnzbd, tautulli, tmdb. Blank keeps the stored value." },
+          "defaultQualityProfile": { "type": "string", "description": "radarr only." },
+          "username": { "type": "string", "description": "qbittorrent only." },
+          "password": { "type": "string", "format": "password", "description": "Secret. qbittorrent only. Blank keeps the stored value." },
+          "token": { "type": "string", "format": "password", "description": "Secret. plex only. Blank keeps the stored value." },
+          "skipLibraries": { "type": "string", "description": "plex only." },
+          "hosts": { "type": "string", "description": "nodes only." },
+          "sshUser": { "type": "string", "description": "nodes only." }
+        },
+        "additionalProperties": true
+      },
+      "ChatRequest": {
+        "type": "object",
+        "required": ["question"],
+        "properties": {
+          "question": { "type": "string", "minLength": 1 },
+          "history": {
+            "type": "array",
+            "description": "Earlier turns of this conversation, oldest first. Malformed entries are dropped; only the last 12 are used.",
+            "items": { "$ref": "#/components/schemas/ChatTurn" }
+          }
+        }
+      },
+      "ChatTurn": {
+        "type": "object",
+        "required": ["role", "text"],
+        "properties": {
+          "role": { "type": "string", "enum": ["user", "assistant"] },
+          "text": { "type": "string", "description": "Cut to 4,000 characters." },
+          "media": {
+            "type": "array",
+            "description": "Rows the dashboard showed under an assistant turn. Only kind, title, year and libraries are used, and a summary of at most 25 rows is given to the model.",
+            "items": {
+              "type": "object",
+              "required": ["title"],
+              "properties": {
+                "kind": { "type": "string", "enum": ["movie", "show"] },
+                "title": { "type": "string" },
+                "year": { "type": ["integer", "null"] },
+                "libraries": { "type": ["array", "null"], "items": { "type": "string" } }
+              }
+            }
+          }
+        }
+      },
+      "ChatAnswer": {
+        "type": "object",
+        "required": ["text", "images", "media"],
+        "properties": {
+          "text": { "type": "string", "description": "The reply, in light Markdown (bold, italics, code, bullets)." },
+          "images": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["mimeType", "data"],
+              "properties": {
+                "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/gif", "image/webp"] },
+                "data": { "type": "string", "contentEncoding": "base64" }
+              }
+            }
+          },
+          "media": {
+            "type": "array",
+            "description": "Rows for the results table.",
+            "items": { "$ref": "#/components/schemas/MediaRow" }
+          }
+        }
+      },
+      "MediaRow": {
+        "type": "object",
+        "required": ["kind", "title", "year", "posterUrl", "libraries", "genres", "rating", "detail"],
+        "properties": {
+          "kind": { "type": "string", "enum": ["movie", "show"] },
+          "title": { "type": "string" },
+          "year": { "type": ["integer", "null"] },
+          "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/plex/image URL or a public image URL, never a URL carrying the Plex token." },
+          "libraries": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Plex libraries holding it. Empty = not in Plex; null = not checked." },
+          "genres": { "type": "array", "items": { "type": "string" } },
+          "rating": { "type": ["number", "null"] },
+          "detail": { "type": ["string", "null"], "description": "Extra context, e.g. the role an actor played." },
+          "show": {
+            "type": "object",
+            "description": "Only on shows.",
+            "properties": {
+              "seasons": { "type": ["integer", "null"] },
+              "episodes": { "type": ["integer", "null"] },
+              "watchedEpisodes": { "type": ["integer", "null"] },
+              "ownedEpisodes": { "type": ["integer", "null"], "description": "Set by the Sonarr tools: aired episodes downloaded." },
+              "network": { "type": ["string", "null"] }
+            }
+          },
+          "lastWatched": { "type": ["string", "null"], "description": "YYYY-MM-DD, null for never, or \"date unknown\"." },
+          "added": { "type": ["string", "null"], "description": "YYYY-MM-DD." }
+        }
+      }
+    }
+  }
+}

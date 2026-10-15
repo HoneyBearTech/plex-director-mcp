@@ -3,6 +3,8 @@
 [![CI/CD](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/ci.yml)
 [![CodeQL](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml/badge.svg)](https://github.com/HoneyBearTech/plex-director-mcp/actions/workflows/codeql.yml)
 [![OpenSSF Scorecard](https://api.scorecard.dev/projects/github.com/HoneyBearTech/plex-director-mcp/badge)](https://scorecard.dev/viewer/?uri=github.com/HoneyBearTech/plex-director-mcp)
+[![OpenSSF Best Practices](https://www.bestpractices.dev/projects/15521/badge)](https://www.bestpractices.dev/projects/15521)
+[![OpenSSF Baseline](https://www.bestpractices.dev/projects/15521/baseline)](https://www.bestpractices.dev/projects/15521)
 [![Docker Pulls](https://img.shields.io/docker/pulls/honeybeartech/plex-director-mcp?logoColor=white&logo=docker)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
 [![Docker Version](https://img.shields.io/github/v/tag/HoneyBearTech/plex-director-mcp?sort=semver&logo=docker&logoColor=white&label=version)](https://hub.docker.com/r/honeybeartech/plex-director-mcp/tags)
 [![Image Size](https://img.shields.io/docker/image-size/honeybeartech/plex-director-mcp/latest?logo=docker&logoColor=white)](https://hub.docker.com/r/honeybeartech/plex-director-mcp)
@@ -16,8 +18,24 @@
 
 It is built for a home-run setup: run it on your LAN, next to the apps it talks to.
 
+> [!WARNING]
+> Plex Director holds the API keys for every service you connect and can change them, not just read them: it adds movies to Radarr and starts download searches, removes stalled torrents from qBittorrent, runs batch upgrade jobs, and triggers Servarr backups. Adding movies goes through a pick-then-confirm step and batch jobs are planned before they run, but purging stalled torrents and starting backups happen as soon as they are asked for, and the chat and Claude Desktop act with your keys. Set `WEB_PASSWORD`, keep the dashboard off the public internet, and see [Security requirements](docs/security.md).
+
+## Documentation
+
+- [Quick start](docs/quick-start.md), [installing](docs/installing.md), [upgrading and backups](docs/upgrading.md) and [verifying releases](docs/verifying-releases.md).
+- The [user guide](docs/user-guide/README.md): the dashboard pages, the Query chat and the MCP tools. The [documentation index](docs/README.md) lists everything.
+- [Architecture](docs/architecture.md): the components, who uses them, and how a question flows through them.
+- [Security requirements](docs/security.md): what Plex Director does and doesn't protect against, and the [assurance case](docs/assurance-case.md) behind it.
+- [Roadmap](docs/roadmap.md): where the project is going, and what it won't do.
+- [Accessibility](docs/accessibility.md): what the dashboard does today and the known gaps.
+- [External interfaces](docs/interfaces.md) (the dashboard's HTTP API is described in [docs/api/openapi.json](docs/api/openapi.json)) and [dependencies and vulnerability management](docs/dependencies.md).
+- [Support](SUPPORT.md): which versions get fixes, and for how long. [Changelog](CHANGELOG.md).
+- [Contributing](CONTRIBUTING.md), [Code of Conduct](CODE_OF_CONDUCT.md), [Governance](GOVERNANCE.md) and [reporting a vulnerability](SECURITY.md).
+
 ## Contents
 
+- [Documentation](#documentation)
 - [What it can do](#what-it-can-do)
 - [Quick start](#quick-start)
 - [Docker](#docker)
@@ -337,6 +355,8 @@ Requires Node.js 24.
 git clone https://github.com/HoneyBearTech/plex-director-mcp.git
 cd plex-director-mcp
 npm install
+# Build the dashboard; without this the web UI has nothing to serve.
+cd web && npm install && npm run build && cd ..
 ```
 
 Create a `.env` file in the repo root with the services you use (all optional; you can also enter service details later on the Settings page):

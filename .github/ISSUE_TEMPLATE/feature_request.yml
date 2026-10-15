@@ -1,0 +1,41 @@
+name: Feature request
+description: Suggest something Plex Director could do, or do better.
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Plex Director has one maintainer, so it helps to know the problem you want solved,
+        not only the solution you have in mind. Please don't include API keys, tokens or passwords.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What do you want to do?
+      description: The question you want to ask, or the job you want done, and why it matters to you.
+      placeholder: |
+        I'd like to ask "which of my shows have new episodes I haven't watched?" because...
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: How might it work?
+      description: A new MCP tool, a change to an existing one, something on the dashboard, a new setting...
+  - type: input
+    id: services
+    attributes:
+      label: Which services would it use?
+      description: For example Plex, Radarr, Sonarr, Prowlarr, SABnzbd, qBittorrent, Tautulli or TMDb.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: What do you do today instead?
+      description: Workarounds, or other tools you have tried.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before you submit
+      options:
+        - label: I searched the existing issues and this hasn't been suggested yet.
+          required: true
+        - label: I'd be willing to open a pull request for this (see CONTRIBUTING.md).

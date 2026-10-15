@@ -5,6 +5,7 @@
   "main": "index.js",
   "scripts": {
     "test": "node --import tsx --test \"test/**/*.test.ts\"",
+    "test:coverage": "node --import tsx --test --experimental-test-coverage --test-coverage-exclude=\"test/**\" --test-coverage-lines=80 \"test/**/*.test.ts\"",
     "start": "tsx src/index.ts"
   },
   "repository": {
