@@ -178,22 +178,6 @@ jobs:
           sbom: true
           provenance: mode=max
 
-      # Non-blocking for now (exit-code: false) so a baseline can be reviewed
-      # before deciding whether to gate the pipeline on it. Results land in
-      # this job's summary. Flip exit-code to true once you're ready to fail
-      # the build on new critical/high CVEs. Pinned to amd64 since CVE data
-      # doesn't differ meaningfully by architecture and scanning both would
-      # just double this step's runtime.
-      - name: Docker Scout - CVE scan
-        if: github.event_name == 'push'
-        uses: docker/scout-action@221e7f4860634eeb1579e3bd7ca232e577bd1864 # v1.26.0
-        with:
-          command: cves
-          image: docker.io/honeybeartech/plex-director-mcp@${{ steps.build.outputs.digest }}
-          platform: linux/amd64
-          only-severities: critical,high
-          exit-code: false
-
       # Keyless signing via GitHub's OIDC token (no key management) - lets
       # anyone verify an image genuinely came from this repo's workflow, e.g.
       # `cosign verify --certificate-identity-regexp ... ghcr.io/.../plex-director-mcp@sha256:...`.
@@ -207,6 +191,28 @@ jobs:
         run: |
           cosign sign --yes "${{ steps.image.outputs.name }}@${DIGEST}"
           cosign sign --yes "docker.io/honeybeartech/plex-director-mcp@${DIGEST}"
+
+      # Runs after signing so a scanner problem can never leave a pushed image
+      # unsigned (it did on 2026-10-15, when scout-action 1.26.0 started
+      # rejecting tokens made from a Docker Hub personal access token; pinned
+      # back to 1.24.0 until the token is replaced). continue-on-error covers
+      # the tool failing; exit-code: false covers findings.
+      # Non-blocking for now (exit-code: false) so a baseline can be reviewed
+      # before deciding whether to gate the pipeline on it. Results land in
+      # this job's summary. Flip exit-code to true once you're ready to fail
+      # the build on new critical/high CVEs. Pinned to amd64 since CVE data
+      # doesn't differ meaningfully by architecture and scanning both would
+      # just double this step's runtime.
+      - name: Docker Scout - CVE scan
+        if: github.event_name == 'push'
+        continue-on-error: true
+        uses: docker/scout-action@7c6b6c3f7844478ace1ffd4e7aef649053d1f87d # v1.24.0
+        with:
+          command: cves
+          image: docker.io/honeybeartech/plex-director-mcp@${{ steps.build.outputs.digest }}
+          platform: linux/amd64
+          only-severities: critical,high
+          exit-code: false
 
   release:
     name: Create GitHub Release

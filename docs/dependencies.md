@@ -45,9 +45,11 @@ which has no package manager.
   and security updates as soon as an advisory appears. Minor and patch updates are grouped into one pull
   request per ecosystem.
 - **Auto-merge** (`.github/workflows/dependabot-auto-merge.yml`): Dependabot's minor and patch updates
-  merge automatically, but only once the required checks on `main` (`check` and `publish`) pass. Major
-  updates, and major Node.js base image bumps (which Dependabot ignores, because the build and runtime
-  images must move together), wait for the maintainer.
+  to npm packages and the Docker base image merge automatically, but only once all required checks on
+  `main` pass. Major updates, GitHub Actions updates (GitHub doesn't let the workflow token enable
+  auto-merge on a pull request that edits workflow files), and major Node.js base image bumps (which
+  Dependabot ignores, because the build and runtime images must move together) wait for the maintainer.
+  `docker/scout-action` is held below 1.25, which rejects the current Docker Hub token.
 - **Every push and pull request** runs `npm audit --audit-level=high` on both npm projects in the `check`
   job of `.github/workflows/ci.yml`. A high or critical advisory anywhere in either locked dependency tree
   fails CI, which blocks merging (including Dependabot's own pull requests).
