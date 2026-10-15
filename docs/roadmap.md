@@ -56,9 +56,10 @@ What works today:
 - **Done (October 2026):** routing guidance for the tools written once (`src/guidance.ts`) and shared by
   the MCP server's `instructions`, a [`SKILL.md`](../skills/plex-director/SKILL.md) in the Agent Skills
   format, and the Query chat's system prompt, so the three cannot drift apart.
-- **Planned:** a listing in the [official MCP registry](https://registry.modelcontextprotocol.io/): a
-  `server.json` describing the Docker image, the registry label on the image, and a release job that
-  publishes each new version.
+- **Done (October 2026, listed from v1.2.0):** a listing in the
+  [official MCP registry](https://registry.modelcontextprotocol.io/) as
+  `io.github.HoneyBearTech/plex-director-mcp`: `server.json` describes the Docker image, the image carries
+  the registry's ownership label, and each version tag publishes the listing from CI.
 
 **Security and project health**
 - **Planned:** a linter and formatter in CI, with warnings failing the build.

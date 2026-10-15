@@ -106,6 +106,7 @@ Outside Docker, a `.env` file in the repository root is read at start-up (`src/e
 | Tags | `latest` (main), `<major>.<minor>.<patch>`, `<major>.<minor>`, `sha-<commit>` |
 | Base | `gcr.io/distroless/nodejs24-debian12`, pinned by digest; no shell or package manager |
 | Command | `dist/index.js` (the MCP server on stdio, the dashboard and the job runner) |
+| Label | `io.modelcontextprotocol.server.name=io.github.HoneyBearTech/plex-director-mcp`, matching [`server.json`](../server.json) for the official MCP registry |
 | Port | `3000/tcp` (`EXPOSE 3000`; follows `WEB_PORT`) |
 | Volume | `/app/data` (SQLite database: settings, credentials, jobs, session secret, SSH host keys). The only path written to. |
 | Optional mount | a private SSH key, read-only, at the path given in `SSH_KEY_PATH` |

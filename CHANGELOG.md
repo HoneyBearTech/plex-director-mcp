@@ -9,6 +9,10 @@ a security problem.
 
 ### Added
 
+- **Official MCP registry listing.** `server.json` describes the Docker image for the
+  [MCP registry](https://registry.modelcontextprotocol.io/), the image carries the registry's
+  `io.modelcontextprotocol.server.name` label, and each version tag publishes the listing from CI using
+  GitHub OIDC (no stored token). CI also checks on every pull request that the label matches `server.json`.
 - **Usage guidance for assistants.** The MCP server now sends `instructions` (which tool answers which
   question; confirm before changing anything), the same guidance ships as an Agent Skill in
   `skills/plex-director/SKILL.md`, and the Query chat uses it too. All three come from `src/guidance.ts`.

@@ -73,7 +73,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 
 ## Quick start
 
-The fastest way to try it is Docker Compose:
+From v1.2.0, Plex Director is listed in the [official MCP registry](https://registry.modelcontextprotocol.io/) as `io.github.HoneyBearTech/plex-director-mcp`, so MCP clients that browse the registry can install it directly ([`server.json`](server.json) lists its settings). Otherwise, the fastest way to try it is Docker Compose:
 
 ```yaml
 ---
