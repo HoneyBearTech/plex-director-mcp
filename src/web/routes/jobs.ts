@@ -20,9 +20,9 @@ function toIso(sqliteTimestamp: string | null): string | null {
   return sqliteTimestamp ? `${sqliteTimestamp.replace(" ", "T")}Z` : null;
 }
 
-// Read-only on purpose: the dashboard has no authentication, so starting,
-// pausing, or cancelling jobs (which trigger Radarr searches) stays with the
-// MCP tools (update_job_status / execute_next_job_step).
+// Read-only on purpose: the dashboard's login is optional (WEB_PASSWORD), so
+// starting, pausing, or cancelling jobs (which trigger Radarr searches) stays
+// with the MCP tools (update_job_status / execute_next_job_step).
 jobsRouter.get("/", (_req, res) => {
   try {
     const rows = db

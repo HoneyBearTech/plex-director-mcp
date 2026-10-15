@@ -275,6 +275,7 @@ Nothing is required to start the container: it boots with no configuration and l
 | Variable | Default | Description |
 | :--- | :---: | :--- |
 | `WEB_PASSWORD` | *(none)* | Requires a login for the dashboard. Changing it signs everyone out. |
+| `WEB_ALLOWED_HOSTS` | *(none)* | Only matters without `WEB_PASSWORD`: extra host names the dashboard answers to, comma-separated (e.g. `plex.example.com` behind a reverse proxy). IP addresses, `localhost`, single-word names and `.local` / `.lan` / `.home.arpa` / `.internal` names always work; any other name gets a 403, which blocks DNS-rebinding attacks. `*` turns the check off. |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Anthropic API key for the Query chat. |
 | `SSH_KEY_PATH` | *(none)* | Path (inside the container) to the private key for host monitoring. It must be readable by the container's user. |
@@ -431,6 +432,8 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 ## MCP tools
 
 Twenty-five tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
+
+The server also sends MCP clients short usage instructions: which tool answers which kind of question, and to confirm before anything that changes your services. The same guidance is in an [Agent Skill](skills/plex-director/SKILL.md) for agents that load skills (such as Claude Code), and in the Query chat's prompt. It is written once in [`src/guidance.ts`](src/guidance.ts).
 
 **Your library**
 

@@ -104,6 +104,9 @@ function ServiceSettingsForm({
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Secrets saved from this form since the page loaded, so their badge says
+  // "configured" straight away instead of waiting for a reload.
+  const [savedSecrets, setSavedSecrets] = useState<Set<string>>(new Set());
 
   async function save(e: React.FormEvent) {
     e.preventDefault();
@@ -113,6 +116,13 @@ function ServiceSettingsForm({
     try {
       await api.updateSettings(service, values);
       setSaved(true);
+      setSavedSecrets((prev) => {
+        const next = new Set(prev);
+        for (const f of fields) {
+          if (f.secret && (values[f.name] ?? "").trim() !== "") next.add(f.name);
+        }
+        return next;
+      });
       // A saved secret goes back to a blank field - typing a new value is
       // what changes it, leaving it blank keeps whatever's already stored.
       setValues((prev) => {
@@ -134,7 +144,8 @@ function ServiceSettingsForm({
       <Flex direction="column" gap="3" maxWidth="480px">
         {fields.map((f) => {
           const current = initial[f.name];
-          const configured = f.secret && typeof current === "object" && current.configured;
+          const configured =
+            f.secret && ((typeof current === "object" && current.configured) || savedSecrets.has(f.name));
           return (
             <Box key={f.name}>
               <Flex justify="between" align="center" mb="1">
@@ -207,10 +218,10 @@ export function SettingsPage() {
 
   return (
     <Flex direction="column" gap="4">
-      <Callout.Root color="amber">
+      <Callout.Root color="gray">
         <Callout.Text>
-          This page has no authentication - anyone who can reach this server can view and change these settings.
-          API keys and passwords are never sent back to the browser once saved; only whether they're set.
+          API keys and passwords are never sent back to the browser once saved; only whether they're set. Changing a
+          service's URL needs its key or password entered again.
         </Callout.Text>
       </Callout.Root>
 

@@ -53,9 +53,9 @@ What works today:
   answers.
 
 **Working with other AI clients**
-- **Planned:** routing guidance for the tools written once and shared by the MCP server's `instructions`,
-  a `SKILL.md` in the Agent Skills format, and the Query chat's system prompt, so the three cannot drift
-  apart.
+- **Done (October 2026):** routing guidance for the tools written once (`src/guidance.ts`) and shared by
+  the MCP server's `instructions`, a [`SKILL.md`](../skills/plex-director/SKILL.md) in the Agent Skills
+  format, and the Query chat's system prompt, so the three cannot drift apart.
 - **Done (October 2026, listed from v1.2.0):** a listing in the
   [official MCP registry](https://registry.modelcontextprotocol.io/) as
   `io.github.HoneyBearTech/plex-director-mcp`: `server.json` describes the Docker image, the image carries
@@ -68,8 +68,10 @@ What works today:
 - **Done (October 2026, first shipped in v1.2.0):** an SPDX SBOM and SLSA build provenance attached to every
   published image, alongside the existing cosign signatures, and the `LICENSE` file inside the image and on
   each GitHub Release.
-- **Planned:** browser hardening headers on the dashboard (a Content-Security-Policy that forbids framing,
-  `X-Content-Type-Options: nosniff`, no `X-Powered-By`) and a `Host` header check against DNS rebinding.
+- **Done (October 2026):** browser hardening headers on the dashboard (framing forbidden,
+  `X-Content-Type-Options: nosniff`, no `X-Powered-By`), a `Host` header check against DNS rebinding, and
+  saved service secrets no longer follow a changed URL.
+- **Planned:** a full Content-Security-Policy for scripts and styles.
 - **Planned:** make the image vulnerability scan block publishing on fixable critical and high findings
   (today it reports only).
 - **Planned:** an accessibility check of every dashboard page (automated and keyboard-only), see
