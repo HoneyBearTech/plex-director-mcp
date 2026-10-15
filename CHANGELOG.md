@@ -9,6 +9,9 @@ a security problem.
 
 ### Added
 
+- **Usage guidance for assistants.** The MCP server now sends `instructions` (which tool answers which
+  question; confirm before changing anything), the same guidance ships as an Agent Skill in
+  `skills/plex-director/SKILL.md`, and the Query chat uses it too. All three come from `src/guidance.ts`.
 - **TV shows.** The Plex search finds TV shows as well as movies, with their season and episode counts and
   how much you have watched (#44), and an actor's filmography includes TV shows, matched to Plex by TMDb id
   (#45).
