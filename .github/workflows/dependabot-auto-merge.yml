@@ -31,7 +31,10 @@ jobs:
       # required status checks on main's ruleset - without that, auto-merge
       # has nothing to wait for and would merge immediately.
       - name: Enable auto-merge for non-major updates
-        if: steps.metadata.outputs.update-type != 'version-update:semver-major'
+        # GitHub Actions updates edit workflow files, and the workflow token may
+        # not enable auto-merge on those (it needs the `workflows` permission),
+        # so they are left for the maintainer like major updates.
+        if: steps.metadata.outputs.update-type != 'version-update:semver-major' && steps.metadata.outputs.package-ecosystem != 'github_actions'
         run: gh pr merge --auto --squash "$PR_URL"
         env:
           PR_URL: ${{ github.event.pull_request.html_url }}

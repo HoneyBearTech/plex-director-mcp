@@ -40,6 +40,12 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
+    ignore:
+      # 1.25+ rejects tokens made from a Docker Hub personal access token, which
+      # broke publishing on 2026-10-15. Remove once DOCKERHUB_TOKEN is replaced
+      # with a token Scout accepts (see ci.yml).
+      - dependency-name: "docker/scout-action"
+        versions: [">= 1.25.0"]
     groups:
       minor-and-patch:
         update-types:
