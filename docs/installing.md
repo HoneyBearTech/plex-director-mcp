@@ -229,6 +229,7 @@ shown on the Settings page.
 | Variable | Default | What it does |
 | :--- | :---: | :--- |
 | `WEB_PASSWORD` | *(none)* | Requires a sign-in for the dashboard. **Strongly recommended.** Changing it signs everyone out. |
+| `WEB_ALLOWED_HOSTS` | *(none)* | Only used without `WEB_PASSWORD`. Extra host names the dashboard answers to, comma-separated, for example the public name a reverse proxy serves it on. IP addresses, `localhost`, single-word names and `.local`, `.lan`, `.home.arpa` and `.internal` names always work; any other name gets a 403 explaining this, which stops DNS-rebinding pages from reaching an open dashboard. `*` turns the check off. |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Turns on the Query chat. A pay-per-use Anthropic API key. |
 | `SSH_KEY_PATH` | *(none)* | Path inside the container to the private key for host monitoring. |

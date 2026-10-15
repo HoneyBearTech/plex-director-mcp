@@ -95,6 +95,48 @@ describe("settings API", () => {
     assert.equal(getSetting("SONARR_API_KEY"), "abc");
   });
 
+  // Security: a saved key must never follow a URL change to another server.
+  it("refuses a new URL that would reuse the saved secret, and saves nothing", async () => {
+    setSetting("RADARR_URL", "http://radarr:7878");
+    setSetting("RADARR_API_KEY", "real-key");
+    for (const body of [{ url: "http://attacker:7878" }, { url: "http://attacker:7878", apiKey: "  " }]) {
+      const res = await send("PUT", "/api/settings/radarr", { ...body, defaultQualityProfile: "HD" });
+      assert.equal(res.status, 400);
+      assert.match((await res.json()).error, /the API key entered again/);
+      assert.equal(getSetting("RADARR_URL"), "http://radarr:7878");
+      assert.equal(getSetting("RADARR_DEFAULT_QUALITY_PROFILE"), "");
+    }
+    assert.equal(getSetting("RADARR_API_KEY"), "real-key");
+  });
+
+  it("also refuses re-pointing a cleared URL while the old secret is still saved", async () => {
+    setSetting("SONARR_URL", "");
+    setSetting("SONARR_API_KEY", "abc");
+    assert.equal((await send("PUT", "/api/settings/sonarr", { url: "http://elsewhere" })).status, 400);
+    assert.equal(getSetting("SONARR_URL"), "");
+  });
+
+  it("names every secret a URL change needs (qBittorrent's password)", async () => {
+    setSetting("QBITTORRENT_URL", "http://qbit");
+    setSetting("QBITTORRENT_PASS", "pw");
+    const res = await send("PUT", "/api/settings/qbittorrent", { url: "http://other", username: "admin" });
+    assert.equal(res.status, 400);
+    assert.match((await res.json()).error, /password entered again/);
+    assert.equal(getSetting("QBITTORRENT_USER"), "");
+  });
+
+  it("allows a URL change with the secret re-entered, the same URL with a blank secret, or no saved secret", async () => {
+    setSetting("RADARR_URL", "http://radarr:7878");
+    setSetting("RADARR_API_KEY", "old");
+    assert.equal((await send("PUT", "/api/settings/radarr", { url: "http://radarr:7878 ", apiKey: "" })).status, 200);
+    assert.equal(getSetting("RADARR_API_KEY"), "old");
+    assert.equal((await send("PUT", "/api/settings/radarr", { url: "http://new:7878", apiKey: "new" })).status, 200);
+    assert.equal(getSetting("RADARR_URL"), "http://new:7878");
+    assert.equal(getSetting("RADARR_API_KEY"), "new");
+    assert.equal((await send("PUT", "/api/settings/prowlarr", { url: "http://prowlarr", apiKey: "" })).status, 200);
+    assert.equal(getSetting("PROWLARR_URL"), "http://prowlarr");
+  });
+
   it("rejects an unknown service and ignores non-string values", async () => {
     assert.equal((await send("PUT", "/api/settings/nope", { url: "x" })).status, 404);
     setSetting("RADARR_URL", "http://keep");

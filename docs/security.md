@@ -116,10 +116,19 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   a non-root user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`; the
   README's [Read-only and non-root operation](../README.md#read-only-and-non-root-operation) shows how.
   `/app/data` is the only place it writes.
-- **HTTP headers:** the dashboard does not currently send a Content-Security-Policy, `X-Frame-Options`,
-  `X-Content-Type-Options` or HSTS, and does not validate the `Host` header (Planned, see the
-  [roadmap](roadmap.md)). Express's default `X-Powered-By` header is present. Responses are JSON (or images
-  from the two artwork proxies); errors are `{"error": "..."}`.
+- **HTTP headers:** every response carries `X-Frame-Options: DENY` and `Content-Security-Policy:
+  frame-ancestors 'none'` (the dashboard can't be framed), `X-Content-Type-Options: nosniff` and
+  `Referrer-Policy: no-referrer`; `X-Powered-By` is off. There is no full script/style CSP or HSTS yet
+  (HSTS belongs on the reverse proxy that terminates TLS). Responses are JSON (or images from the two
+  artwork proxies); errors are `{"error": "..."}`.
+- **DNS rebinding:** while `WEB_PASSWORD` is unset, requests whose `Host` header is not an IP address,
+  `localhost`, a single-word name, a `.local` / `.lan` / `.home.arpa` / `.internal` name or a name listed
+  in `WEB_ALLOWED_HOSTS` get a 403 (`src/web/hostCheck.ts`). That stops a web page on a public domain from
+  re-pointing its name at the dashboard and reading or changing settings from your browser. With a
+  password set, the check is skipped: such a page has no session.
+- **A saved secret never follows a URL change:** saving a different URL for a service while leaving its
+  key, token or password blank is refused, so the stored secret can't be sent to a new server
+  (`src/web/routes/settings.ts`).
 - **Dependencies:** locked, audited in CI and updated weekly; see [dependencies.md](dependencies.md).
 - **Releases:** images are signed with cosign keyless signing; see
   [verifying-releases.md](verifying-releases.md).
