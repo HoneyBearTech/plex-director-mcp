@@ -72,7 +72,8 @@ Conventions:
 
 - JSON in and out (`Content-Type: application/json`, at most 1 MB), apart from the two image routes, which
   return image bytes. Errors are `{"error": "…"}`.
-- `401` means not signed in (only when `WEB_PASSWORD` is set), `400` a bad parameter, `404` an unknown
+- `403` means the `Host` name isn't allowed (only when `WEB_PASSWORD` is unset; see `WEB_ALLOWED_HOSTS`),
+  `401` means not signed in (only when `WEB_PASSWORD` is set), `400` a bad parameter, `404` an unknown
   route, service or host, `413` a body over 1 MB, `429` too many requests (300 per minute per address, or
   10 failed sign-ins per 15 minutes), and `502` that the service behind the route failed or is not
   configured.
@@ -89,7 +90,7 @@ Every variable is described in the README's
   `PLEX_SKIP_LIBRARIES`, `TMDB_API_KEY`, `UBUNTU_HOSTS`, `SSH_USER`): copied into the database on first
   start; from then on the value saved in the database (edited on the Settings page) wins.
 - **Container settings**, read from the environment every time and never stored or shown: `WEB_PASSWORD`,
-  `WEB_PORT`, `ANTHROPIC_API_KEY`, `SSH_KEY_PATH`, `SSH_KEY_PASSPHRASE`, `DISCORD_WEBHOOK_URL`,
+  `WEB_ALLOWED_HOSTS`, `WEB_PORT`, `ANTHROPIC_API_KEY`, `SSH_KEY_PATH`, `SSH_KEY_PASSPHRASE`, `DISCORD_WEBHOOK_URL`,
   `JOB_RUNNER_INTERVAL_SECONDS`.
 
 Outside Docker, a `.env` file in the repository root is read at start-up (`src/env.ts`).

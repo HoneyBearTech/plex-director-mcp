@@ -3,6 +3,7 @@ import rateLimit from "express-rate-limit";
 import path from "node:path";
 import { projectRoot } from "../env.js";
 import { authRouter, requireAuth, isAuthEnabled } from "./auth.js";
+import { requireAllowedHost } from "./hostCheck.js";
 import { statusRouter } from "./routes/status.js";
 import { nodesRouter } from "./routes/nodes.js";
 import { queuesRouter } from "./routes/queues.js";
@@ -14,6 +15,17 @@ import { jobsRouter } from "./routes/jobs.js";
 
 export function createWebApp() {
   const app = express();
+  app.disable("x-powered-by");
+  // Browser hardening for every response: the dashboard is never framed (no
+  // clickjacking), content types are not sniffed, and links don't leak the
+  // dashboard's address to other sites.
+  app.use((_req, res, next) => {
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Frame-Options", "DENY");
+    res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+    res.setHeader("Referrer-Policy", "no-referrer");
+    next();
+  });
   // Chat history carries earlier answers' tables, so requests can be sizeable;
   // 1 MB is ample and still bounded (the default 100 KB rejected long chats).
   app.use(express.json({ limit: "1mb" }));
@@ -33,6 +45,10 @@ export function createWebApp() {
   app.get("/healthz", (_req, res) => {
     res.json({ ok: true });
   });
+
+  // Everything else, the SPA included, refuses Host names a DNS-rebinding page
+  // could use while there's no password (see hostCheck.ts).
+  app.use(requireAllowedHost);
 
   if (!isAuthEnabled()) {
     console.error(

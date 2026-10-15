@@ -83,6 +83,15 @@ a security problem.
 - Updated two dependencies with high-severity advisories: `@modelcontextprotocol/sdk` 1.30.0 to 1.32.1
   ([GHSA-6qxp-vccf-f47h](https://github.com/advisories/GHSA-6qxp-vccf-f47h)), and `source-map-js` 1.2.1 to
   1.2.2 in the dashboard ([GHSA-68fv-2mgg-jv7q](https://github.com/advisories/GHSA-68fv-2mgg-jv7q)) (#66).
+- Saving a different URL for a service on the Settings page while leaving its key, token or password blank
+  is now refused. Before, the saved secret was kept and sent to the new URL, so anyone able to save
+  settings could collect it with a server of their own.
+- Without `WEB_PASSWORD`, the dashboard now answers only to host names a DNS-rebinding web page can't use
+  (IP addresses, `localhost`, single-word names, `.local` / `.lan` / `.home.arpa` / `.internal` names) plus
+  any listed in the new `WEB_ALLOWED_HOSTS`. **If you reach a password-less dashboard through a public
+  name, such as a reverse proxy's, add that name to `WEB_ALLOWED_HOSTS` or set `WEB_PASSWORD`.**
+- Every dashboard response now forbids framing (`X-Frame-Options: DENY`, `frame-ancestors 'none'`), sets
+  `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`, and no longer sends `X-Powered-By`.
 
 ## [1.1.0] - 2026-09-17
 
