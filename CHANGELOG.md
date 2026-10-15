@@ -7,6 +7,8 @@ a security problem.
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-10-15
+
 ### Added
 
 - **Official MCP registry listing.** `server.json` describes the Docker image for the
@@ -154,6 +156,7 @@ a security problem.
 - CodeQL analysis of the source.
 - The MIT license.
 
-[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/HoneyBearTech/plex-director-mcp/releases/tag/v1.0.0

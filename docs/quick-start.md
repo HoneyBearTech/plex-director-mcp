@@ -25,8 +25,8 @@ services:
     restart: unless-stopped
 ```
 
-Change `choose-a-password`. Keep the `latest` tag: the newest release, 1.1.0, is older than this guide and has
-no dashboard password at all ([installing.md](installing.md#choose-an-image-and-a-tag)). Then start it:
+Change `choose-a-password`. `latest` follows the newest build; to choose when you upgrade, pin `1.2.0` instead
+([installing.md](installing.md#choose-an-image-and-a-tag)). Then start it:
 
 ```sh
 docker compose up -d
