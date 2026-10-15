@@ -48,15 +48,13 @@ signed ([verifying-releases.md](verifying-releases.md)):
 | :--- | :--- |
 | `latest` | The newest build of the `main` branch, **including changes that are not in a release yet**. |
 | `sha-<commit>` | The build of one commit of `main`, such as `sha-d2bca8a`. It never changes. |
-| `1.1.0` | One release. Pin a release to choose when you upgrade. |
-| `1.1` | The newest patch release of 1.1. |
+| `1.2.0` | One release. Pin a release to choose when you upgrade. |
+| `1.2` | The newest patch release of 1.2. |
 
 > [!IMPORTANT]
-> **These docs describe the `main` branch, which today is only in `latest` and the `sha-` tags.** The newest
-> release, 1.1.0, is older than most of what they describe: it has **no dashboard password**
-> (`WEB_PASSWORD` is ignored), no health check, no Plex or TV tools, no Indexers or Jobs pages and no job
-> runner. See the [changelog](../CHANGELOG.md). Until the next release, use `latest`, or pin the `sha-` tag
-> or digest of a `latest` build you have tried.
+> **Use 1.2.0 or later.** These docs describe 1.2.0. Releases before it are much older: 1.1.0 has **no
+> dashboard password** (`WEB_PASSWORD` is ignored), no health check, no Plex or TV tools, no Indexers or Jobs
+> pages and no job runner. See the [changelog](../CHANGELOG.md).
 
 The examples use `latest`. To pin the build you are running instead, use its `sha-` tag, or for the strongest
 pin its digest ([verifying-releases.md](verifying-releases.md#pin-the-digest)).
@@ -178,7 +176,7 @@ Node.js 24 and Git.
 ```sh
 git clone https://github.com/HoneyBearTech/plex-director-mcp.git
 cd plex-director-mcp
-# main is what these docs describe; 1.1.0 (git checkout v1.1.0) predates most of it
+# main is what these docs describe; for the release instead: git checkout v1.2.0
 npm install
 (cd web && npm install && npm run build)   # builds the dashboard; without it the web pages don't load
 ```

@@ -127,11 +127,10 @@ Desktop. If you use `latest`, `docker run` doesn't check for a newer image by it
 ## Pinning a version
 
 - `latest` follows the `main` branch, so it can change at any time and includes changes that have no release
-  yet. For now it is also the only way to get what these docs describe: the newest release, 1.1.0, predates
-  most of it, including the dashboard password ([installing.md](installing.md#choose-an-image-and-a-tag)).
+  yet. Pin a release (1.2.0 or later) to choose when you upgrade.
 - A `sha-` tag, such as `sha-d2bca8a`, is one build of `main` and stays on it. Pin one to keep the `latest`
   build you have tried, and move it on when you choose.
-- A version tag such as `1.1.0` stays on that release. `1.1` moves to each new 1.1.x patch release.
+- A version tag such as `1.2.0` stays on that release. `1.2` moves to each new 1.2.x patch release.
 - A digest (`honeybeartech/plex-director-mcp@sha256:…`, optionally with the tag in front) can't be moved at
   all, not even by someone who could push to the registry. [verifying-releases.md](verifying-releases.md#pin-the-digest)
   shows how to find and check it.
@@ -148,6 +147,6 @@ the tables it needs if they are missing, and settings are simple name and value 
 ignores what it doesn't know. That may not stay true forever. If a release changes it, its notes should say
 so, and the backup you took before upgrading is your way back: restore it with the old tag.
 
-Rolling back also takes away whatever the newer build added. In particular, going from a `latest` build back to
-1.1.0 removes the dashboard password: 1.1.0 ignores `WEB_PASSWORD` and leaves the dashboard open. Roll back to
-an earlier `sha-` tag instead.
+Rolling back also takes away whatever the newer build added. In particular, never roll back below 1.2.0:
+1.1.0 ignores `WEB_PASSWORD` and leaves the dashboard open. Roll back to an earlier 1.2.x release or `sha-`
+tag instead.

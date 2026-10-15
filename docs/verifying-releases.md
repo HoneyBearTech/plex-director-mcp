@@ -15,8 +15,7 @@ You need [cosign](https://docs.sigstore.dev/cosign/system_config/installation/).
 checked with cosign 3.1.3. The signatures are stored in cosign's original (non-bundle) format, which cosign 2.x
 reads as well, though that hasn't been tested here.
 
-Most people run `latest` for now, because the newest release, 1.1.0, predates most of what these docs describe
-([installing.md](installing.md#choose-an-image-and-a-tag)). Both kinds are covered below.
+Use a release (1.2.0 or later) if you pin versions, or `latest` to follow `main`. Both kinds are covered below.
 
 ## Which identity signs what
 
@@ -25,7 +24,7 @@ GitHub Actions:
 
 | Image | Certificate identity | OIDC issuer |
 | :--- | :--- | :--- |
-| A release, such as `1.1.0` or `1.1` | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.1.0` | `https://token.actions.githubusercontent.com` |
+| A release, such as `1.2.0` or `1.2` | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.2.0` | `https://token.actions.githubusercontent.com` |
 | `latest` and `sha-<commit>` builds | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/heads/main` | `https://token.actions.githubusercontent.com` |
 
 Only pushes sign. Pull-request builds are never published.
@@ -33,21 +32,21 @@ Only pushes sign. Pull-request builds are never published.
 ## Verify a release image
 
 ```sh
-cosign verify honeybeartech/plex-director-mcp:1.1.0 \
-  --certificate-identity 'https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.1.0' \
+cosign verify honeybeartech/plex-director-mcp:1.2.0 \
+  --certificate-identity 'https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.2.0' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-For the GHCR copy, use `ghcr.io/honeybeartech/plex-director-mcp:1.1.0` with the same flags. cosign lists the
+For the GHCR copy, use `ghcr.io/honeybeartech/plex-director-mcp:1.2.0` with the same flags. cosign lists the
 checks it made and prints the signature's claims as JSON. Among them you should see the repository
-(`HoneyBearTech/plex-director-mcp`), the ref (`refs/tags/v1.1.0`), the commit it was built from, and the
+(`HoneyBearTech/plex-director-mcp`), the ref (`refs/tags/v1.2.0`), the commit it was built from, and the
 digest of the image index that was signed.
 
 To check those claims as part of the command rather than by reading them, add:
 
 ```sh
   --certificate-github-workflow-repository HoneyBearTech/plex-director-mcp \
-  --certificate-github-workflow-ref refs/tags/v1.1.0 \
+  --certificate-github-workflow-ref refs/tags/v1.2.0 \
   --certificate-github-workflow-trigger push
 ```
 
@@ -131,7 +130,8 @@ These are **planned**, not done. Until they are, the image signature above is th
 
 - **Release files with checksums.** GitHub Releases have generated release notes and, after 1.1.0, a copy of
   the licence; there are no downloads, `SHA256SUMS` or signed provenance files to check.
-- **Signed git tags.** The `v1.1.0` tag is annotated but not signed, and `v1.0.0` is a plain tag.
+- **Signed git tags for older releases.** From `v1.2.0`, release tags are signed (SSH; GitHub shows them as
+  Verified). The `v1.1.0` tag is annotated but not signed, and `v1.0.0` is a plain tag.
 - **A signature on 1.0.0.** cosign finds no signature for the `1.0.0` image (checked 15 October 2026). Use
   1.1.0 or later.
 
