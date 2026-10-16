@@ -7,6 +7,24 @@ a security problem.
 
 ## [Unreleased]
 
+### Security
+
+- **Poster downloads are limited.** `check_movie_status` only downloads a poster over HTTPS from TMDb's image
+  server or the placeholder service, with no redirects, a 10-second timeout and a 5 MB cap. The URL comes
+  from Radarr's metadata, and could otherwise point anywhere on your network.
+- **The image proxies only pass on images.** The dashboard's Plex and Tautulli artwork routes refuse a reply
+  that isn't JPEG, PNG, WebP or GIF, and mark images `Cache-Control: private` (they sit behind the login).
+- **SSH probes are bounded:** one connection and command must finish within 30 seconds, and more than 1 MB of
+  output ends it.
+- **Jobs can't be revived.** `update_job_status` only makes changes that fit the job's state: a completed or
+  cancelled job stays that way. `plan_media_upgrade` takes at most 100 movies per job.
+- The torrent hash in qBittorrent delete requests is URL-encoded.
+
+### Fixed
+
+- `manage_stalled_downloads` with `PURGE_STALLED` no longer says the releases were "blocklisted": it deletes
+  them in qBittorrent only, and now says that Radarr and Sonarr weren't told.
+
 ## [1.3.0] - 2026-10-16
 
 ### Changed
