@@ -102,7 +102,11 @@ export function fakeApi(
 // Boots the real Express app on an ephemeral port.
 export async function startApp(): Promise<{ base: string; close: () => Promise<void> }> {
   const { createWebApp } = await import("../src/web/app.js");
-  const server: Server = createWebApp().listen(0);
+  // Bound to 127.0.0.1, the address the tests fetch, not every interface: on
+  // macOS another process may listen on 127.0.0.1 with the same port as an
+  // app bound to [::], and IPv4 requests then reach that process instead (a
+  // local app once answered 401 to a test expecting 403).
+  const server: Server = createWebApp().listen(0, "127.0.0.1");
   await new Promise<void>((resolve) => server.once("listening", () => resolve()));
   const { port } = server.address() as AddressInfo;
   return {
