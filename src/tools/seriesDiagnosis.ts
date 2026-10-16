@@ -10,6 +10,14 @@ import {
   resolveSeries,
   type SeriesAnalysis,
 } from "./series.js";
+import type {
+  SonarrEpisode,
+  SonarrEpisodeFile,
+  SonarrHistoryRecord,
+  SonarrQualityProfile,
+  SonarrQueueItem,
+  SonarrSeries,
+} from "../types/sonarr.js";
 
 // The TV counterparts of check_movie_status and diagnose_missing_media: what
 // Sonarr knows about one show, and why an episode it should have is missing.
@@ -42,7 +50,7 @@ function formatSize(bytes: number): string {
 
 // --- What Sonarr's download queue says -------------------------------------
 
-export function describeQueueItem(item: any): string {
+export function describeQueueItem(item: Omit<SonarrQueueItem, "seriesId" | "episodeId">): string {
   const state = String(item.trackedDownloadState ?? "");
   const size = Number(item.size);
   const left = Number(item.sizeleft);
@@ -92,7 +100,10 @@ const text = (value: unknown): string | null =>
 
 // The most recent thing that happened to one episode, from its history records
 // (newest first is not assumed) or, above all, its place in the download queue.
-export function storyOf(records: any[], queueItem?: any): Story {
+export function storyOf(
+  records: Omit<SonarrHistoryRecord, "episodeId">[],
+  queueItem?: Omit<SonarrQueueItem, "seriesId" | "episodeId">,
+): Story {
   if (queueItem) return { kind: "queued", note: describeQueueItem(queueItem) };
 
   const latest = records
@@ -164,26 +175,29 @@ export interface DiagnoseOptions {
 }
 
 interface Diagnosed {
-  episode: any;
+  episode: SonarrEpisode;
   story: Story;
   // Would Sonarr go looking for it? (show monitored AND episode monitored)
   searching: boolean;
 }
 
-const queueFor = async (seriesId: number): Promise<any[]> => {
-  const response = await sonarrClient.get("/api/v3/queue", { params: { page: 1, pageSize: 500 } });
-  return ((response.data?.records ?? []) as any[]).filter((item) => item.seriesId === seriesId);
+const queueFor = async (seriesId: number): Promise<SonarrQueueItem[]> => {
+  const response = await sonarrClient.get<{ records?: SonarrQueueItem[] }>("/api/v3/queue", {
+    params: { page: 1, pageSize: 500 },
+  });
+  return (response.data?.records ?? []).filter((item) => item.seriesId === seriesId);
 };
 
-const historyFor = async (seriesId: number, season?: number): Promise<any[]> => {
+const historyFor = async (seriesId: number, season?: number): Promise<SonarrHistoryRecord[]> => {
   const params: Record<string, unknown> = { seriesId };
   if (season !== undefined) params.seasonNumber = season;
-  const response = await sonarrClient.get("/api/v3/history/series", { params });
-  return Array.isArray(response.data) ? response.data : [];
+  const response = await sonarrClient.get<unknown>("/api/v3/history/series", { params });
+  return Array.isArray(response.data) ? (response.data as SonarrHistoryRecord[]) : [];
 };
 
-function consequence(series: any, group: Diagnosed[]): string {
-  const first = group[0]!;
+function consequence(series: SonarrSeries, group: Diagnosed[]): string {
+  const [first] = group;
+  if (!first) return "";
   if (first.story.kind === "queued") return "Sonarr is already handling it.";
   if (!first.searching) {
     const why = !series.monitored
@@ -223,23 +237,24 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
     ]);
     const analysis = analyzeEpisodes(episodes);
     const now = Date.now();
-    const released = (e: any) => e.hasFile || (e.airDateUtc && Date.parse(e.airDateUtc) <= now);
+    const released = (e: SonarrEpisode) =>
+      e.hasFile || (e.airDateUtc && Date.parse(e.airDateUtc) <= now);
     const heading = `## ${label(series)} - ${series.monitored ? "monitored" : "not monitored"} in Sonarr\n`;
 
     // Which episodes to look at.
-    let targets: any[];
+    let targets: SonarrEpisode[];
     if (season !== undefined && !episodes.some((e) => e.seasonNumber === season)) {
       return textReply(`${heading}${label(series)} has no season ${season} in Sonarr.`);
     }
-    if (episodeNumber !== undefined) {
+    if (episodeNumber !== undefined && season !== undefined) {
       const one = episodes.find(
         (e) => e.seasonNumber === season && e.episodeNumber === episodeNumber,
       );
       if (!one)
         return textReply(
-          `${heading}Sonarr has no ${code(season!, episodeNumber)} for ${label(series)}.`,
+          `${heading}Sonarr has no ${code(season, episodeNumber)} for ${label(series)}.`,
         );
-      const name = `${code(season!, episodeNumber)}${one.title ? ` "${one.title}"` : ""}`;
+      const name = `${code(season, episodeNumber)}${one.title ? ` "${one.title}"` : ""}`;
       if (one.hasFile)
         return textReply(`${heading}${name} is not missing: Sonarr has a file for it.`);
       if (!released(one))
@@ -264,13 +279,13 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
     }
 
     // What happened to each one. History and queue were each fetched once.
-    const byEpisode = new Map<number, any[]>();
+    const byEpisode = new Map<number, SonarrHistoryRecord[]>();
     for (const record of history) {
       const list = byEpisode.get(record.episodeId) ?? [];
       list.push(record);
       byEpisode.set(record.episodeId, list);
     }
-    const queued = new Map<number, any>(queue.map((item) => [item.episodeId, item]));
+    const queued = new Map<number, SonarrQueueItem>(queue.map((item) => [item.episodeId, item]));
     const diagnosed: Diagnosed[] = targets.map((episode) => ({
       episode,
       story: storyOf(byEpisode.get(episode.id) ?? [], queued.get(episode.id)),
@@ -289,6 +304,8 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
     output += `${targets.length} aired episode${targets.length === 1 ? " has" : "s have"} no file${season !== undefined ? ` in season ${season}` : ""}. `;
     output += `Why, from Sonarr's history and download queue (nothing was changed):\n`;
     for (const group of ordered.slice(0, MAX_GROUPS)) {
+      const [first] = group;
+      if (!first) continue;
       const examples = group
         .slice(0, MAX_EXAMPLES)
         .map(({ episode, story }) => {
@@ -297,14 +314,16 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
         })
         .join("; ");
       const more = group.length > MAX_EXAMPLES ? `; and ${group.length - MAX_EXAMPLES} more` : "";
-      output += `- ${group.length} episode${group.length === 1 ? "" : "s"}: ${HEADLINE[group[0]!.story.kind]}. ${consequence(series, group)} ${examples}${more}.\n`;
+      output += `- ${group.length} episode${group.length === 1 ? "" : "s"}: ${HEADLINE[first.story.kind]}. ${consequence(series, group)} ${examples}${more}.\n`;
     }
     if (ordered.length > MAX_GROUPS) {
       const rest = ordered.slice(MAX_GROUPS).reduce((sum, g) => sum + g.length, 0);
       output += `- ${rest} more episodes across ${ordered.length - MAX_GROUPS} other situations.\n`;
     }
 
-    const top = ordered[0]!;
+    // The biggest group; targets is not empty, so neither is it.
+    const top = ordered[0] ?? [];
+    const topKind = top[0]?.story.kind ?? "never";
     const row: MediaRow = {
       kind: "show",
       title: String(series.title),
@@ -313,7 +332,7 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
       libraries: null,
       genres: [],
       rating: null,
-      detail: `${targets.length} missing: ${HEADLINE[top[0]!.story.kind]}${top.every((d) => d.searching) ? "" : ", not monitored"}`,
+      detail: `${targets.length} missing: ${HEADLINE[topKind]}${top.every((d) => d.searching) ? "" : ", not monitored"}`,
       show: {
         seasons: analysis.seasons.length,
         episodes: analysis.released,
@@ -330,8 +349,8 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
 
 // --- check_series_status ---------------------------------------------------
 
-function posterOf(series: any): string | null {
-  const url = (series.images ?? []).find((image: any) => image.coverType === "poster")?.remoteUrl;
+function posterOf(series: SonarrSeries): string | null {
+  const url = (series.images ?? []).find((image) => image.coverType === "poster")?.remoteUrl;
   // Only a public artwork URL: Sonarr's own /MediaCover paths need its API key.
   return typeof url === "string" && /^https?:\/\//.test(url) ? url : null;
 }
@@ -346,16 +365,16 @@ export async function checkSeriesStatus(title: string, year?: number) {
     const [episodes, files, profiles, queue] = await Promise.all([
       fetchEpisodes(series.id),
       sonarrClient
-        .get("/api/v3/episodefile", { params: { seriesId: series.id } })
-        .then((r) => (r.data ?? []) as any[]),
-      sonarrClient.get("/api/v3/qualityprofile").then((r) => (r.data ?? []) as any[]),
+        .get<SonarrEpisodeFile[]>("/api/v3/episodefile", { params: { seriesId: series.id } })
+        .then((r) => r.data ?? []),
+      sonarrClient.get<SonarrQualityProfile[]>("/api/v3/qualityprofile").then((r) => r.data ?? []),
       queueFor(series.id),
     ]);
     const analysis: SeriesAnalysis = analyzeEpisodes(episodes);
     const profile =
       profiles.find((p) => p.id === series.qualityProfileId)?.name ??
       `profile #${series.qualityProfileId}`;
-    const stats = series.statistics ?? {};
+    const sizeOnDisk = series.statistics?.sizeOnDisk;
 
     let output = `## ${label(series)} - Sonarr: ${[series.status, series.monitored ? "monitored" : "not monitored"].filter(Boolean).join(", ")}\n`;
     const facts = [
@@ -377,8 +396,8 @@ export async function checkSeriesStatus(title: string, year?: number) {
     }
     if (analysis.released > 0) {
       output += `, across ${analysis.seasons.filter((s) => s.released > 0).length} season${analysis.seasons.filter((s) => s.released > 0).length === 1 ? "" : "s"}`;
-      if (typeof stats.sizeOnDisk === "number" && stats.sizeOnDisk > 0)
-        output += `, ${formatSize(stats.sizeOnDisk)} on disk`;
+      if (typeof sizeOnDisk === "number" && sizeOnDisk > 0)
+        output += `, ${formatSize(sizeOnDisk)} on disk`;
       output += ".\n";
     }
     if (text(series.monitorNewItems)) {

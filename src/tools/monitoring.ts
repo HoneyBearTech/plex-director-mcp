@@ -1,6 +1,7 @@
 import { server } from "../server.js";
 import { tautulliClient } from "../clients.js";
 import { textReply, getErrorMessage, rowLabel, rowPlays } from "../util.js";
+import type { TautulliActivity, TautulliHomeStat, TautulliResponse } from "../types/tautulli.js";
 
 // Plex playback and historical usage metrics.
 export function registerMonitoringTools() {
@@ -10,17 +11,19 @@ export function registerMonitoringTools() {
     {},
     async () => {
       try {
-        const response = await tautulliClient.get("", { params: { cmd: "get_activity" } });
+        const response = await tautulliClient.get<TautulliResponse<TautulliActivity>>("", {
+          params: { cmd: "get_activity" },
+        });
         const data = response.data?.response?.data;
 
-        if (!data || parseInt(data.stream_count, 10) === 0) {
+        if (!data || parseInt(String(data.stream_count), 10) === 0) {
           return textReply("💤 Total Plex streams: 0. The server is completely idle right now.");
         }
 
         let summary = `📊 Active Server Load:\n- Total Streams: ${data.stream_count}\n- Transcode Count: ${data.stream_count_transcode}\n- Direct Play Count: ${data.stream_count_direct_play}\n\n`;
 
         const sessions = data.sessions || [];
-        sessions.forEach((session: any) => {
+        sessions.forEach((session) => {
           summary += `👤 User: ${session.user} watching "${session.title}" (${session.year || "TV"})\n`;
           summary += `  ↳ Quality: ${session.video_resolution} (${session.stream_container})\n`;
           summary += `  ↳ Processing: ${session.transcode_decision === "transcode" ? `⚠️ Transcoding (${session.video_decision})` : "✓ Direct Play"}\n`;
@@ -43,7 +46,9 @@ export function registerMonitoringTools() {
     {},
     async () => {
       try {
-        const response = await tautulliClient.get("", { params: { cmd: "get_home_stats" } });
+        const response = await tautulliClient.get<TautulliResponse<TautulliHomeStat[]>>("", {
+          params: { cmd: "get_home_stats" },
+        });
         const stats = response.data?.response?.data || [];
 
         if (stats.length === 0) {
@@ -54,7 +59,7 @@ export function registerMonitoringTools() {
         richDashboard +=
           "Historical distribution patterns across media libraries and active profile streams.\n\n";
 
-        stats.forEach((category: any) => {
+        stats.forEach((category) => {
           const categoryTitle = category.stat_title || category.stat_id || "Watch statistics";
           const statId = String(category.stat_id || "");
           richDashboard += `### 📊 ${categoryTitle}\n`;
@@ -62,7 +67,7 @@ export function registerMonitoringTools() {
           richDashboard += "| :---: | :--- | :--- |\n";
 
           const items = category.rows || [];
-          items.slice(0, 3).forEach((item: any, index: number) => {
+          items.slice(0, 3).forEach((item, index) => {
             const medal = index === 0 ? "🥇" : index === 1 ? "🥈" : "🥉";
             const playCount = rowPlays(item);
             const label = rowLabel(statId, item);

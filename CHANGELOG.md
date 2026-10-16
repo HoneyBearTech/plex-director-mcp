@@ -10,8 +10,14 @@ a security problem.
 ### Added
 
 - **Linting and formatting in CI.** [Biome](https://biomejs.dev/) checks the backend, tests and dashboard on
-  every pull request (`npm run check` locally); lint errors and unformatted files fail the build. The
-  codebase was reformatted once to match.
+  every pull request (`npm run check` locally); lint errors, lint warnings and unformatted files fail the
+  build. The codebase was reformatted once to match, and every service response is now typed.
+
+### Security
+
+- **The Query chat now validates the model's tool arguments.** Every tool checks its input against its
+  schema before it runs, so the web chat gets the same validation MCP clients already had; input that
+  doesn't match is returned to the model as an error instead of reaching the tool.
 
 ### Fixed
 

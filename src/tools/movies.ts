@@ -15,6 +15,8 @@ import {
 import { getUpcomingEpisodes, type UpcomingOptions } from "./upcoming.js";
 import { searchEpisodes, type EpisodeSearchArgs } from "./plexEpisodes.js";
 import { findSeriesByQuality, type QualityOptions } from "./seriesQuality.js";
+import type { RadarrHistoryRecord, RadarrLibraryMovie, RadarrMovie } from "../types/radarr.js";
+import type { SabnzbdQueueResponse } from "../types/sabnzbd.js";
 
 // /movie/lookup returns a TMDB-backed search result that, even for a movie
 // already in the library, omits some fields the actual library record has
@@ -22,24 +24,23 @@ import { findSeriesByQuality, type QualityOptions } from "./seriesQuality.js";
 // real /movie record, not just the lookup hit, to trust hasFile/path/status.
 async function findRadarrMatch(
   title: string,
-): Promise<{ lookupMatch: any; primaryMatch: any | undefined } | null> {
-  const lookupResponse = await radarrClient.get(
+): Promise<{ lookupMatch: RadarrMovie; primaryMatch: RadarrLibraryMovie | undefined } | null> {
+  const lookupResponse = await radarrClient.get<RadarrMovie[]>(
     `/api/v3/movie/lookup?term=${encodeURIComponent(title)}`,
   );
-  const lookupMovies = lookupResponse.data as Array<any>;
+  const [lookupMatch] = lookupResponse.data ?? [];
 
-  if (!lookupMovies || lookupMovies.length === 0) {
+  if (!lookupMatch) {
     return null;
   }
 
-  const lookupMatch = lookupMovies[0];
-  const libraryResponse = await radarrClient.get("/api/v3/movie");
-  const libraryMovies = libraryResponse.data as Array<any>;
+  const libraryResponse = await radarrClient.get<RadarrLibraryMovie[]>("/api/v3/movie");
+  const libraryMovies = libraryResponse.data ?? [];
   const normalizedTitle = String(lookupMatch.title || title)
     .trim()
     .toLowerCase();
   const primaryMatch = libraryMovies.find(
-    (movie: any) =>
+    (movie) =>
       (lookupMatch.tmdbId && movie.tmdbId === lookupMatch.tmdbId) ||
       (String(movie.title || "")
         .trim()
@@ -64,17 +65,17 @@ async function checkMovieStatus(title: string): Promise<CallToolResult> {
       );
     }
 
-    let posterUrl = primaryMatch.images?.find(
-      (image: any) => image.coverType === "poster",
-    )?.remoteUrl;
+    let posterUrl = primaryMatch.images?.find((image) => image.coverType === "poster")?.remoteUrl;
     if (!posterUrl && primaryMatch.tmdbId) {
-      const tmdbResponse = await tmdbClient.get(`/movie/${primaryMatch.tmdbId}`);
+      const tmdbResponse = await tmdbClient.get<{ poster_path?: string | null }>(
+        `/movie/${primaryMatch.tmdbId}`,
+      );
       const posterPath = tmdbResponse.data?.poster_path;
       if (posterPath) {
         posterUrl = `https://image.tmdb.org/t/p/w500${posterPath}`;
       }
     }
-    posterUrl ||= `https://placehold.co/600x900?text=${encodeURIComponent(primaryMatch.title)}`;
+    posterUrl ||= `https://placehold.co/600x900?text=${encodeURIComponent(primaryMatch.title ?? title)}`;
 
     let richLayout = `### 🎬 Media Asset Profile: ${primaryMatch.title} (${primaryMatch.year})\n\n`;
     richLayout += `![${primaryMatch.title} poster](${posterUrl})\n\n`;
@@ -147,10 +148,12 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
     }
 
     traceSteps.push("📡 Step 2: Scanning Download Client Queues (SABnzbd)...");
-    const sabQueue = await sabnzbdClient.get("", { params: { mode: "queue" } });
+    const sabQueue = await sabnzbdClient.get<SabnzbdQueueResponse>("", {
+      params: { mode: "queue" },
+    });
     const activeDownloads = sabQueue.data?.queue?.slots || [];
     const activeMatch = activeDownloads.find(
-      (slot: any) =>
+      (slot) =>
         typeof slot?.filename === "string" &&
         slot.filename.toLowerCase().includes(title.toLowerCase()),
     );
@@ -166,16 +169,18 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
 
     traceSteps.push("📜 Step 3: Checking download history for failure blocklists...");
     if (movie.id) {
-      const historyResponse = await radarrClient.get(`/api/v3/history?movieId=${movie.id}`);
+      const historyResponse = await radarrClient.get<{ records?: RadarrHistoryRecord[] }>(
+        `/api/v3/history?movieId=${movie.id}`,
+      );
       const historyItems = historyResponse.data?.records || [];
-      const failedItems = historyItems.filter((h: any) => h.eventType === "downloadFailed");
+      const failedItems = historyItems.filter((h) => h.eventType === "downloadFailed");
 
       if (failedItems.length > 0) {
         traceSteps.push(
           `  ❌ Found ${failedItems.length} failed release attempts in historical logs.`,
         );
         traceSteps.push(
-          `  ↳ Last Failure Reason: ${failedItems[0].data?.droppedPath ? "Bad download path" : "Grabbed but failed to import"}`,
+          `  ↳ Last Failure Reason: ${failedItems[0]?.data?.droppedPath ? "Bad download path" : "Grabbed but failed to import"}`,
         );
       } else {
         traceSteps.push(
@@ -200,15 +205,41 @@ async function diagnoseMissingMedia(title: string): Promise<CallToolResult> {
 // LLM driving the web UI calls the exact same logic as an MCP client.
 // Explicit shape so tools with different argument types (and required vs.
 // optional fields) can live in one list that both surfaces iterate.
-interface MovieTool {
+interface ToolDefinition {
   name: string;
   description: string;
   zodSchema: z.ZodRawShape;
   inputSchema: { type: "object"; properties: Record<string, unknown>; required?: string[] };
-  handler: (args: any) => Promise<CallToolResult>;
+  // Typed `never` so each tool can declare its own argument type; it only ever
+  // receives input that has passed zodSchema (see withValidation).
+  handler: (args: never) => Promise<CallToolResult>;
 }
 
-export const movieTools: MovieTool[] = [
+export interface MovieTool extends Omit<ToolDefinition, "handler"> {
+  // Checks `input` against zodSchema, then runs the tool. The MCP SDK validates
+  // too; the web chat relies on this, since the model's input is unchecked.
+  handler: (input: unknown) => Promise<CallToolResult>;
+}
+
+function withValidation(tool: ToolDefinition): MovieTool {
+  const schema = z.object(tool.zodSchema);
+  const run = tool.handler as (args: unknown) => Promise<CallToolResult>;
+  return {
+    ...tool,
+    handler: async (input) => {
+      const parsed = schema.safeParse(input ?? {});
+      if (!parsed.success) {
+        return textReply(
+          `Invalid arguments for ${tool.name}: ${z.prettifyError(parsed.error)}`,
+          true,
+        );
+      }
+      return run(parsed.data);
+    },
+  };
+}
+
+const definitions: ToolDefinition[] = [
   {
     name: "check_movie_status",
     description:
@@ -844,6 +875,8 @@ export const movieTools: MovieTool[] = [
     handler: async (options: UpcomingOptions) => getUpcomingEpisodes(options),
   },
 ];
+
+export const movieTools: MovieTool[] = definitions.map(withValidation);
 
 // Movie lookup and missing-media diagnostics.
 export function registerMovieTools() {

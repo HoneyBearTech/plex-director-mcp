@@ -2,16 +2,19 @@ import { Router } from "express";
 import { sabnzbdClient } from "../../clients.js";
 import { getErrorMessage } from "../../util.js";
 import { loginToQbittorrent, getDownloadingTorrents } from "../../qbittorrent.js";
+import type { SabnzbdQueueResponse } from "../../types/sabnzbd.js";
 
 export const queuesRouter = Router();
 
 queuesRouter.get("/sabnzbd", async (_req, res) => {
   try {
-    const response = await sabnzbdClient.get("", { params: { mode: "queue" } });
+    const response = await sabnzbdClient.get<SabnzbdQueueResponse>("", {
+      params: { mode: "queue" },
+    });
     const slots = response.data?.queue?.slots || [];
 
     res.json({
-      items: slots.map((slot: any) => ({
+      items: slots.map((slot) => ({
         filename: slot.filename,
         status: slot.status,
         percentage: Number(slot.percentage) || 0,
@@ -30,7 +33,7 @@ queuesRouter.get("/qbittorrent", async (_req, res) => {
     const torrents = await getDownloadingTorrents(await loginToQbittorrent());
 
     res.json({
-      items: torrents.map((torrent: any) => ({
+      items: torrents.map((torrent) => ({
         name: torrent.name,
         state: torrent.state,
         progress: Number(torrent.progress) || 0,

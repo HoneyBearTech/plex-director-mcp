@@ -31,10 +31,10 @@ jobs:
         run: npx tsc --noEmit
 
       # Biome covers src/, test/, scripts/ and web/ from the root install, so
-      # it runs before the web dependencies are installed. Lint errors and
-      # unformatted files fail the job; warnings are reported but don't (yet).
+      # it runs before the web dependencies are installed. Lint errors,
+      # warnings and unformatted files all fail the job.
       - name: Lint and format check
-        run: npx biome ci .
+        run: npx biome ci . --error-on-warnings
 
       # Runs against a throwaway database with no network access and none of the
       # real credentials (see test/setup.ts); test/isolation.test.ts fails the

@@ -180,7 +180,7 @@ export async function askMovieAssistant(
     for (const use of toolUses) {
       const tool = movieTools.find((t) => t.name === use.name);
       const result: CallToolResult = tool
-        ? await tool.handler(use.input as { title: string })
+        ? await tool.handler(use.input)
         : {
             content: [{ type: "text" as const, text: `Unknown tool "${use.name}"` }],
             isError: true,

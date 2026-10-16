@@ -1,9 +1,10 @@
 import { z } from "zod";
 import { server } from "../server.js";
-import { db } from "../db.js";
+import { db, type SystemJobRow } from "../db.js";
 import { radarrClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { stepJob } from "../jobs.js";
+import type { RadarrLibraryMovie } from "../types/radarr.js";
 
 // Durable batch-job planning, execution, and status management.
 export function registerJobTools() {
@@ -13,7 +14,7 @@ export function registerJobTools() {
     {},
     async () => {
       const stmt = db.prepare("SELECT * FROM system_jobs ORDER BY created_at DESC LIMIT 10");
-      const jobs = stmt.all() as any[];
+      const jobs = stmt.all() as SystemJobRow[];
 
       if (jobs.length === 0) {
         return textReply("No background batch jobs found in the queue.");
@@ -85,10 +86,10 @@ export function registerJobTools() {
       }
 
       try {
-        const response = await radarrClient.get("/api/v3/movie");
+        const response = await radarrClient.get<RadarrLibraryMovie[]>("/api/v3/movie");
         const allMovies = response.data || [];
 
-        const upgradeCandidates = allMovies.filter((movie: any) => {
+        const upgradeCandidates = allMovies.filter((movie) => {
           const currentResolution = movie.movieFile?.quality?.quality?.name || "";
           const isAlreadyHighQuality =
             currentResolution.includes("1080") ||
@@ -108,7 +109,7 @@ export function registerJobTools() {
         }
 
         const targetedBatch = upgradeCandidates.slice(0, maxBatchSize);
-        const targetIds = targetedBatch.map((movie: any) => movie.id);
+        const targetIds = targetedBatch.map((movie) => movie.id);
         const insertStmt = db.prepare(`
           INSERT INTO system_jobs (task_name, status, total_items, processed_items, payload)
           VALUES (?, 'PENDING', ?, 0, ?)
@@ -123,9 +124,9 @@ export function registerJobTools() {
         outputSummary += `- Scheduled in This Safe Batch: ${targetedBatch.length}\n\n`;
         outputSummary += "Sample Items Enqueued:\n";
 
-        targetedBatch.slice(0, 5).forEach((movie: any) => {
+        for (const movie of targetedBatch.slice(0, 5)) {
           outputSummary += `  ▪ ${movie.title} (${movie.year})\n`;
-        });
+        }
 
         if (targetedBatch.length > 5) {
           outputSummary += `  ...and ${targetedBatch.length - 5} more.\n\n`;

@@ -72,12 +72,12 @@ local database out of the build context. Releases are built and signed by `.gith
 | Dashboard build | the static assets the backend serves | `cd web && npm run build` | inside the image build (required) |
 | Dependency audit | known vulnerabilities, high severity or worse, in both projects | `npm audit --audit-level=high` (and the same in `web/`) | every pull request and push to `main` (required) |
 | Image smoke test | the image builds and starts with dummy configuration | `docker build -t plex-director-mcp .` | every pull request and push to `main` (required) |
-| Lint and format | [Biome](https://biomejs.dev/) with its recommended rules (`biome.jsonc`) on `src/`, `test/`, `scripts/` and `web/`: lint errors and unformatted files fail | `npm run check` | every pull request and push to `main` (required) |
+| Lint and format | [Biome](https://biomejs.dev/) with its recommended rules (`biome.jsonc`) on `src/`, `test/`, `scripts/` and `web/`: lint errors, warnings and unformatted files fail | `npm run check` | every pull request and push to `main` (required) |
 | Static analysis | CodeQL security queries on the TypeScript | (CI only) | every pull request, push to `main`, and weekly |
 
 `npm run format` rewrites files in the house style, and `npx biome check --write .` also applies safe lint
-fixes. Lint warnings (mostly `any` on service payloads in `src/`) don't fail the build yet; don't add new
-ones. The bulk reformat is listed in `.git-blame-ignore-revs`; run
+fixes. Service responses are typed in `src/types/` (only the fields the code reads); add the fields you
+need there rather than reaching for `any`. The bulk reformat is listed in `.git-blame-ignore-revs`; run
 `git config blame.ignoreRevsFile .git-blame-ignore-revs` once so local `git blame` skips it too.
 
 **The tests can't touch your real setup.** They run against a throwaway database, never read your `.env`,

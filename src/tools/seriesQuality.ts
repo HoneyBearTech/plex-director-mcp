@@ -3,6 +3,7 @@ import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 import type { MediaRow } from "./plex.js";
 import { fetchAllSeries, label, mapWithLimit, NOT_CONFIGURED } from "./series.js";
+import type { SonarrEpisodeFile, SonarrSeries } from "../types/sonarr.js";
 
 // "Which shows do I only have in 720p?" / "which shows mix qualities?", from the
 // quality Sonarr recorded for each downloaded file. Sonarr's own statistics say
@@ -29,7 +30,7 @@ export interface QualityOptions {
 }
 
 interface QualitySummary {
-  series: any;
+  series: SonarrSeries;
   files: number;
   // Resolution (0 = unknown) -> number of files.
   byResolution: Map<number, number>;
@@ -47,7 +48,7 @@ export function resetQualityCache(): void {
 
 const resolutionLabel = (resolution: number) => (resolution > 0 ? `${resolution}p` : "unknown");
 
-function summarise(series: any, files: any[]): QualitySummary {
+function summarise(series: SonarrSeries, files: SonarrEpisodeFile[]): QualitySummary {
   const byResolution = new Map<number, number>();
   for (const file of files) {
     const resolution = Number(file.quality?.quality?.resolution) || 0;
@@ -69,10 +70,10 @@ async function loadSummaries(now: number): Promise<QualitySummary[]> {
   // A show with no files has no quality; its files need not be fetched.
   const withFiles = all.filter((s) => !s.statistics || (s.statistics.episodeFileCount ?? 1) > 0);
   const summaries = await mapWithLimit(withFiles, FETCH_CONCURRENCY, async (series) => {
-    const response = await sonarrClient.get("/api/v3/episodefile", {
+    const response = await sonarrClient.get<SonarrEpisodeFile[]>("/api/v3/episodefile", {
       params: { seriesId: series.id },
     });
-    return summarise(series, (response.data ?? []) as any[]);
+    return summarise(series, response.data ?? []);
   });
   cache = { at: now, summaries };
   return summaries;
@@ -137,7 +138,7 @@ export async function findSeriesByQuality(options: QualityOptions = {}, now: num
       bestAtLeast !== undefined ? `best at least ${bestAtLeast}p` : null,
       mixedOnly ? "mixed qualities" : null,
       monitored !== "any" ? monitored : null,
-      folder ? `in folders matching "${options.folder!.trim()}"` : null,
+      folder ? `in folders matching "${options.folder?.trim()}"` : null,
     ].filter(Boolean);
     if (filters.length > 0)
       output += `Matching (${filters.join(", ")}): ${wanted.length} show${wanted.length === 1 ? "" : "s"}.\n`;

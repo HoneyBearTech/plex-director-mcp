@@ -10,7 +10,7 @@
     "build:skill": "tsx scripts/build-skill.ts",
     "lint": "biome lint .",
     "format": "biome format --write .",
-    "check": "biome check ."
+    "check": "biome check . --error-on-warnings"
   },
   "repository": {
     "type": "git",

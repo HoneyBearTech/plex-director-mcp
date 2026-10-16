@@ -2,6 +2,7 @@ import { plexClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 import { findSeries } from "./series.js";
+import type { PlexContainer, PlexMetadata } from "../types/plex.js";
 import {
   getSections,
   isoDay,
@@ -64,7 +65,7 @@ const norm = (s: string) =>
     .trim();
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
-function toEp(item: any, library: string): Ep {
+function toEp(item: PlexMetadata, library: string): Ep {
   return {
     show: String(item.grandparentTitle ?? "Unknown show"),
     season: Number(item.parentIndex ?? 0),
@@ -189,10 +190,10 @@ async function withinShow(
   // Find the show in every library (a show can be in HD and 4K).
   const found = await Promise.all(
     sections.map(async (section) => {
-      const response = await plexClient.get(`/library/sections/${section.key}/all`, {
+      const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
         params: { type: 2, title: show },
       });
-      return ((response.data?.MediaContainer?.Metadata ?? []) as any[]).map((item) => ({
+      return (response.data?.MediaContainer?.Metadata ?? []).map((item) => ({
         item,
         library: section.title,
       }));
@@ -224,19 +225,18 @@ async function withinShow(
     return textReply(
       `"${show}" matches several shows in Plex: ${lookup.candidates
         .slice(0, 10)
-        .map((c: any) => (c.year ? `${c.title} (${c.year})` : c.title))
+        .map((c) => (c.year ? `${c.title} (${c.year})` : c.title))
         .join("; ")}. Ask again with the full title.`,
     );
   }
-  const chosen = lookup.series as {
-    title: string;
-    copies: Array<{ ratingKey: string; library: string }>;
-  };
+  const chosen = lookup.series;
 
   const leaves = await Promise.all(
     chosen.copies.map(async (copy) => {
-      const response = await plexClient.get(`/library/metadata/${copy.ratingKey}/allLeaves`);
-      return ((response.data?.MediaContainer?.Metadata ?? []) as any[]).map((item) =>
+      const response = await plexClient.get<PlexContainer>(
+        `/library/metadata/${copy.ratingKey}/allLeaves`,
+      );
+      return (response.data?.MediaContainer?.Metadata ?? []).map((item) =>
         toEp(item, copy.library),
       );
     }),
@@ -325,8 +325,10 @@ async function libraryWide(
       if (airedTo) params["originallyAvailableAt<<"] = airedTo;
       if (episode !== undefined) params.index = episode;
       else if (episodeType === "premiere") params.index = 1;
-      const response = await plexClient.get(`/library/sections/${section.key}/all`, { params });
-      return ((response.data?.MediaContainer?.Metadata ?? []) as any[]).map((item) =>
+      const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
+        params,
+      });
+      return (response.data?.MediaContainer?.Metadata ?? []).map((item) =>
         toEp(item, section.title),
       );
     }),

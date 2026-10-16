@@ -1,4 +1,5 @@
 import axios from "axios";
+import { getErrorMessage } from "./util.js";
 
 // Send optional rich status alerts without making Discord a hard dependency.
 export async function sendDiscordNotification(
@@ -21,7 +22,7 @@ export async function sendDiscordNotification(
         },
       ],
     });
-  } catch (error: any) {
-    console.error(`Failed to dispatch alert matrix to Discord: ${error.message}`);
+  } catch (error: unknown) {
+    console.error(`Failed to dispatch alert matrix to Discord: ${getErrorMessage(error)}`);
   }
 }

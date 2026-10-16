@@ -1,6 +1,7 @@
 import { plexClient } from "../clients.js";
 import { getSetting, isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
+import type { PlexContainer, PlexDirectory, PlexMetadata } from "../types/plex.js";
 
 export type MediaKind = "movie" | "show";
 
@@ -103,11 +104,11 @@ interface PlexSection {
 // A server can have several libraries of a kind (e.g. HD, 4K, kids,
 // documentaries); an "I own" question has to look across all of them.
 export async function getSections(kinds: MediaKind[]): Promise<PlexSection[]> {
-  const response = await plexClient.get("/library/sections");
-  const directories: any[] = response.data?.MediaContainer?.Directory ?? [];
+  const response = await plexClient.get<PlexContainer>("/library/sections");
+  const directories = response.data?.MediaContainer?.Directory ?? [];
   return directories
-    .filter((d) => kinds.includes(d.type))
-    .map((d) => ({ key: String(d.key), title: String(d.title), kind: d.type as MediaKind }));
+    .filter((d): d is PlexDirectory & { type: MediaKind } => kinds.some((k) => k === d.type))
+    .map((d) => ({ key: String(d.key), title: String(d.title), kind: d.type }));
 }
 
 // Libraries the Settings page says to leave out unless one is asked for by name
@@ -129,7 +130,9 @@ async function resolveGenre(
 ): Promise<{ key: string } | { available: string[] }> {
   const lists = await Promise.all(
     sections.map(async (section) => {
-      const response = await plexClient.get(`/library/sections/${section.key}/genre`);
+      const response = await plexClient.get<PlexContainer>(
+        `/library/sections/${section.key}/genre`,
+      );
       return (response.data?.MediaContainer?.Directory ?? []) as Array<{
         key: string;
         title: string;
@@ -153,39 +156,44 @@ async function resolveGenre(
 async function resolveActor(
   name: string,
 ): Promise<{ id: string; name: string } | { candidates: string[] } | null> {
-  const response = await plexClient.get("/hubs/search", { params: { query: name, limit: 10 } });
-  const hubs: any[] = response.data?.MediaContainer?.Hub ?? [];
+  const response = await plexClient.get<PlexContainer>("/hubs/search", {
+    params: { query: name, limit: 10 },
+  });
+  const hubs = response.data?.MediaContainer?.Hub ?? [];
   const actorHub = hubs.find((h) => h.type === "actor");
-  const entries: Array<{ id: number | string; tag: string }> = actorHub?.Directory ?? [];
+  const entries = actorHub?.Directory ?? [];
 
   // The same person shows up once per library that contains them.
   const unique = new Map<string, string>();
-  for (const entry of entries) unique.set(String(entry.id), entry.tag);
+  for (const entry of entries) if (entry.tag) unique.set(String(entry.id), entry.tag);
   if (unique.size === 0) return null;
 
   const wanted = name.trim().toLowerCase();
   const people = [...unique].map(([id, tag]) => ({ id, name: tag }));
   const exact = people.filter((p) => p.name.toLowerCase() === wanted);
-  if (exact.length === 1) return exact[0]!;
-  if (people.length === 1) return people[0]!;
+  const [onlyExact] = exact;
+  if (onlyExact && exact.length === 1) return onlyExact;
+  const [onlyPerson] = people;
+  if (onlyPerson && people.length === 1) return onlyPerson;
   return { candidates: people.map((p) => p.name) };
 }
 
-function guidOf(item: any, scheme: string): string | null {
-  const guid = (item.Guid ?? []).find(
-    (g: any) => typeof g.id === "string" && g.id.startsWith(`${scheme}://`),
-  );
-  return guid ? guid.id.slice(scheme.length + 3) : null;
+function guidOf(item: PlexMetadata, scheme: string): string | null {
+  const prefix = `${scheme}://`;
+  const id = (item.Guid ?? [])
+    .map((g) => g.id)
+    .find((g) => typeof g === "string" && g.startsWith(prefix));
+  return id ? id.slice(prefix.length) : null;
 }
 
-function tmdbIdOf(item: any): string | null {
+function tmdbIdOf(item: PlexMetadata): string | null {
   return guidOf(item, "tmdb");
 }
 
 // The ids that identify one title, best first. TMDb and TVDB numbers overlap
 // each other and movies overlap shows, so each is namespaced. Shows fall back
 // to TVDB when Plex has no TMDb match for them.
-function identityKeys(item: any, kind: MediaKind): string[] {
+function identityKeys(item: PlexMetadata, kind: MediaKind): string[] {
   const keys: string[] = [];
   const tmdb = tmdbIdOf(item);
   if (tmdb) keys.push(`${kind}:tmdb:${tmdb}`);
@@ -362,15 +370,18 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     // must be counted once and paged as one, which needs the whole set.
     const perSection = await Promise.all(
       sections.map(async (section) => {
-        const response = await plexClient.get(`/library/sections/${section.key}/all`, {
-          params: {
-            ...filters,
-            includeGuids: 1,
-            "X-Plex-Container-Start": 0,
-            "X-Plex-Container-Size": FETCH_ALL,
+        const response = await plexClient.get<PlexContainer>(
+          `/library/sections/${section.key}/all`,
+          {
+            params: {
+              ...filters,
+              includeGuids: 1,
+              "X-Plex-Container-Start": 0,
+              "X-Plex-Container-Size": FETCH_ALL,
+            },
           },
-        });
-        const items: any[] = response.data?.MediaContainer?.Metadata ?? [];
+        );
+        const items = response.data?.MediaContainer?.Metadata ?? [];
         return { section, items };
       }),
     );
@@ -381,7 +392,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     // matched by TMDb.
     interface Group {
       kind: MediaKind;
-      item: any;
+      item: PlexMetadata;
       libraries: string[];
       watch: Watch;
     }
@@ -525,7 +536,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     output += undatedNote;
     output += "\n\n";
     for (const { kind, item, libraries, watch } of rows) {
-      const genres = (item.Genre ?? []).map((g: any) => g.tag).join(", ");
+      const genres = (item.Genre ?? []).map((g) => g.tag).join(", ");
       const kindNote = kind === "show" ? `TV show, ${showSummary(item.childCount, watch)}, ` : "";
       const watchNote = withDates ? ` - ${watchNoteOf(kind, watch, sort === "recentlyAdded")}` : "";
       output += `- ${item.title} (${item.year ?? "year unknown"}) - ${kindNote}${libraries.join(", ")}${genres ? ` - ${genres}` : ""}${watchNote}\n`;
@@ -539,7 +550,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
         year: item.year ?? null,
         posterUrl: plexPosterUrl(item.thumb),
         libraries,
-        genres: (item.Genre ?? []).map((g: any) => String(g.tag)),
+        genres: (item.Genre ?? []).map((g) => String(g.tag)),
         rating: rating !== undefined ? Number(rating) : null,
         detail: null,
       };
@@ -591,7 +602,7 @@ const latest = (a: number | null, b: number | null) =>
 const earliest = (a: number | null, b: number | null) =>
   a === null ? b : b === null ? a : Math.min(a, b);
 
-function watchOf(item: any, kind: MediaKind): Watch {
+function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
   return {
     viewCount: count(item.viewCount),
     viewOffset: count(item.viewOffset),
@@ -710,15 +721,18 @@ export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<
   await Promise.all(
     sections.map(async (section) => {
       for (let start = 0; ; start += INDEX_PAGE_SIZE) {
-        const response = await plexClient.get(`/library/sections/${section.key}/all`, {
-          params: {
-            includeGuids: 1,
-            "X-Plex-Container-Start": start,
-            "X-Plex-Container-Size": INDEX_PAGE_SIZE,
+        const response = await plexClient.get<PlexContainer>(
+          `/library/sections/${section.key}/all`,
+          {
+            params: {
+              includeGuids: 1,
+              "X-Plex-Container-Start": start,
+              "X-Plex-Container-Size": INDEX_PAGE_SIZE,
+            },
           },
-        });
-        const container = response.data?.MediaContainer ?? {};
-        const items: any[] = container.Metadata ?? [];
+        );
+        const container = response.data?.MediaContainer;
+        const items = container?.Metadata ?? [];
         for (const item of items) {
           const tmdbId = tmdbIdOf(item);
           if (!tmdbId) continue;
@@ -726,7 +740,7 @@ export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<
           libraries.push(section.title);
           byTmdbId.set(tmdbId, libraries);
         }
-        if (items.length === 0 || start + items.length >= Number(container.totalSize ?? 0)) break;
+        if (items.length === 0 || start + items.length >= Number(container?.totalSize ?? 0)) break;
       }
     }),
   );
@@ -771,13 +785,13 @@ export async function getOnDeck(args: OnDeckArgs = {}) {
   const limit = Math.min(Math.max(Math.trunc(args.limit ?? DEFAULT_DECK_LIMIT), 1), MAX_DECK_LIMIT);
 
   try {
-    const response = await plexClient.get("/library/onDeck", {
+    const response = await plexClient.get<PlexContainer>("/library/onDeck", {
       params: { "X-Plex-Container-Start": 0, "X-Plex-Container-Size": MAX_DECK_LIMIT },
     });
-    const raw: any[] = (response.data?.MediaContainer?.Metadata ?? []).filter(
-      (item: any) => item.type === "episode" || item.type === "movie",
+    const raw = (response.data?.MediaContainer?.Metadata ?? []).filter(
+      (item) => item.type === "episode" || item.type === "movie",
     );
-    const kindOf = (item: any): MediaKind => (item.type === "episode" ? "show" : "movie");
+    const kindOf = (item: PlexMetadata): MediaKind => (item.type === "episode" ? "show" : "movie");
 
     let items = raw.filter((item) => mediaType === "any" || kindOf(item) === mediaType);
     if (args.library) {
@@ -813,7 +827,7 @@ export async function getOnDeck(args: OnDeckArgs = {}) {
 
     // One entry per movie or show, however many libraries hold it.
     interface Entry {
-      item: any;
+      item: PlexMetadata;
       kind: MediaKind;
       libraries: string[];
     }
