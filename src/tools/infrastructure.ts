@@ -16,7 +16,7 @@ export function registerInfrastructureTools() {
     async () => {
       const { text, isError } = await runServarrBackups();
       return textReply(text, isError);
-    }
+    },
   );
 
   // qBittorrent queue auditing and stalled-download remediation.
@@ -24,8 +24,16 @@ export function registerInfrastructureTools() {
     "manage_stalled_downloads",
     "Scans qBittorrent download queues to isolate, pause, or blocklist items stuck below threshold download speeds.",
     {
-      action: z.enum(["AUDIT", "PURGE_STALLED"]).describe("AUDIT returns stalled candidates; PURGE_STALLED wipes them and flags a re-search."),
-      minSpeedKbps: z.number().optional().default(50).describe("The minimum allowed speed threshold before a torrent is considered stalled.")
+      action: z
+        .enum(["AUDIT", "PURGE_STALLED"])
+        .describe(
+          "AUDIT returns stalled candidates; PURGE_STALLED wipes them and flags a re-search.",
+        ),
+      minSpeedKbps: z
+        .number()
+        .optional()
+        .default(50)
+        .describe("The minimum allowed speed threshold before a torrent is considered stalled."),
     },
     async ({ action, minSpeedKbps }) => {
       try {
@@ -40,7 +48,14 @@ export function registerInfrastructureTools() {
         });
 
         if (stalledTorrents.length === 0) {
-          return { content: [{ type: "text", text: "✅ Queue Audit: Zero stalled or low-bandwidth torrent items detected in qBittorrent." }] };
+          return {
+            content: [
+              {
+                type: "text",
+                text: "✅ Queue Audit: Zero stalled or low-bandwidth torrent items detected in qBittorrent.",
+              },
+            ],
+          };
         }
 
         if (action === "AUDIT") {
@@ -67,11 +82,18 @@ export function registerInfrastructureTools() {
 
         purgeReport += `\nAll stalled items successfully dropped. Servarr RSS routines will automatically cycle to alternative indexer releases.`;
         return { content: [{ type: "text", text: purgeReport }] };
-
       } catch (error: any) {
-        return { content: [{ type: "text", text: `Failed to execute qBittorrent cleanup routines: ${error.message}` }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Failed to execute qBittorrent cleanup routines: ${error.message}`,
+            },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   );
 
   // Multi-host CPU, memory, and Docker health monitoring.
@@ -82,7 +104,15 @@ export function registerInfrastructureTools() {
     async () => {
       const hosts = getConfiguredHosts();
       if (hosts.length === 0) {
-        return { content: [{ type: "text", text: "No remote Ubuntu hosts defined in configuration metadata mappings." }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No remote Ubuntu hosts defined in configuration metadata mappings.",
+            },
+          ],
+          isError: true,
+        };
       }
 
       let systemsReport = `🖥️ **Distributed Ubuntu Cluster Performance Matrix**\n\n`;
@@ -109,7 +139,7 @@ export function registerInfrastructureTools() {
       }
 
       return { content: [{ type: "text", text: systemsReport }] };
-    }
+    },
   );
 
   // Cluster telemetry data for clients that render charts from the response.
@@ -120,7 +150,15 @@ export function registerInfrastructureTools() {
     async () => {
       const hosts = getConfiguredHosts();
       if (hosts.length === 0) {
-        return { content: [{ type: "text", text: "No remote Ubuntu hosts defined in configuration metadata mappings." }], isError: true };
+        return {
+          content: [
+            {
+              type: "text",
+              text: "No remote Ubuntu hosts defined in configuration metadata mappings.",
+            },
+          ],
+          isError: true,
+        };
       }
 
       try {
@@ -135,8 +173,13 @@ export function registerInfrastructureTools() {
 
         return { content: [{ type: "text", text: report }] };
       } catch (error: any) {
-        return { content: [{ type: "text", text: `Failed to compile host telemetry metrics: ${error.message}` }], isError: true };
+        return {
+          content: [
+            { type: "text", text: `Failed to compile host telemetry metrics: ${error.message}` },
+          ],
+          isError: true,
+        };
       }
-    }
+    },
   );
 }

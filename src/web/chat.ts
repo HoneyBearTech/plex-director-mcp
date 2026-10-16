@@ -1,5 +1,11 @@
 import Anthropic from "@anthropic-ai/sdk";
-import type { MessageParam, TextBlock, ToolResultBlockParam, ToolUnion, ToolUseBlock } from "@anthropic-ai/sdk/resources/messages";
+import type {
+  MessageParam,
+  TextBlock,
+  ToolResultBlockParam,
+  ToolUnion,
+  ToolUseBlock,
+} from "@anthropic-ai/sdk/resources/messages";
 import { movieTools } from "../tools/movies.js";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import type { MediaRow } from "../tools/plex.js";
@@ -16,9 +22,9 @@ export const SYSTEM_PROMPT = [
   // Shared with the MCP server's instructions and the Agent Skill.
   chatGuidance(new Set(movieTools.map((t) => t.name))),
 
-  "HOW RESULTS ARE SHOWN: when a search tool returns movies or shows, the interface displays them to the user as a table with posters directly BELOW your reply, one row per title with the Plex libraries that hold it (shows also get season and episode counts and watch progress; Sonarr completeness results show how many aired episodes are downloaded instead of libraries). The table always contains everything the tool returned, so never say anything is missing from it, never mention rows, limits, paging, offsets or 'the first N', and refer to it as \"the table below\" (never \"above\").",
+  'HOW RESULTS ARE SHOWN: when a search tool returns movies or shows, the interface displays them to the user as a table with posters directly BELOW your reply, one row per title with the Plex libraries that hold it (shows also get season and episode counts and watch progress; Sonarr completeness results show how many aired episodes are downloaded instead of libraries). The table always contains everything the tool returned, so never say anything is missing from it, never mention rows, limits, paging, offsets or \'the first N\', and refer to it as "the table below" (never "above").',
 
-  "FILTERS: the table shows exactly the rows the tool returned, so express any narrowing the user asks for as a tool filter (year range, owned/missing, genre, actor, library such as 4K, mediaType movie or show) - never filter a tool's results yourself in your reply. For a follow-up like \"which of those are 4K?\", run the search again with the earlier filters plus the new one (e.g. library \"4k\"). If the user asks for everything, request the maximum limit, and if the tool says more titles remain, fetch the next page with the offset it gives. Earlier messages in the conversation are included, so follow-ups such as \"what about the sequel?\" refer to them; a bracketed \"[Table shown to the user ...]\" note in an earlier answer lists the titles the user saw - the interface adds that note to earlier turns for your information, so never write one in your own reply.",
+  'FILTERS: the table shows exactly the rows the tool returned, so express any narrowing the user asks for as a tool filter (year range, owned/missing, genre, actor, library such as 4K, mediaType movie or show) - never filter a tool\'s results yourself in your reply. For a follow-up like "which of those are 4K?", run the search again with the earlier filters plus the new one (e.g. library "4k"). If the user asks for everything, request the maximum limit, and if the tool says more titles remain, fetch the next page with the offset it gives. Earlier messages in the conversation are included, so follow-ups such as "what about the sequel?" refer to them; a bracketed "[Table shown to the user ...]" note in an earlier answer lists the titles the user saw - the interface adds that note to earlier turns for your information, so never write one in your own reply.',
 
   "REPLY STYLE (this is shown in a chat window, so keep it clean and scannable): start with the answer in one or two short sentences - the number that matters and what the table shows. Add up to three short '- ' bullet points only if they add something useful (a highlight, a caveat, an offer of a next step), each under about 15 words. Never write a paragraph, never list more than three example titles in a row, no long parenthetical lists. Use **bold** sparingly for the key number or title; avoid other Markdown, and no tables or headings. Be concise and direct.",
 ].join("\n\n");
@@ -62,7 +68,12 @@ function describeTable(media: MediaRow[]): string {
   const rows = media.slice(0, MAX_SUMMARY_ROWS).map((m) => {
     const year = m.year ? ` (${m.year})` : "";
     const kind = m.kind === "show" ? " [TV show]" : "";
-    const where = m.libraries === null ? "" : m.libraries.length === 0 ? " - not in Plex" : ` - in Plex: ${m.libraries.join(", ")}`;
+    const where =
+      m.libraries === null
+        ? ""
+        : m.libraries.length === 0
+          ? " - not in Plex"
+          : ` - in Plex: ${m.libraries.join(", ")}`;
     return `${m.title}${year}${kind}${where}`;
   });
   const more = media.length > rows.length ? `; and ${media.length - rows.length} more` : "";
@@ -77,7 +88,9 @@ export function buildHistoryMessages(history: ChatTurn[] = []): MessageParam[] {
 
   for (const turn of history.slice(-MAX_HISTORY_TURNS)) {
     if (turn.role !== "user" && turn.role !== "assistant") continue;
-    let text = String(turn.text ?? "").slice(0, MAX_TURN_CHARS).trim();
+    let text = String(turn.text ?? "")
+      .slice(0, MAX_TURN_CHARS)
+      .trim();
     if (turn.role === "assistant" && Array.isArray(turn.media) && turn.media.length > 0) {
       text += describeTable(turn.media);
     }
@@ -118,7 +131,10 @@ function buildTools(): ToolUnion[] {
   }));
 }
 
-export async function askMovieAssistant(question: string, history: ChatTurn[] = []): Promise<ChatAnswer> {
+export async function askMovieAssistant(
+  question: string,
+  history: ChatTurn[] = [],
+): Promise<ChatAnswer> {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   if (!apiKey) {
     throw new Error("ANTHROPIC_API_KEY is not configured on the server.");
@@ -145,7 +161,9 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
       messages,
     });
 
-    const toolUses = response.content.filter((block): block is ToolUseBlock => block.type === "tool_use");
+    const toolUses = response.content.filter(
+      (block): block is ToolUseBlock => block.type === "tool_use",
+    );
 
     if (toolUses.length === 0) {
       const text = response.content
@@ -163,7 +181,10 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
       const tool = movieTools.find((t) => t.name === use.name);
       const result: CallToolResult = tool
         ? await tool.handler(use.input as { title: string })
-        : { content: [{ type: "text" as const, text: `Unknown tool "${use.name}"` }], isError: true };
+        : {
+            content: [{ type: "text" as const, text: `Unknown tool "${use.name}"` }],
+            isError: true,
+          };
 
       media.splice(0, media.length, ...mergeToolRows(media, result.structuredContent));
 
@@ -174,7 +195,11 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
         } else if (block.type === "image" && SUPPORTED_IMAGE_TYPES.has(block.mimeType)) {
           content.push({
             type: "image",
-            source: { type: "base64", media_type: block.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp", data: block.data },
+            source: {
+              type: "base64",
+              media_type: block.mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp",
+              data: block.data,
+            },
           });
           images.push({ mimeType: block.mimeType, data: block.data });
         }
@@ -191,5 +216,9 @@ export async function askMovieAssistant(question: string, history: ChatTurn[] = 
     messages.push({ role: "user", content: toolResults });
   }
 
-  return { text: "I wasn't able to finish looking that up - the assistant hit its tool-call limit.", images, media };
+  return {
+    text: "I wasn't able to finish looking that up - the assistant hit its tool-call limit.",
+    images,
+    media,
+  };
 }

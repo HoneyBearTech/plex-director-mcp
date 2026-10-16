@@ -33,7 +33,12 @@ export interface IndexerHealth {
   warnings: ProwlarrWarning[];
 }
 
-const STATE_ORDER: Record<IndexerState, number> = { "backing-off": 0, warning: 1, disabled: 2, healthy: 3 };
+const STATE_ORDER: Record<IndexerState, number> = {
+  "backing-off": 0,
+  warning: 1,
+  disabled: 2,
+  healthy: 3,
+};
 
 export async function getIndexerHealth(): Promise<IndexerHealth> {
   const [configs, statuses, health] = await Promise.all([
@@ -43,7 +48,8 @@ export async function getIndexerHealth(): Promise<IndexerHealth> {
   ]);
 
   const statusByIndexer = new Map<number, any>();
-  for (const status of (statuses.data ?? []) as any[]) statusByIndexer.set(status.indexerId, status);
+  for (const status of (statuses.data ?? []) as any[])
+    statusByIndexer.set(status.indexerId, status);
 
   const now = Date.now();
   const indexers: IndexerRow[] = ((configs.data ?? []) as any[]).map((config) => {
@@ -69,7 +75,9 @@ export async function getIndexerHealth(): Promise<IndexerHealth> {
     };
   });
 
-  indexers.sort((a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name));
+  indexers.sort(
+    (a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name),
+  );
 
   const warnings: ProwlarrWarning[] = ((health.data ?? []) as any[]).map((h) => ({
     type: String(h.type),

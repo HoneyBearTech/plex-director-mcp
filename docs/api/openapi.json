@@ -121,7 +121,9 @@
             "content": {
               "application/json": {
                 "schema": { "$ref": "#/components/schemas/Error" },
-                "example": { "error": "Too many failed login attempts. Try again in a few minutes." }
+                "example": {
+                  "error": "Too many failed login attempts. Try again in a few minutes."
+                }
               }
             }
           }
@@ -452,7 +454,17 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": ["sonarr", "radarr", "prowlarr", "sabnzbd", "qbittorrent", "tautulli", "plex", "tmdb", "nodes"]
+              "enum": [
+                "sonarr",
+                "radarr",
+                "prowlarr",
+                "sabnzbd",
+                "qbittorrent",
+                "tautulli",
+                "plex",
+                "tmdb",
+                "nodes"
+              ]
             }
           }
         ],
@@ -465,7 +477,12 @@
           }
         },
         "responses": {
-          "400": { "description": "The URL changed but a saved secret (API key, token or password) was not entered again. Nothing is saved.", "content": { "application/json": { "schema": { "$ref": "#/components/schemas/Error" } } } },
+          "400": {
+            "description": "The URL changed but a saved secret (API key, token or password) was not entered again. Nothing is saved.",
+            "content": {
+              "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
+            }
+          },
           "200": {
             "description": "Saved.",
             "content": {
@@ -640,7 +657,10 @@
         "required": ["authRequired", "authenticated"],
         "properties": {
           "authRequired": { "type": "boolean", "description": "Whether WEB_PASSWORD is set." },
-          "authenticated": { "type": "boolean", "description": "True when no sign-in is required or the session cookie is valid." }
+          "authenticated": {
+            "type": "boolean",
+            "description": "True when no sign-in is required or the session cookie is valid."
+          }
         }
       },
       "LoginRequest": {
@@ -667,14 +687,20 @@
         "type": "object",
         "properties": {
           "user": { "type": "string" },
-          "userThumb": { "type": ["string", "null"], "description": "The viewer's avatar URL as Tautulli reports it." },
+          "userThumb": {
+            "type": ["string", "null"],
+            "description": "The viewer's avatar URL as Tautulli reports it."
+          },
           "title": { "type": "string" },
           "year": { "type": ["integer", "string", "null"] },
           "resolution": { "type": ["string", "null"] },
           "container": { "type": ["string", "null"] },
           "transcoding": { "type": "boolean" },
           "progress": { "type": "number", "description": "Percent played." },
-          "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/status/image URL." }
+          "posterUrl": {
+            "type": ["string", "null"],
+            "description": "A same-origin /api/status/image URL."
+          }
         }
       },
       "LibraryAnalytics": {
@@ -697,8 +723,14 @@
                     "properties": {
                       "label": { "type": "string" },
                       "plays": { "type": "number" },
-                      "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/status/image URL, for media categories." },
-                      "userThumb": { "type": ["string", "null"], "description": "An avatar URL, for the top users category." }
+                      "posterUrl": {
+                        "type": ["string", "null"],
+                        "description": "A same-origin /api/status/image URL, for media categories."
+                      },
+                      "userThumb": {
+                        "type": ["string", "null"],
+                        "description": "An avatar URL, for the top users category."
+                      }
                     }
                   }
                 }
@@ -716,7 +748,21 @@
       },
       "OnlineHostHealth": {
         "type": "object",
-        "required": ["host", "hostname", "online", "cpuPercent", "ramPercent", "ramUsedMb", "ramTotalMb", "containersRunning", "deadContainers", "diskPercent", "diskUsed", "diskTotal", "uptime"],
+        "required": [
+          "host",
+          "hostname",
+          "online",
+          "cpuPercent",
+          "ramPercent",
+          "ramUsedMb",
+          "ramTotalMb",
+          "containersRunning",
+          "deadContainers",
+          "diskPercent",
+          "diskUsed",
+          "diskTotal",
+          "uptime"
+        ],
         "properties": {
           "host": { "type": "string", "description": "As configured, including any :port." },
           "hostname": { "type": "string" },
@@ -726,7 +772,11 @@
           "ramUsedMb": { "type": "number" },
           "ramTotalMb": { "type": "number" },
           "containersRunning": { "type": "integer" },
-          "deadContainers": { "type": "array", "items": { "type": "string" }, "description": "Names of exited or dead containers." },
+          "deadContainers": {
+            "type": "array",
+            "items": { "type": "string" },
+            "description": "Names of exited or dead containers."
+          },
           "diskPercent": { "type": "number", "description": "Root filesystem use." },
           "diskUsed": { "type": "string", "examples": ["55G"] },
           "diskTotal": { "type": "string", "examples": ["115G"] },
@@ -746,8 +796,14 @@
             "description": "Present when the host presented a different SSH key than the one remembered.",
             "required": ["expected", "actual"],
             "properties": {
-              "expected": { "type": "string", "description": "Remembered fingerprint, SHA256:<base64>." },
-              "actual": { "type": "string", "description": "Presented fingerprint, SHA256:<base64>." }
+              "expected": {
+                "type": "string",
+                "description": "Remembered fingerprint, SHA256:<base64>."
+              },
+              "actual": {
+                "type": "string",
+                "description": "Presented fingerprint, SHA256:<base64>."
+              }
             }
           }
         }
@@ -774,7 +830,10 @@
           "dlspeedKbps": { "type": "number" },
           "sizeBytes": { "type": "number" },
           "seeders": { "type": "integer" },
-          "stalled": { "type": "boolean", "description": "True when qBittorrent reports stalledDL." }
+          "stalled": {
+            "type": "boolean",
+            "description": "True when qBittorrent reports stalledDL."
+          }
         }
       },
       "IndexerHealth": {
@@ -801,7 +860,17 @@
       },
       "IndexerRow": {
         "type": "object",
-        "required": ["id", "name", "protocol", "priority", "enabled", "state", "mostRecentFailure", "disabledTill", "escalationLevel"],
+        "required": [
+          "id",
+          "name",
+          "protocol",
+          "priority",
+          "enabled",
+          "state",
+          "mostRecentFailure",
+          "disabledTill",
+          "escalationLevel"
+        ],
         "properties": {
           "id": { "type": "integer" },
           "name": { "type": "string" },
@@ -810,17 +879,32 @@
           "enabled": { "type": "boolean" },
           "state": { "type": "string", "enum": ["healthy", "warning", "backing-off", "disabled"] },
           "mostRecentFailure": { "type": ["string", "null"], "format": "date-time" },
-          "disabledTill": { "type": ["string", "null"], "format": "date-time", "description": "Set only while Prowlarr is backing off." },
+          "disabledTill": {
+            "type": ["string", "null"],
+            "format": "date-time",
+            "description": "Set only while Prowlarr is backing off."
+          },
           "escalationLevel": { "type": "number" }
         }
       },
       "Job": {
         "type": "object",
-        "required": ["id", "taskName", "status", "totalItems", "processedItems", "createdAt", "updatedAt"],
+        "required": [
+          "id",
+          "taskName",
+          "status",
+          "totalItems",
+          "processedItems",
+          "createdAt",
+          "updatedAt"
+        ],
         "properties": {
           "id": { "type": "integer" },
           "taskName": { "type": "string" },
-          "status": { "type": "string", "enum": ["PENDING", "RUNNING", "PAUSED", "COMPLETED", "CANCELLED"] },
+          "status": {
+            "type": "string",
+            "enum": ["PENDING", "RUNNING", "PAUSED", "COMPLETED", "CANCELLED"]
+          },
           "totalItems": { "type": "integer" },
           "processedItems": { "type": "integer" },
           "createdAt": { "type": ["string", "null"], "format": "date-time" },
@@ -831,12 +915,25 @@
         "type": "object",
         "required": ["configured"],
         "properties": {
-          "configured": { "type": "boolean", "description": "Whether a value is stored. The value itself is never returned." }
+          "configured": {
+            "type": "boolean",
+            "description": "Whether a value is stored. The value itself is never returned."
+          }
         }
       },
       "SettingsResponse": {
         "type": "object",
-        "required": ["sonarr", "radarr", "prowlarr", "sabnzbd", "qbittorrent", "tautulli", "plex", "tmdb", "nodes"],
+        "required": [
+          "sonarr",
+          "radarr",
+          "prowlarr",
+          "sabnzbd",
+          "qbittorrent",
+          "tautulli",
+          "plex",
+          "tmdb",
+          "nodes"
+        ],
         "properties": {
           "sonarr": {
             "type": "object",
@@ -887,7 +984,10 @@
             "properties": {
               "url": { "type": "string" },
               "token": { "$ref": "#/components/schemas/SecretStatus" },
-              "skipLibraries": { "type": "string", "description": "Comma-separated Plex library names left out of searches." }
+              "skipLibraries": {
+                "type": "string",
+                "description": "Comma-separated Plex library names left out of searches."
+              }
             }
           },
           "tmdb": {
@@ -899,7 +999,10 @@
           "nodes": {
             "type": "object",
             "properties": {
-              "hosts": { "type": "string", "description": "Comma-separated SSH hosts, each optionally with :port." },
+              "hosts": {
+                "type": "string",
+                "description": "Comma-separated SSH hosts, each optionally with :port."
+              },
               "sshUser": { "type": "string" }
             }
           }
@@ -910,11 +1013,23 @@
         "description": "Any subset of the fields for the service in the path. Fields that do not belong to that service are ignored.",
         "properties": {
           "url": { "type": "string", "description": "All services except tmdb and nodes." },
-          "apiKey": { "type": "string", "format": "password", "description": "Secret. sonarr, radarr, prowlarr, sabnzbd, tautulli, tmdb. Blank keeps the stored value." },
+          "apiKey": {
+            "type": "string",
+            "format": "password",
+            "description": "Secret. sonarr, radarr, prowlarr, sabnzbd, tautulli, tmdb. Blank keeps the stored value."
+          },
           "defaultQualityProfile": { "type": "string", "description": "radarr only." },
           "username": { "type": "string", "description": "qbittorrent only." },
-          "password": { "type": "string", "format": "password", "description": "Secret. qbittorrent only. Blank keeps the stored value." },
-          "token": { "type": "string", "format": "password", "description": "Secret. plex only. Blank keeps the stored value." },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "description": "Secret. qbittorrent only. Blank keeps the stored value."
+          },
+          "token": {
+            "type": "string",
+            "format": "password",
+            "description": "Secret. plex only. Blank keeps the stored value."
+          },
           "skipLibraries": { "type": "string", "description": "plex only." },
           "hosts": { "type": "string", "description": "nodes only." },
           "sshUser": { "type": "string", "description": "nodes only." }
@@ -959,14 +1074,20 @@
         "type": "object",
         "required": ["text", "images", "media"],
         "properties": {
-          "text": { "type": "string", "description": "The reply, in light Markdown (bold, italics, code, bullets)." },
+          "text": {
+            "type": "string",
+            "description": "The reply, in light Markdown (bold, italics, code, bullets)."
+          },
           "images": {
             "type": "array",
             "items": {
               "type": "object",
               "required": ["mimeType", "data"],
               "properties": {
-                "mimeType": { "type": "string", "enum": ["image/jpeg", "image/png", "image/gif", "image/webp"] },
+                "mimeType": {
+                  "type": "string",
+                  "enum": ["image/jpeg", "image/png", "image/gif", "image/webp"]
+                },
                 "data": { "type": "string", "contentEncoding": "base64" }
               }
             }
@@ -980,16 +1101,35 @@
       },
       "MediaRow": {
         "type": "object",
-        "required": ["kind", "title", "year", "posterUrl", "libraries", "genres", "rating", "detail"],
+        "required": [
+          "kind",
+          "title",
+          "year",
+          "posterUrl",
+          "libraries",
+          "genres",
+          "rating",
+          "detail"
+        ],
         "properties": {
           "kind": { "type": "string", "enum": ["movie", "show"] },
           "title": { "type": "string" },
           "year": { "type": ["integer", "null"] },
-          "posterUrl": { "type": ["string", "null"], "description": "A same-origin /api/plex/image URL or a public image URL, never a URL carrying the Plex token." },
-          "libraries": { "type": ["array", "null"], "items": { "type": "string" }, "description": "Plex libraries holding it. Empty = not in Plex; null = not checked." },
+          "posterUrl": {
+            "type": ["string", "null"],
+            "description": "A same-origin /api/plex/image URL or a public image URL, never a URL carrying the Plex token."
+          },
+          "libraries": {
+            "type": ["array", "null"],
+            "items": { "type": "string" },
+            "description": "Plex libraries holding it. Empty = not in Plex; null = not checked."
+          },
           "genres": { "type": "array", "items": { "type": "string" } },
           "rating": { "type": ["number", "null"] },
-          "detail": { "type": ["string", "null"], "description": "Extra context, e.g. the role an actor played." },
+          "detail": {
+            "type": ["string", "null"],
+            "description": "Extra context, e.g. the role an actor played."
+          },
           "show": {
             "type": "object",
             "description": "Only on shows.",
@@ -997,11 +1137,17 @@
               "seasons": { "type": ["integer", "null"] },
               "episodes": { "type": ["integer", "null"] },
               "watchedEpisodes": { "type": ["integer", "null"] },
-              "ownedEpisodes": { "type": ["integer", "null"], "description": "Set by the Sonarr tools: aired episodes downloaded." },
+              "ownedEpisodes": {
+                "type": ["integer", "null"],
+                "description": "Set by the Sonarr tools: aired episodes downloaded."
+              },
               "network": { "type": ["string", "null"] }
             }
           },
-          "lastWatched": { "type": ["string", "null"], "description": "YYYY-MM-DD, null for never, or \"date unknown\"." },
+          "lastWatched": {
+            "type": ["string", "null"],
+            "description": "YYYY-MM-DD, null for never, or \"date unknown\"."
+          },
           "added": { "type": ["string", "null"], "description": "YYYY-MM-DD." }
         }
       }

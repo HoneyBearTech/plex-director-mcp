@@ -4,7 +4,14 @@ import { usePolling } from "../usePolling";
 
 function Poster({ src, alt }: { src: string | null; alt: string }) {
   if (!src) {
-    return <Flex width="36px" height="54px" flexShrink="0" style={{ borderRadius: 4, background: "var(--gray-a4)" }} />;
+    return (
+      <Flex
+        width="36px"
+        height="54px"
+        flexShrink="0"
+        style={{ borderRadius: 4, background: "var(--gray-a4)" }}
+      />
+    );
   }
   return (
     <img
@@ -39,7 +46,8 @@ export function StatusPage() {
               {activity.data.streamCount > 0 && (
                 <Text color="gray">
                   {" "}
-                  ({activity.data.directPlayCount} direct play, {activity.data.transcodeCount} transcoding)
+                  ({activity.data.directPlayCount} direct play, {activity.data.transcodeCount}{" "}
+                  transcoding)
                 </Text>
               )}
             </Text>
@@ -49,7 +57,12 @@ export function StatusPage() {
                   <Table.Row key={i}>
                     <Table.Cell>
                       <Flex align="center" gap="2">
-                        <Avatar src={session.userThumb ?? undefined} fallback={session.user.charAt(0).toUpperCase()} size="2" radius="full" />
+                        <Avatar
+                          src={session.userThumb ?? undefined}
+                          fallback={session.user.charAt(0).toUpperCase()}
+                          size="2"
+                          radius="full"
+                        />
                         <Text>{session.user}</Text>
                       </Flex>
                     </Table.Cell>
@@ -97,7 +110,12 @@ export function StatusPage() {
                     <Table.Cell>
                       <Flex align="center" gap="3">
                         {row.userThumb ? (
-                          <Avatar src={row.userThumb} fallback={row.label.charAt(0).toUpperCase()} size="2" radius="full" />
+                          <Avatar
+                            src={row.userThumb}
+                            fallback={row.label.charAt(0).toUpperCase()}
+                            size="2"
+                            radius="full"
+                          />
                         ) : row.posterUrl ? (
                           <Poster src={row.posterUrl} alt={row.label} />
                         ) : null}

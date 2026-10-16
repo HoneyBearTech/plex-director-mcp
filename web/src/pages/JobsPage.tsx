@@ -30,12 +30,15 @@ export function JobsPage() {
           Background jobs
         </Heading>
         <Text as="p" size="2" color="gray" mb="3">
-          Batch jobs such as media upgrades. This page is read-only - start, pause, resume, or cancel a job by asking the assistant.
+          Batch jobs such as media upgrades. This page is read-only - start, pause, resume, or
+          cancel a job by asking the assistant.
         </Text>
 
         {jobs.loading && !jobs.data && <Text color="gray">Loading…</Text>}
         {jobs.data && jobs.data.jobs.length === 0 && (
-          <Text color="gray">No background jobs yet. Ask the assistant to plan a media upgrade to create one.</Text>
+          <Text color="gray">
+            No background jobs yet. Ask the assistant to plan a media upgrade to create one.
+          </Text>
         )}
         {jobs.data && jobs.data.jobs.length > 0 && (
           <Table.Root>
@@ -51,7 +54,8 @@ export function JobsPage() {
             </Table.Header>
             <Table.Body>
               {jobs.data.jobs.map((job) => {
-                const percent = job.totalItems > 0 ? Math.round((job.processedItems / job.totalItems) * 100) : 0;
+                const percent =
+                  job.totalItems > 0 ? Math.round((job.processedItems / job.totalItems) * 100) : 0;
                 return (
                   <Table.Row key={job.id}>
                     <Table.RowHeaderCell>#{job.id}</Table.RowHeaderCell>

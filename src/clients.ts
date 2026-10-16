@@ -33,7 +33,9 @@ export const qbitClient = axios.create({ withCredentials: true, timeout: REQUEST
 
 function tautulliApiUrl(rawUrl: string): string {
   if (!rawUrl) return "";
-  return /\/api\/v2\/?$/i.test(rawUrl) ? rawUrl.replace(/\/+$/, "") : `${rawUrl.replace(/\/+$/, "")}/api/v2`;
+  return /\/api\/v2\/?$/i.test(rawUrl)
+    ? rawUrl.replace(/\/+$/, "")
+    : `${rawUrl.replace(/\/+$/, "")}/api/v2`;
 }
 
 export function refreshClients(): void {
@@ -52,7 +54,7 @@ export function refreshClients(): void {
   plexClient.defaults.baseURL = getSetting("PLEX_URL");
   plexClient.defaults.headers.common["X-Plex-Token"] = getSetting("PLEX_TOKEN");
 
-  tmdbClient.defaults.headers.common["Authorization"] = `Bearer ${getSetting("TMDB_API_KEY")}`;
+  tmdbClient.defaults.headers.common.Authorization = `Bearer ${getSetting("TMDB_API_KEY")}`;
 
   prowlarrClient.defaults.baseURL = getSetting("PROWLARR_URL");
   prowlarrClient.defaults.headers.common["X-Api-Key"] = getSetting("PROWLARR_API_KEY");

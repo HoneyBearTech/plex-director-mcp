@@ -31,27 +31,78 @@ export const CHANGE_RULES: string[] = [
 ];
 
 export const ROUTES: Route[] = [
-  { question: "Do I have <title>? What do I own by genre, actor, year, library (e.g. 4K), network, rating, watch state or date added?", tools: ["search_plex_library"] },
-  { question: "What should I watch next? Which episode is next in <show>?", tools: ["get_on_deck"] },
-  { question: "Which episode of <show> is the one where ...? Episodes that aired in a date range, premieres or finales", tools: ["search_episodes"] },
-  { question: "Which of <actor>'s movies or shows do I have, and which am I missing?", tools: ["resolve_actor_filmography"] },
-  { question: "Is <movie> in Radarr and monitored? Why is <movie> missing?", tools: ["check_movie_status", "diagnose_missing_media"] },
-  { question: "Do I have every episode of <show>? Which shows have gaps?", tools: ["check_series_completeness", "find_series_gaps"] },
-  { question: "Is <show> monitored, what quality profile, what is queued? Why are episodes of <show> missing?", tools: ["check_series_status", "diagnose_missing_episodes"] },
-  { question: "Which shows do I only have in 720p, or in mixed qualities?", tools: ["find_series_by_quality"] },
-  { question: "What's on this week? When does <show> come back?", tools: ["get_upcoming_episodes"] },
-  { question: "Add a movie to Radarr", tools: ["search_and_select_movies", "confirm_selected_choices"] },
+  {
+    question:
+      "Do I have <title>? What do I own by genre, actor, year, library (e.g. 4K), network, rating, watch state or date added?",
+    tools: ["search_plex_library"],
+  },
+  {
+    question: "What should I watch next? Which episode is next in <show>?",
+    tools: ["get_on_deck"],
+  },
+  {
+    question:
+      "Which episode of <show> is the one where ...? Episodes that aired in a date range, premieres or finales",
+    tools: ["search_episodes"],
+  },
+  {
+    question: "Which of <actor>'s movies or shows do I have, and which am I missing?",
+    tools: ["resolve_actor_filmography"],
+  },
+  {
+    question: "Is <movie> in Radarr and monitored? Why is <movie> missing?",
+    tools: ["check_movie_status", "diagnose_missing_media"],
+  },
+  {
+    question: "Do I have every episode of <show>? Which shows have gaps?",
+    tools: ["check_series_completeness", "find_series_gaps"],
+  },
+  {
+    question:
+      "Is <show> monitored, what quality profile, what is queued? Why are episodes of <show> missing?",
+    tools: ["check_series_status", "diagnose_missing_episodes"],
+  },
+  {
+    question: "Which shows do I only have in 720p, or in mixed qualities?",
+    tools: ["find_series_by_quality"],
+  },
+  {
+    question: "What's on this week? When does <show> come back?",
+    tools: ["get_upcoming_episodes"],
+  },
+  {
+    question: "Add a movie to Radarr",
+    tools: ["search_and_select_movies", "confirm_selected_choices"],
+  },
   { question: "Are my indexers healthy?", tools: ["check_indexer_health"] },
   { question: "Which downloads are stalled? Clean them up", tools: ["manage_stalled_downloads"] },
-  { question: "Upgrade movies that have no file or are below 1080p, as a paced batch; check, pause, resume or cancel it", tools: ["plan_media_upgrade", "get_background_jobs", "update_job_status", "execute_next_job_step"] },
-  { question: "Who is streaming now? What gets watched most?", tools: ["get_plex_activity", "get_library_analytics"] },
-  { question: "How are my servers doing (CPU, memory, disk, containers)?", tools: ["get_cluster_infrastructure_health", "get_cluster_hardware_analytics"] },
+  {
+    question:
+      "Upgrade movies that have no file or are below 1080p, as a paced batch; check, pause, resume or cancel it",
+    tools: [
+      "plan_media_upgrade",
+      "get_background_jobs",
+      "update_job_status",
+      "execute_next_job_step",
+    ],
+  },
+  {
+    question: "Who is streaming now? What gets watched most?",
+    tools: ["get_plex_activity", "get_library_analytics"],
+  },
+  {
+    question: "How are my servers doing (CPU, memory, disk, containers)?",
+    tools: ["get_cluster_infrastructure_health", "get_cluster_hardware_analytics"],
+  },
   { question: "Back up Radarr, Sonarr and Prowlarr", tools: ["run_cluster_backup"] },
 ];
 
 // The question-to-tool map, limited to the tools a surface actually has.
 export function renderRoutes(available?: ReadonlySet<string>): string {
-  return ROUTES.map((r) => ({ ...r, tools: available ? r.tools.filter((t) => available.has(t)) : r.tools }))
+  return ROUTES.map((r) => ({
+    ...r,
+    tools: available ? r.tools.filter((t) => available.has(t)) : r.tools,
+  }))
     .filter((r) => r.tools.length > 0)
     .map((r) => `- ${r.question} → ${r.tools.join(", ")}`)
     .join("\n");
@@ -68,7 +119,9 @@ export const SERVER_INSTRUCTIONS = [
 
 // For the dashboard chat, which only has the read-only tools in `available`.
 export function chatGuidance(available: ReadonlySet<string>): string {
-  return [`RULES:\n${bullets(RULES)}`, `WHICH TOOL ANSWERS WHAT:\n${renderRoutes(available)}`].join("\n\n");
+  return [`RULES:\n${bullets(RULES)}`, `WHICH TOOL ANSWERS WHAT:\n${renderRoutes(available)}`].join(
+    "\n\n",
+  );
 }
 
 // The Agent Skill file. Frontmatter follows https://agentskills.io/specification

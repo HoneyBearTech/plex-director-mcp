@@ -20,8 +20,13 @@ export interface KeyPair {
 // every key is checked with ssh2's own parser and regenerated if it is bad.
 export function generateKeyPair(passphrase?: string): KeyPair {
   for (let attempt = 0; attempt < 25; attempt++) {
-    const pair = utils.generateKeyPairSync("ed25519", passphrase ? { passphrase, cipher: "aes256-ctr", rounds: 16 } : {});
-    const usable = !(utils.parseKey(pair.private, passphrase) instanceof Error) && !(utils.parseKey(pair.public) instanceof Error);
+    const pair = utils.generateKeyPairSync(
+      "ed25519",
+      passphrase ? { passphrase, cipher: "aes256-ctr", rounds: 16 } : {},
+    );
+    const usable =
+      !(utils.parseKey(pair.private, passphrase) instanceof Error) &&
+      !(utils.parseKey(pair.public) instanceof Error);
     if (usable) return { privateKey: pair.private, publicKey: pair.public };
   }
   throw new Error("Could not generate a usable SSH key pair");
@@ -35,7 +40,12 @@ export interface TestSshServer {
   close: () => Promise<void>;
 }
 
-export async function startSshServer(opts: { hostKey?: KeyPair; authorizedPublicKey: string; user?: string; output?: string }): Promise<TestSshServer> {
+export async function startSshServer(opts: {
+  hostKey?: KeyPair;
+  authorizedPublicKey: string;
+  user?: string;
+  output?: string;
+}): Promise<TestSshServer> {
   const hostKey = opts.hostKey ?? generateKeyPair();
   const user = opts.user ?? "tester";
   const authorized = utils.parseKey(opts.authorizedPublicKey) as ParsedKey;
@@ -44,9 +54,14 @@ export async function startSshServer(opts: { hostKey?: KeyPair; authorizedPublic
   const server = new Server({ hostKeys: [hostKey.privateKey] }, (client) => {
     client.on("authentication", (ctx) => {
       if (ctx.method !== "publickey" || ctx.username !== user) return ctx.reject(["publickey"]);
-      if (ctx.key.algo !== authorized.type || Buffer.compare(ctx.key.data, authorized.getPublicSSH()) !== 0) return ctx.reject(["publickey"]);
+      if (
+        ctx.key.algo !== authorized.type ||
+        Buffer.compare(ctx.key.data, authorized.getPublicSSH()) !== 0
+      )
+        return ctx.reject(["publickey"]);
       // A publickey probe has no signature yet; accepting it tells the client to sign.
-      if (ctx.signature && !authorized.verify(ctx.blob!, ctx.signature, ctx.hashAlgo)) return ctx.reject(["publickey"]);
+      if (ctx.signature && !authorized.verify(ctx.blob!, ctx.signature, ctx.hashAlgo))
+        return ctx.reject(["publickey"]);
       ctx.accept();
     });
     client.on("ready", () => {

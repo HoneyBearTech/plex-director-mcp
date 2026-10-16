@@ -21,5 +21,5 @@ createRoot(rootElement).render(
         </AuthGate>
       </BrowserRouter>
     </AppearanceProvider>
-  </StrictMode>
+  </StrictMode>,
 );

@@ -28,11 +28,17 @@ afterEach(() => fake.restore());
 
 function job(status: string, ids: number[], processed = 0): number {
   const result = db
-    .prepare("INSERT INTO system_jobs (task_name, status, total_items, processed_items, payload) VALUES (?, ?, ?, ?, ?)")
+    .prepare(
+      "INSERT INTO system_jobs (task_name, status, total_items, processed_items, payload) VALUES (?, ?, ?, ?, ?)",
+    )
     .run(`job-${status}`, status, ids.length, processed, JSON.stringify(ids));
   return Number(result.lastInsertRowid);
 }
-const row = (id: number) => db.prepare("SELECT status, processed_items AS done FROM system_jobs WHERE id = ?").get(id) as { status: string; done: number };
+const row = (id: number) =>
+  db.prepare("SELECT status, processed_items AS done FROM system_jobs WHERE id = ?").get(id) as {
+    status: string;
+    done: number;
+  };
 
 describe("stepJob", () => {
   it("searches exactly one movie per step and completes after the last", async () => {
@@ -86,7 +92,10 @@ describe("stepJob", () => {
   it("two concurrent steps never search the same movie", async () => {
     const id = job("RUNNING", [601, 602]);
     const results = await Promise.all([stepJob(id), stepJob(id)]);
-    assert.deepEqual(results.map((r) => r.outcome), ["stepped", "stepped"]);
+    assert.deepEqual(
+      results.map((r) => r.outcome),
+      ["stepped", "stepped"],
+    );
     assert.deepEqual([...searched].sort(), [601, 602]);
     assert.equal(row(id).status, "COMPLETED");
   });
@@ -95,7 +104,9 @@ describe("stepJob", () => {
     const id = job("RUNNING", [1, 2]);
     const claim = () =>
       db
-        .prepare("UPDATE system_jobs SET processed_items = processed_items + 1 WHERE id = ? AND processed_items = ? AND status IN ('PENDING','RUNNING')")
+        .prepare(
+          "UPDATE system_jobs SET processed_items = processed_items + 1 WHERE id = ? AND processed_items = ? AND status IN ('PENDING','RUNNING')",
+        )
         .run(id, 0).changes;
     assert.equal(claim(), 1);
     assert.equal(claim(), 0);

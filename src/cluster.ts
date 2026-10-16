@@ -61,12 +61,14 @@ export interface OfflineHostHealth {
 export type HostHealth = OnlineHostHealth | OfflineHostHealth;
 
 const hostnameCmd = "hostname";
-const cpuCmd = "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'";
+const cpuCmd =
+  "top -bn1 | grep 'Cpu(s)' | sed 's/.*, *\\([0-9.]*\\)%* id.*/\\1/' | awk '{print 100 - $1}'";
 const ramPercentCmd = "free -m | awk 'NR==2{printf \"%.2f\", $3*100/$2}'";
 const ramUsedCmd = "free -m | awk 'NR==2{print $3}'";
 const ramTotalCmd = "free -m | awk 'NR==2{print $2}'";
 const dockerCountCmd = "docker ps --format '{{.Names}}' | wc -l";
-const dockerDownCmd = "docker ps -a --filter 'status=exited' --filter 'status=dead' --format '{{.Names}}' | tr '\\n' ','";
+const dockerDownCmd =
+  "docker ps -a --filter 'status=exited' --filter 'status=dead' --format '{{.Names}}' | tr '\\n' ','";
 // Space-separated "size used percent" for the root filesystem, e.g. "115G 55G 50%".
 const diskCmd = "df -h / | awk 'NR==2{print $2, $3, $5}'";
 const uptimeCmd = "cat /proc/uptime | awk '{print int($1)}'";
@@ -92,9 +94,8 @@ const combinedCmd = [
 // Turns the combined script's output into typed health data. Pure, so it can
 // be tested without an SSH connection.
 export function parseProbeOutput(host: string, output: string): OnlineHostHealth {
-  const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] = output
-    .split(FIELD_SEP)
-    .map((s) => s.trim());
+  const [hostname, cpu, ramPercent, ramUsed, ramTotal, dockerCount, deadContainers, disk, uptime] =
+    output.split(FIELD_SEP).map((s) => s.trim());
 
   const [diskTotal, diskUsed, diskPercentRaw] = (disk ?? "").split(/\s+/);
 
@@ -120,7 +121,13 @@ export async function probeHost(host: string): Promise<HostHealth> {
     return parseProbeOutput(host, await runRemoteCommand(host, combinedCmd));
   } catch (error: unknown) {
     if (error instanceof HostKeyMismatchError) {
-      return { host, hostname: host, online: false, error: error.message, hostKeyChanged: { expected: error.expected, actual: error.actual } };
+      return {
+        host,
+        hostname: host,
+        online: false,
+        error: error.message,
+        hostKeyChanged: { expected: error.expected, actual: error.actual },
+      };
     }
     return { host, hostname: host, online: false, error: getErrorMessage(error) };
   }

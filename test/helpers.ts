@@ -1,5 +1,10 @@
 import "./setup.js";
-import { AxiosError, type AxiosInstance, type AxiosResponse, type InternalAxiosRequestConfig } from "axios";
+import {
+  AxiosError,
+  type AxiosInstance,
+  type AxiosResponse,
+  type InternalAxiosRequestConfig,
+} from "axios";
 import os from "node:os";
 import path from "node:path";
 import type { Server } from "node:http";
@@ -14,7 +19,11 @@ export interface RecordedRequest {
   headers: Record<string, string>;
 }
 
-export type FakeReply = { status?: number; data?: unknown; headers?: Record<string, string | string[]> };
+export type FakeReply = {
+  status?: number;
+  data?: unknown;
+  headers?: Record<string, string | string[]>;
+};
 type Handler = (req: RecordedRequest) => FakeReply | Promise<FakeReply>;
 
 function record(config: InternalAxiosRequestConfig): RecordedRequest {
@@ -26,14 +35,26 @@ function record(config: InternalAxiosRequestConfig): RecordedRequest {
       /* form-encoded or plain text - keep the string */
     }
   }
-  const headers = typeof (config.headers as any)?.toJSON === "function" ? (config.headers as any).toJSON() : { ...config.headers };
-  return { method: String(config.method).toLowerCase(), url: String(config.url), params: (config.params ?? {}) as Record<string, unknown>, body, headers };
+  const headers =
+    typeof (config.headers as any)?.toJSON === "function"
+      ? (config.headers as any).toJSON()
+      : { ...config.headers };
+  return {
+    method: String(config.method).toLowerCase(),
+    url: String(config.url),
+    params: (config.params ?? {}) as Record<string, unknown>,
+    body,
+    headers,
+  };
 }
 
 // Replaces an axios client's transport with a fake. Reply with an object for a
 // response, or throw from the handler to simulate a network failure. Non-2xx
 // statuses reject like real axios does.
-export function fakeApi(client: AxiosInstance, handler: Handler): { calls: RecordedRequest[]; restore: () => void } {
+export function fakeApi(
+  client: AxiosInstance,
+  handler: Handler,
+): { calls: RecordedRequest[]; restore: () => void } {
   const previous = client.defaults.adapter;
   const calls: RecordedRequest[] = [];
 
@@ -49,7 +70,13 @@ export function fakeApi(client: AxiosInstance, handler: Handler): { calls: Recor
       config,
     };
     if (response.status >= 400) {
-      throw new AxiosError(`Request failed with status code ${response.status}`, "ERR_BAD_REQUEST", config, null, response);
+      throw new AxiosError(
+        `Request failed with status code ${response.status}`,
+        "ERR_BAD_REQUEST",
+        config,
+        null,
+        response,
+      );
     }
     return response;
   };
@@ -81,8 +108,14 @@ export async function startApp(): Promise<{ base: string; close: () => Promise<v
 export function assertIsolated(): void {
   const dbPath = process.env.PLEX_DIRECTOR_DB_PATH ?? "";
   const tmp = os.tmpdir();
-  if (process.env.PLEX_DIRECTOR_SKIP_DOTENV !== "1" || !dbPath.startsWith(tmp) || !path.basename(path.dirname(dbPath)).startsWith("plex-director-test-")) {
-    throw new Error(`Refusing to touch a database that isn't a test one (PLEX_DIRECTOR_DB_PATH=${JSON.stringify(dbPath)}). Import "./setup.js" first.`);
+  if (
+    process.env.PLEX_DIRECTOR_SKIP_DOTENV !== "1" ||
+    !dbPath.startsWith(tmp) ||
+    !path.basename(path.dirname(dbPath)).startsWith("plex-director-test-")
+  ) {
+    throw new Error(
+      `Refusing to touch a database that isn't a test one (PLEX_DIRECTOR_DB_PATH=${JSON.stringify(dbPath)}). Import "./setup.js" first.`,
+    );
   }
 }
 
@@ -90,5 +123,7 @@ export function assertIsolated(): void {
 export async function resetDb(): Promise<void> {
   assertIsolated();
   const { db } = await import("../src/db.js");
-  db.exec("DELETE FROM system_jobs; DELETE FROM interaction_context; DELETE FROM settings; DELETE FROM ssh_host_keys; DELETE FROM sqlite_sequence WHERE name='system_jobs';");
+  db.exec(
+    "DELETE FROM system_jobs; DELETE FROM interaction_context; DELETE FROM settings; DELETE FROM ssh_host_keys; DELETE FROM sqlite_sequence WHERE name='system_jobs';",
+  );
 }

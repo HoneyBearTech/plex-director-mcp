@@ -29,9 +29,12 @@ export function registerMonitoringTools() {
 
         return textReply(summary);
       } catch (error: unknown) {
-        return textReply(`Failed to interface with Tautulli monitoring node: ${getErrorMessage(error)}`, true);
+        return textReply(
+          `Failed to interface with Tautulli monitoring node: ${getErrorMessage(error)}`,
+          true,
+        );
       }
-    }
+    },
   );
 
   server.tool(
@@ -48,7 +51,8 @@ export function registerMonitoringTools() {
         }
 
         let richDashboard = "## 🏆 Server Watch History Analytics Dashboard\n";
-        richDashboard += "Historical distribution patterns across media libraries and active profile streams.\n\n";
+        richDashboard +=
+          "Historical distribution patterns across media libraries and active profile streams.\n\n";
 
         stats.forEach((category: any) => {
           const categoryTitle = category.stat_title || category.stat_id || "Watch statistics";
@@ -71,6 +75,6 @@ export function registerMonitoringTools() {
       } catch (error: unknown) {
         return textReply(`Failed to process analytics query: ${getErrorMessage(error)}`, true);
       }
-    }
+    },
   );
 }

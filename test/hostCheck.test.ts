@@ -32,7 +32,14 @@ describe("Host names allowed without a password", () => {
   });
 
   it("refuses public names, look-alikes and a missing Host", () => {
-    for (const host of ["attacker.example", "evil.com:3000", "lan.attacker.com", "local.evil.net", "192.168.1.20.nip.io", ""]) {
+    for (const host of [
+      "attacker.example",
+      "evil.com:3000",
+      "lan.attacker.com",
+      "local.evil.net",
+      "192.168.1.20.nip.io",
+      "",
+    ]) {
       assert.equal(isAllowedHost(host), false, host);
     }
     assert.equal(isAllowedHost(undefined), false);
@@ -61,16 +68,26 @@ describe("DNS-rebinding guard on the dashboard", () => {
     delete process.env.WEB_ALLOWED_HOSTS;
   });
 
-  function request(path: string, host: string, method = "GET"): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
+  function request(
+    path: string,
+    host: string,
+    method = "GET",
+  ): Promise<{ status: number; body: string; headers: http.IncomingHttpHeaders }> {
     const url = new URL(app.base + path);
     return new Promise((resolve, reject) => {
       const req = http.request(
-        { hostname: url.hostname, port: url.port, path: url.pathname, method, headers: { Host: host, "Content-Type": "application/json" } },
+        {
+          hostname: url.hostname,
+          port: url.port,
+          path: url.pathname,
+          method,
+          headers: { Host: host, "Content-Type": "application/json" },
+        },
         (res) => {
           let body = "";
           res.on("data", (chunk) => (body += chunk));
           res.on("end", () => resolve({ status: res.statusCode ?? 0, body, headers: res.headers }));
-        }
+        },
       );
       req.on("error", reject);
       req.end(method === "PUT" ? JSON.stringify({ url: "http://attacker" }) : undefined);
@@ -78,7 +95,11 @@ describe("DNS-rebinding guard on the dashboard", () => {
   }
 
   it("refuses the API, settings writes and the page itself for a rebound public name", async () => {
-    for (const [path, method] of [["/api/settings", "GET"], ["/api/settings/radarr", "PUT"], ["/", "GET"]] as const) {
+    for (const [path, method] of [
+      ["/api/settings", "GET"],
+      ["/api/settings/radarr", "PUT"],
+      ["/", "GET"],
+    ] as const) {
       const res = await request(path, "attacker.example:3000", method);
       assert.equal(res.status, 403, `${method} ${path}`);
       assert.match(res.body, /WEB_ALLOWED_HOSTS/);

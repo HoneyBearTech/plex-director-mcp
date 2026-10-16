@@ -23,13 +23,23 @@ describe("test isolation", () => {
   });
 
   it("has no service credentials or webhooks in the environment", () => {
-    const leaked = Object.keys(process.env).filter((k) => /^(RADARR|SONARR|PROWLARR|SABNZBD|QBITTORRENT|TAUTULLI|PLEX|TMDB|UBUNTU|SSH|DISCORD|WEB|ANTHROPIC|JOB_RUNNER|BACKUP|CLUSTER)_/.test(k) && k !== "PLEX_DIRECTOR_SKIP_DOTENV" && k !== "PLEX_DIRECTOR_DB_PATH");
+    const leaked = Object.keys(process.env).filter(
+      (k) =>
+        /^(RADARR|SONARR|PROWLARR|SABNZBD|QBITTORRENT|TAUTULLI|PLEX|TMDB|UBUNTU|SSH|DISCORD|WEB|ANTHROPIC|JOB_RUNNER|BACKUP|CLUSTER)_/.test(
+          k,
+        ) &&
+        k !== "PLEX_DIRECTOR_SKIP_DOTENV" &&
+        k !== "PLEX_DIRECTOR_DB_PATH",
+    );
     assert.deepEqual(leaked, []);
   });
 
   it("blocks network access unless a test installs a fake", async () => {
     await assert.rejects(axios.get("https://example.com/"), /Network access is disabled in tests/);
-    await assert.rejects(axios.create().post("http://127.0.0.1:1/x", {}), /Network access is disabled in tests/);
+    await assert.rejects(
+      axios.create().post("http://127.0.0.1:1/x", {}),
+      /Network access is disabled in tests/,
+    );
   });
 
   it("refuses to run destructive helpers against a non-test database", () => {

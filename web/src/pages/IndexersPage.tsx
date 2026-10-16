@@ -2,7 +2,10 @@ import { Badge, Callout, Card, Flex, Heading, Table, Text } from "@radix-ui/them
 import { api, type IndexerState } from "../api";
 import { usePolling } from "../usePolling";
 
-const STATE_BADGE: Record<IndexerState, { color: "green" | "amber" | "red" | "gray"; label: string }> = {
+const STATE_BADGE: Record<
+  IndexerState,
+  { color: "green" | "amber" | "red" | "gray"; label: string }
+> = {
   healthy: { color: "green", label: "Healthy" },
   warning: { color: "amber", label: "Recent failures" },
   "backing-off": { color: "red", label: "Backing off" },
@@ -42,7 +45,9 @@ export function IndexersPage() {
           Indexers
         </Heading>
         {health.loading && !health.data && <Text color="gray">Loading…</Text>}
-        {health.data && health.data.indexers.length === 0 && <Text color="gray">No indexers configured in Prowlarr.</Text>}
+        {health.data && health.data.indexers.length === 0 && (
+          <Text color="gray">No indexers configured in Prowlarr.</Text>
+        )}
         {health.data && health.data.indexers.length > 0 && (
           <Table.Root>
             <Table.Header>

@@ -77,7 +77,7 @@ export function ChatText({ text }: { text: string }) {
               </Fragment>
             ))}
           </Text>
-        )
+        ),
       )}
     </Box>
   );

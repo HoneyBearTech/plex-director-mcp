@@ -15,7 +15,9 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
   return new Promise((resolve, reject) => {
     const keyPath = process.env.SSH_KEY_PATH;
     if (!keyPath) {
-      return reject(new Error("SSH_KEY_PATH is not set, so there is no private key to log in with."));
+      return reject(
+        new Error("SSH_KEY_PATH is not set, so there is no private key to log in with."),
+      );
     }
 
     const { host, port } = splitHostPort(target);
@@ -23,23 +25,27 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
     let output = "";
     let hostKeyProblem: HostKeyMismatchError | undefined;
 
-    conn.on("ready", () => {
-      conn.exec(command, (err, stream) => {
-        if (err) {
-          conn.end();
-          return reject(err);
-        }
-        stream.on("data", (data: any) => { output += data.toString(); });
-        stream.on("close", () => {
-          conn.end();
-          resolve(output.trim());
+    conn
+      .on("ready", () => {
+        conn.exec(command, (err, stream) => {
+          if (err) {
+            conn.end();
+            return reject(err);
+          }
+          stream.on("data", (data: any) => {
+            output += data.toString();
+          });
+          stream.on("close", () => {
+            conn.end();
+            resolve(output.trim());
+          });
         });
+      })
+      .on("error", (err) => {
+        // A refused host key surfaces from ssh2 as a generic handshake error;
+        // report the real reason instead.
+        reject(hostKeyProblem ?? err);
       });
-    }).on("error", (err) => {
-      // A refused host key surfaces from ssh2 as a generic handshake error;
-      // report the real reason instead.
-      reject(hostKeyProblem ?? err);
-    });
 
     try {
       conn.connect({

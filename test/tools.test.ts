@@ -1,7 +1,7 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { z } from "zod";
+import type { z } from "zod";
 import { server } from "../src/server.js";
 import { movieTools, registerMovieTools } from "../src/tools/movies.js";
 
@@ -37,6 +37,7 @@ describe("movieTools", () => {
   it("registers every tool with the MCP server", () => {
     registerMovieTools();
     const registered = Object.keys((server as any)._registeredTools);
-    for (const tool of movieTools) assert.ok(registered.includes(tool.name), `${tool.name} is registered`);
+    for (const tool of movieTools)
+      assert.ok(registered.includes(tool.name), `${tool.name} is registered`);
   });
 });

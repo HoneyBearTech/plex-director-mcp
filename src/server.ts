@@ -8,5 +8,5 @@ export const server = new McpServer(
     version: APP_VERSION,
   },
   // Sent to every MCP client in the initialize result (see src/guidance.ts).
-  { instructions: SERVER_INSTRUCTIONS }
+  { instructions: SERVER_INSTRUCTIONS },
 );

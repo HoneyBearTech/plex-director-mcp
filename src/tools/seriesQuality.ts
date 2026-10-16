@@ -69,7 +69,9 @@ async function loadSummaries(now: number): Promise<QualitySummary[]> {
   // A show with no files has no quality; its files need not be fetched.
   const withFiles = all.filter((s) => !s.statistics || (s.statistics.episodeFileCount ?? 1) > 0);
   const summaries = await mapWithLimit(withFiles, FETCH_CONCURRENCY, async (series) => {
-    const response = await sonarrClient.get("/api/v3/episodefile", { params: { seriesId: series.id } });
+    const response = await sonarrClient.get("/api/v3/episodefile", {
+      params: { seriesId: series.id },
+    });
     return summarise(series, (response.data ?? []) as any[]);
   });
   cache = { at: now, summaries };
@@ -77,15 +79,22 @@ async function loadSummaries(now: number): Promise<QualitySummary[]> {
 }
 
 const breakdown = (s: QualitySummary) =>
-  [...s.byResolution].sort((a, b) => b[0] - a[0]).map(([resolution, n]) => `${resolutionLabel(resolution)} x${n}`).join(", ");
+  [...s.byResolution]
+    .sort((a, b) => b[0] - a[0])
+    .map(([resolution, n]) => `${resolutionLabel(resolution)} x${n}`)
+    .join(", ");
 
 export async function findSeriesByQuality(options: QualityOptions = {}, now: number = Date.now()) {
   if (!isConfigured("SONARR")) return textReply(NOT_CONFIGURED, true);
   const { bestAtMost, bestAtLeast, mixedOnly = false, monitored = "any" } = options;
   const folder = options.folder?.trim().toLowerCase() ?? "";
   const limit = Math.min(Math.max(Math.trunc(options.limit ?? DEFAULT_LIMIT), 1), MAX_LIMIT);
-  for (const [name, value] of [["bestAtMost", bestAtMost], ["bestAtLeast", bestAtLeast]] as const) {
-    if (value !== undefined && !(value > 0)) return textReply(`${name} must be a resolution such as 480, 720, 1080 or 2160.`, true);
+  for (const [name, value] of [
+    ["bestAtMost", bestAtMost],
+    ["bestAtLeast", bestAtLeast],
+  ] as const) {
+    if (value !== undefined && !(value > 0))
+      return textReply(`${name} must be a resolution such as 480, 720, 1080 or 2160.`, true);
   }
   if (bestAtMost !== undefined && bestAtLeast !== undefined && bestAtLeast > bestAtMost) {
     return textReply("bestAtLeast is above bestAtMost, so no show can match.", true);
@@ -97,16 +106,31 @@ export async function findSeriesByQuality(options: QualityOptions = {}, now: num
       .filter((s) => bestAtMost === undefined || (s.best !== null && s.best <= bestAtMost))
       .filter((s) => bestAtLeast === undefined || (s.best !== null && s.best >= bestAtLeast))
       .filter((s) => !mixedOnly || (s.best !== null && s.worst !== null && s.worst < s.best))
-      .filter((s) => monitored === "any" || (monitored === "monitored") === Boolean(s.series.monitored))
-      .filter((s) => !folder || String(s.series.path ?? "").toLowerCase().includes(folder))
+      .filter(
+        (s) => monitored === "any" || (monitored === "monitored") === Boolean(s.series.monitored),
+      )
+      .filter(
+        (s) =>
+          !folder ||
+          String(s.series.path ?? "")
+            .toLowerCase()
+            .includes(folder),
+      )
       // Lowest best quality first (the likeliest upgrade candidates), bigger collections first.
-      .sort((a, b) => (a.best ?? 0) - (b.best ?? 0) || b.files - a.files || String(a.series.title).localeCompare(String(b.series.title)));
+      .sort(
+        (a, b) =>
+          (a.best ?? 0) - (b.best ?? 0) ||
+          b.files - a.files ||
+          String(a.series.title).localeCompare(String(b.series.title)),
+      );
 
-    const tally = (predicate: (best: number | null) => boolean) => summaries.filter((s) => predicate(s.best)).length;
+    const tally = (predicate: (best: number | null) => boolean) =>
+      summaries.filter((s) => predicate(s.best)).length;
     let output = `## Show quality (from Sonarr's downloaded files)\n`;
     output += `${summaries.length} shows have files. By best quality: 2160p ${tally((b) => b !== null && b >= 2160)}, 1080p ${tally((b) => b !== null && b >= 1080 && b < 2160)}, 720p ${tally((b) => b !== null && b >= 720 && b < 1080)}, below 720p ${tally((b) => b !== null && b < 720)}, unknown ${tally((b) => b === null)}. `;
     output += `${summaries.filter((s) => s.best !== null && s.worst !== null && s.worst < s.best).length} mix resolutions. `;
-    output += "This is the quality Sonarr downloaded: a 4K copy in Plex's 4K libraries that Sonarr does not manage is not seen here (use search_plex_library with library '4k'). The user sees the same shows in a table below your reply.\n";
+    output +=
+      "This is the quality Sonarr downloaded: a 4K copy in Plex's 4K libraries that Sonarr does not manage is not seen here (use search_plex_library with library '4k'). The user sees the same shows in a table below your reply.\n";
 
     const filters = [
       bestAtMost !== undefined ? `best at most ${bestAtMost}p` : null,
@@ -115,13 +139,16 @@ export async function findSeriesByQuality(options: QualityOptions = {}, now: num
       monitored !== "any" ? monitored : null,
       folder ? `in folders matching "${options.folder!.trim()}"` : null,
     ].filter(Boolean);
-    if (filters.length > 0) output += `Matching (${filters.join(", ")}): ${wanted.length} show${wanted.length === 1 ? "" : "s"}.\n`;
+    if (filters.length > 0)
+      output += `Matching (${filters.join(", ")}): ${wanted.length} show${wanted.length === 1 ? "" : "s"}.\n`;
     if (wanted.length === 0) return textReply(output.trimEnd());
 
     const shown = wanted.slice(0, limit);
-    if (wanted.length > shown.length) output += `Listed the ${shown.length} with the lowest best quality (then the most files); ${wanted.length - shown.length} more are not listed (raise limit up to ${MAX_LIMIT}, or narrow the filters).\n`;
+    if (wanted.length > shown.length)
+      output += `Listed the ${shown.length} with the lowest best quality (then the most files); ${wanted.length - shown.length} more are not listed (raise limit up to ${MAX_LIMIT}, or narrow the filters).\n`;
     output += "\n";
-    for (const s of shown) output += `- ${label(s.series)} - best ${s.best !== null ? `${s.best}p` : "unknown"}: ${breakdown(s)} - ${s.series.monitored ? "monitored" : "not monitored"}\n`;
+    for (const s of shown)
+      output += `- ${label(s.series)} - best ${s.best !== null ? `${s.best}p` : "unknown"}: ${breakdown(s)} - ${s.series.monitored ? "monitored" : "not monitored"}\n`;
 
     const media: MediaRow[] = shown.map((s) => ({
       kind: "show",

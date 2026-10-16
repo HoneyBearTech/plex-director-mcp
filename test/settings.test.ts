@@ -1,7 +1,13 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
-import { getSetting, isConfigured, seedSettingsFromEnv, setSetting, SETTINGS_KEYS } from "../src/settings.js";
+import {
+  getSetting,
+  isConfigured,
+  seedSettingsFromEnv,
+  setSetting,
+  SETTINGS_KEYS,
+} from "../src/settings.js";
 import { resetDb } from "./helpers.js";
 
 beforeEach(async () => {

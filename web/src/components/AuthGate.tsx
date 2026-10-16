@@ -9,7 +9,10 @@ interface AuthContextValue {
   logout: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue>({ authRequired: false, logout: async () => {} });
+const AuthContext = createContext<AuthContextValue>({
+  authRequired: false,
+  logout: async () => {},
+});
 
 export function useAuth(): AuthContextValue {
   return useContext(AuthContext);

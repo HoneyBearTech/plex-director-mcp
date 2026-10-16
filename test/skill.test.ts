@@ -17,12 +17,24 @@ describe("Agent Skill (skills/plex-director/SKILL.md)", () => {
     const match = /^---\n([\s\S]*?)\n---\n/.exec(renderSkill());
     assert.ok(match, "frontmatter block");
     const fields = Object.fromEntries(
-      match[1]!.split("\n").map((line) => [line.slice(0, line.indexOf(":")), line.slice(line.indexOf(":") + 1).trim()])
+      match[1]!
+        .split("\n")
+        .map((line) => [
+          line.slice(0, line.indexOf(":")),
+          line.slice(line.indexOf(":") + 1).trim(),
+        ]),
     );
-    assert.equal(fields.name, path.basename(path.dirname(skillPath)), "name must match the folder name");
+    assert.equal(
+      fields.name,
+      path.basename(path.dirname(skillPath)),
+      "name must match the folder name",
+    );
     assert.match(fields.name!, /^[a-z0-9]+(-[a-z0-9]+)*$/);
     assert.ok(fields.name!.length <= 64);
-    assert.ok(fields.description && fields.description.length <= 1024, `description is ${fields.description?.length} chars`);
+    assert.ok(
+      fields.description && fields.description.length <= 1024,
+      `description is ${fields.description?.length} chars`,
+    );
     assert.ok(!fields.compatibility || fields.compatibility.length <= 500);
   });
 });

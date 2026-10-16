@@ -13,8 +13,9 @@ own interface is what you use.
 
 Honestly: not much yet.
 
-- **No automated accessibility tests.** There are no axe checks and no accessibility lint rules, and the
-  dashboard (`web/`) has no tests of its own; CI typechecks and builds it.
+- **Few automated accessibility checks.** Biome's recommended accessibility lint rules run on the
+  dashboard (`web/`) in CI (for example, images need alternative text). There are no axe checks, and the
+  dashboard has no tests of its own; CI typechecks, lints and builds it.
 - **No manual audit.** Nobody has yet tested complete tasks with a screen reader (NVDA, JAWS, VoiceOver,
   TalkBack), measured colour contrast, or done a keyboard-only pass of every page.
 

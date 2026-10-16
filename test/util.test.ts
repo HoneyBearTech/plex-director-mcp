@@ -2,7 +2,14 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { AxiosError } from "axios";
-import { escapeTableCell, getErrorMessage, rowLabel, rowPlays, safeJsonParse, textReply } from "../src/util.js";
+import {
+  escapeTableCell,
+  getErrorMessage,
+  rowLabel,
+  rowPlays,
+  safeJsonParse,
+  textReply,
+} from "../src/util.js";
 
 describe("textReply", () => {
   it("wraps text as MCP content", () => {
@@ -16,17 +23,26 @@ describe("textReply", () => {
 
 describe("getErrorMessage", () => {
   it("prefers an API error body's message over the generic axios one", () => {
-    const err = new AxiosError("Request failed with status code 400", "ERR_BAD_REQUEST", undefined, null, {
-      data: { message: "Movie already exists" },
-      status: 400,
-      statusText: "",
-      headers: {},
-      config: {} as any,
-    });
+    const err = new AxiosError(
+      "Request failed with status code 400",
+      "ERR_BAD_REQUEST",
+      undefined,
+      null,
+      {
+        data: { message: "Movie already exists" },
+        status: 400,
+        statusText: "",
+        headers: {},
+        config: {} as any,
+      },
+    );
     assert.equal(getErrorMessage(err), "Movie already exists");
   });
   it("falls back to the axios message, Error message, then a placeholder", () => {
-    assert.equal(getErrorMessage(new AxiosError("timeout of 10000ms exceeded")), "timeout of 10000ms exceeded");
+    assert.equal(
+      getErrorMessage(new AxiosError("timeout of 10000ms exceeded")),
+      "timeout of 10000ms exceeded",
+    );
     assert.equal(getErrorMessage(new Error("boom")), "boom");
     assert.equal(getErrorMessage("nope"), "Unknown error");
   });
@@ -50,7 +66,10 @@ describe("Tautulli row labels and play counts", () => {
     assert.equal(rowLabel("top_platforms", { platform: "iOS", title: "ignored" }), "iOS");
     assert.equal(rowLabel("top_libraries", { section_name: "Movies" }), "Movies");
     assert.equal(rowLabel("most_concurrent", { title: "Peak" }), "Peak");
-    assert.equal(rowLabel("top_tv", { grandparent_title: "Severance", title: "Hello, Ms. Cobel" }), "Severance");
+    assert.equal(
+      rowLabel("top_tv", { grandparent_title: "Severance", title: "Hello, Ms. Cobel" }),
+      "Severance",
+    );
     assert.equal(rowLabel("top_movies", { title: "Heat" }), "Heat");
   });
   it("says Unknown when nothing identifies the row", () => {
@@ -74,5 +93,6 @@ describe("escapeTableCell", () => {
     assert.equal(escapeTableCell("trail\\"), "trail\\\\");
     assert.equal(escapeTableCell("x\\|y"), "x\\\\\\|y");
   });
-  it("leaves ordinary text alone", () => assert.equal(escapeTableCell("Blade Runner 2049"), "Blade Runner 2049"));
+  it("leaves ordinary text alone", () =>
+    assert.equal(escapeTableCell("Blade Runner 2049"), "Blade Runner 2049"));
 });

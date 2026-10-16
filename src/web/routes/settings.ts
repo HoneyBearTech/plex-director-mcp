@@ -53,7 +53,11 @@ const SERVICES: Record<string, FieldDef[]> = {
 };
 
 // How each secret field is named in messages shown to the user.
-const SECRET_LABELS: Record<string, string> = { apiKey: "API key", token: "token", password: "password" };
+const SECRET_LABELS: Record<string, string> = {
+  apiKey: "API key",
+  token: "token",
+  password: "password",
+};
 
 export const settingsRouter = Router();
 
@@ -88,7 +92,10 @@ settingsRouter.put("/:service", (req, res) => {
   // key kept would send that key to whatever server the new URL names, so a
   // URL change needs the secret typed again. Clearing the URL is still fine.
   const urlField = fields.find((f) => f.field === "url");
-  const newUrl = urlField && typeof body[urlField.field] === "string" ? (body[urlField.field] as string).trim() : undefined;
+  const newUrl =
+    urlField && typeof body[urlField.field] === "string"
+      ? (body[urlField.field] as string).trim()
+      : undefined;
   if (urlField && newUrl !== undefined && newUrl !== "" && newUrl !== getSetting(urlField.key)) {
     const missing = fields.filter((f) => {
       if (!f.secret || getSetting(f.key) === "") return false;

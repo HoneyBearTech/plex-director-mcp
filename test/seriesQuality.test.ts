@@ -13,9 +13,19 @@ let inFlight = 0;
 let maxInFlight = 0;
 const NOW = Date.parse("2026-09-19T15:00:00Z");
 
-const series = (id: number, title: string, extra: Record<string, unknown> = {}) => ({ id, title, year: 2010, monitored: true, statistics: { episodeFileCount: 10 }, ...extra });
-const file = (resolution: number | undefined, name = "x") => ({ quality: { quality: { resolution, name } } });
-const many = (resolution: number | undefined, n: number) => Array.from({ length: n }, () => file(resolution));
+const series = (id: number, title: string, extra: Record<string, unknown> = {}) => ({
+  id,
+  title,
+  year: 2010,
+  monitored: true,
+  statistics: { episodeFileCount: 10 },
+  ...extra,
+});
+const file = (resolution: number | undefined, name = "x") => ({
+  quality: { quality: { resolution, name } },
+});
+const many = (resolution: number | undefined, n: number) =>
+  Array.from({ length: n }, () => file(resolution));
 
 function sonarrFake(overrides?: (url: string, params: Record<string, unknown>) => any) {
   sonarr = fakeApi(sonarrClient, async (req) => {
@@ -62,8 +72,12 @@ afterEach(() => sonarr?.restore());
 const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
 const rows = (r: any) => (r.structuredContent?.media ?? []) as any[];
 const titles = (r: any) => rows(r).map((m) => m.title);
-const lines = (r: any) => text(r).split("\n").filter((l) => l.startsWith("- "));
-const q = (options: Parameters<typeof findSeriesByQuality>[0] = {}) => findSeriesByQuality(options, NOW);
+const lines = (r: any) =>
+  text(r)
+    .split("\n")
+    .filter((l) => l.startsWith("- "));
+const q = (options: Parameters<typeof findSeriesByQuality>[0] = {}) =>
+  findSeriesByQuality(options, NOW);
 
 describe("find_series_by_quality", () => {
   it("says so when Sonarr isn't configured, without calling it", async () => {
@@ -77,8 +91,14 @@ describe("find_series_by_quality", () => {
   it("opens with how many shows are at each best quality and how many mix resolutions", async () => {
     sonarrFake();
     const out = text(await q());
-    assert.match(out, /6 shows have files\. By best quality: 2160p 1, 1080p 2, 720p 1, below 720p 1, unknown 1\. 2 mix resolutions\./);
-    assert.match(out, /a 4K copy in Plex's 4K libraries that Sonarr does not manage is not seen here \(use search_plex_library with library '4k'\)/);
+    assert.match(
+      out,
+      /6 shows have files\. By best quality: 2160p 1, 1080p 2, 720p 1, below 720p 1, unknown 1\. 2 mix resolutions\./,
+    );
+    assert.match(
+      out,
+      /a 4K copy in Plex's 4K libraries that Sonarr does not manage is not seen here \(use search_plex_library with library '4k'\)/,
+    );
   });
 
   it("lists lowest best quality first, then bigger collections, with the count at each resolution", async () => {
@@ -109,7 +129,10 @@ describe("find_series_by_quality", () => {
 
   it("mixedOnly finds shows whose files are not all one resolution", async () => {
     sonarrFake();
-    assert.deepEqual(new Set(titles(await q({ mixedOnly: true }))), new Set(["Mixed Show", "Has 4K"]));
+    assert.deepEqual(
+      new Set(titles(await q({ mixedOnly: true }))),
+      new Set(["Mixed Show", "Has 4K"]),
+    );
     assert.deepEqual(titles(await q({ mixedOnly: true, bestAtMost: 1080 })), ["Mixed Show"]);
   });
 
@@ -131,7 +154,10 @@ describe("find_series_by_quality", () => {
     sonarrFake();
     assert.deepEqual(titles(await q({ folder: "KIDS" })), ["Old SD", "Mixed Show"]);
     assert.deepEqual(titles(await q({ folder: "kids", bestAtMost: 480 })), ["Old SD"]);
-    assert.match(text(await q({ folder: "  kids " })), /Matching \(in folders matching "kids"\): 2 shows\./);
+    assert.match(
+      text(await q({ folder: "  kids " })),
+      /Matching \(in folders matching "kids"\): 2 shows\./,
+    );
     assert.equal(titles(await q({ folder: "  " })).length, 6, "a blank folder is no filter");
     assert.deepEqual(titles(await q({ folder: "anime" })), []);
   });
@@ -139,7 +165,10 @@ describe("find_series_by_quality", () => {
   it("does not read the files of a show that has none", async () => {
     sonarrFake();
     await q();
-    const asked = sonarr.calls.filter((c) => c.url === "/api/v3/episodefile").map((c) => c.params.seriesId).sort();
+    const asked = sonarr.calls
+      .filter((c) => c.url === "/api/v3/episodefile")
+      .map((c) => c.params.seriesId)
+      .sort();
     assert.deepEqual(asked, [1, 2, 3, 4, 6, 7]);
   });
 
@@ -169,7 +198,10 @@ describe("find_series_by_quality", () => {
     sonarrFake();
     const result = await q({ limit: 2 });
     assert.equal(rows(result).length, 2);
-    assert.match(text(result), /Listed the 2 with the lowest best quality \(then the most files\); 4 more are not listed/);
+    assert.match(
+      text(result),
+      /Listed the 2 with the lowest best quality \(then the most files\); 4 more are not listed/,
+    );
     assert.equal(rows(await q({ limit: 0 })).length, 1);
   });
 
@@ -181,7 +213,9 @@ describe("find_series_by_quality", () => {
   });
 
   it("never lists more than 200 shows, whatever limit is asked for", async () => {
-    allSeries = Array.from({ length: 210 }, (_, i) => series(i + 1, `Show ${String(i).padStart(3, "0")}`));
+    allSeries = Array.from({ length: 210 }, (_, i) =>
+      series(i + 1, `Show ${String(i).padStart(3, "0")}`),
+    );
     files = Object.fromEntries(allSeries.map((s) => [s.id, many(720, 1)]));
     sonarrFake();
     assert.equal(rows(await q({ limit: 500 })).length, 200);
@@ -190,7 +224,16 @@ describe("find_series_by_quality", () => {
   it("returns table rows with the quality breakdown", async () => {
     sonarrFake();
     assert.deepEqual(rows(await q({ bestAtMost: 480 })), [
-      { kind: "show", title: "Old SD", year: 2010, posterUrl: null, libraries: null, genres: [], rating: null, detail: "best 480p: 480p x8" },
+      {
+        kind: "show",
+        title: "Old SD",
+        year: 2010,
+        posterUrl: null,
+        libraries: null,
+        genres: [],
+        rating: null,
+        detail: "best 480p: 480p x8",
+      },
     ]);
   });
 
@@ -203,7 +246,11 @@ describe("find_series_by_quality", () => {
 
   it("rejects a resolution that cannot be right, or a range that cannot match", async () => {
     sonarrFake();
-    for (const [args, re] of [[{ bestAtMost: 0 }, /bestAtMost must be a resolution/], [{ bestAtLeast: -1 }, /bestAtLeast must be a resolution/], [{ bestAtLeast: 1080, bestAtMost: 720 }, /bestAtLeast is above bestAtMost/]] as const) {
+    for (const [args, re] of [
+      [{ bestAtMost: 0 }, /bestAtMost must be a resolution/],
+      [{ bestAtLeast: -1 }, /bestAtLeast must be a resolution/],
+      [{ bestAtLeast: 1080, bestAtMost: 720 }, /bestAtLeast is above bestAtMost/],
+    ] as const) {
       const result = await q(args);
       assert.equal(result.isError, true);
       assert.match(text(result), re);
@@ -212,7 +259,9 @@ describe("find_series_by_quality", () => {
   });
 
   it("fails as a whole if any show's files can't be read, and does not cache the failure", async () => {
-    sonarrFake((url, params) => (url === "/api/v3/episodefile" && params.seriesId === 3 ? { status: 500 } : undefined));
+    sonarrFake((url, params) =>
+      url === "/api/v3/episodefile" && params.seriesId === 3 ? { status: 500 } : undefined,
+    );
     const result = await q();
     assert.equal(result.isError, true);
     assert.match(text(result), /Failed to check Sonarr/);

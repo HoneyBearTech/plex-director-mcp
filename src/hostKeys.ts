@@ -10,9 +10,11 @@ export class HostKeyMismatchError extends Error {
   constructor(
     readonly host: string,
     readonly expected: string,
-    readonly actual: string
+    readonly actual: string,
   ) {
-    super(`The SSH host key for ${host} has changed (remembered ${expected}, host presented ${actual}). If the host was rebuilt or reinstalled, choose "Trust new key" on the Node Utilization page; otherwise don't - someone may be impersonating it.`);
+    super(
+      `The SSH host key for ${host} has changed (remembered ${expected}, host presented ${actual}). If the host was rebuilt or reinstalled, choose "Trust new key" on the Node Utilization page; otherwise don't - someone may be impersonating it.`,
+    );
     this.name = "HostKeyMismatchError";
   }
 }
@@ -26,10 +28,16 @@ export function fingerprintFromHex(hex: string): string {
 // INSERT OR IGNORE then read, so two processes meeting a new host together
 // end up trusting the same first key rather than racing.
 export function checkHostKey(host: string, fingerprint: string): HostKeyCheck {
-  const inserted = db.prepare("INSERT OR IGNORE INTO ssh_host_keys (host, fingerprint) VALUES (?, ?)").run(host, fingerprint).changes;
+  const inserted = db
+    .prepare("INSERT OR IGNORE INTO ssh_host_keys (host, fingerprint) VALUES (?, ?)")
+    .run(host, fingerprint).changes;
   if (inserted === 1) return { status: "new" };
 
-  const stored = (db.prepare("SELECT fingerprint FROM ssh_host_keys WHERE host = ?").get(host) as { fingerprint: string }).fingerprint;
+  const stored = (
+    db.prepare("SELECT fingerprint FROM ssh_host_keys WHERE host = ?").get(host) as {
+      fingerprint: string;
+    }
+  ).fingerprint;
   return stored === fingerprint ? { status: "match" } : { status: "mismatch", expected: stored };
 }
 

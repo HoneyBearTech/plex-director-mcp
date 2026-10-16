@@ -76,9 +76,19 @@ export interface PlexSearchArgs {
 
 const DEFAULT_LIMIT = 25;
 const DAY_MS = 86_400_000;
-const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+const fold = (s: string) =>
+  s
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 // "gb/15" and "15" are the same rating; "tv-ma" and "TV-MA" too.
-const normalizeRating = (s: string) => s.trim().replace(/^[a-z]{2}\//i, "").toUpperCase();
+const normalizeRating = (s: string) =>
+  s
+    .trim()
+    .replace(/^[a-z]{2}\//i, "")
+    .toUpperCase();
 const MAX_LIMIT = 500;
 // Plex is asked for everything that matches in one go; libraries here are
 // well under this, so it is effectively "all".
@@ -107,7 +117,7 @@ export function skippedLibraryNames(): Set<string> {
     getSetting("PLEX_SKIP_LIBRARIES")
       .split(",")
       .map((name) => name.trim().toLowerCase())
-      .filter(Boolean)
+      .filter(Boolean),
   );
 }
 
@@ -115,13 +125,16 @@ export function skippedLibraryNames(): Set<string> {
 // library, so any library that has the genre can supply the key.
 async function resolveGenre(
   name: string,
-  sections: PlexSection[]
+  sections: PlexSection[],
 ): Promise<{ key: string } | { available: string[] }> {
   const lists = await Promise.all(
     sections.map(async (section) => {
       const response = await plexClient.get(`/library/sections/${section.key}/genre`);
-      return (response.data?.MediaContainer?.Directory ?? []) as Array<{ key: string; title: string }>;
-    })
+      return (response.data?.MediaContainer?.Directory ?? []) as Array<{
+        key: string;
+        title: string;
+      }>;
+    }),
   );
 
   const byName = new Map<string, { key: string; title: string }>();
@@ -138,7 +151,7 @@ async function resolveGenre(
 // The library's own actor list can't be filtered by name, but the hub search
 // returns matching people with the same tag ids the actor filter accepts.
 async function resolveActor(
-  name: string
+  name: string,
 ): Promise<{ id: string; name: string } | { candidates: string[] } | null> {
   const response = await plexClient.get("/hubs/search", { params: { query: name, limit: 10 } });
   const hubs: any[] = response.data?.MediaContainer?.Hub ?? [];
@@ -159,7 +172,9 @@ async function resolveActor(
 }
 
 function guidOf(item: any, scheme: string): string | null {
-  const guid = (item.Guid ?? []).find((g: any) => typeof g.id === "string" && g.id.startsWith(`${scheme}://`));
+  const guid = (item.Guid ?? []).find(
+    (g: any) => typeof g.id === "string" && g.id.startsWith(`${scheme}://`),
+  );
   return guid ? guid.id.slice(scheme.length + 3) : null;
 }
 
@@ -183,7 +198,9 @@ function identityKeys(item: any, kind: MediaKind): string[] {
 }
 
 export function plexPosterUrl(thumb: unknown): string | null {
-  return typeof thumb === "string" && thumb ? `/api/plex/image?path=${encodeURIComponent(thumb)}` : null;
+  return typeof thumb === "string" && thumb
+    ? `/api/plex/image?path=${encodeURIComponent(thumb)}`
+    : null;
 }
 
 // Movies and shows actually in the Plex library, filtered by any combination of
@@ -191,22 +208,62 @@ export function plexPosterUrl(thumb: unknown): string | null {
 // managed) and the TMDb tools (what exists) with "what can I actually watch".
 export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date.now()) {
   if (!isConfigured("PLEX")) {
-    return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
+    return textReply(
+      "Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).",
+      true,
+    );
   }
 
-  const { title, genre, actor, year, library, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays } = args;
+  const {
+    title,
+    genre,
+    actor,
+    year,
+    library,
+    watched,
+    notWatchedInYears,
+    network,
+    contentRating,
+    minRating,
+    yearFrom,
+    yearTo,
+    addedWithinDays,
+  } = args;
   const mediaType = args.mediaType ?? "any";
   const sort = args.sort ?? "title";
-  const extra = Boolean(network?.trim()) || Boolean(contentRating?.trim()) || minRating !== undefined || yearFrom !== undefined || yearTo !== undefined || addedWithinDays !== undefined;
-  if (!title && !genre && !actor && year === undefined && !library && mediaType === "any" && !watched && notWatchedInYears === undefined && sort === "title" && !extra) {
-    return textReply("Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort.", true);
+  const extra =
+    Boolean(network?.trim()) ||
+    Boolean(contentRating?.trim()) ||
+    minRating !== undefined ||
+    yearFrom !== undefined ||
+    yearTo !== undefined ||
+    addedWithinDays !== undefined;
+  if (
+    !title &&
+    !genre &&
+    !actor &&
+    year === undefined &&
+    !library &&
+    mediaType === "any" &&
+    !watched &&
+    notWatchedInYears === undefined &&
+    sort === "title" &&
+    !extra
+  ) {
+    return textReply(
+      "Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort.",
+      true,
+    );
   }
   if (notWatchedInYears !== undefined && !(notWatchedInYears > 0)) {
     return textReply("notWatchedInYears must be greater than 0.", true);
   }
-  if (addedWithinDays !== undefined && !(addedWithinDays > 0)) return textReply("addedWithinDays must be greater than 0.", true);
-  if (minRating !== undefined && !(minRating >= 0 && minRating <= 10)) return textReply("minRating must be between 0 and 10.", true);
-  if (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo) return textReply("yearFrom is after yearTo.", true);
+  if (addedWithinDays !== undefined && !(addedWithinDays > 0))
+    return textReply("addedWithinDays must be greater than 0.", true);
+  if (minRating !== undefined && !(minRating >= 0 && minRating <= 10))
+    return textReply("minRating must be between 0 and 10.", true);
+  if (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo)
+    return textReply("yearFrom is after yearTo.", true);
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const offset = Math.max(args.offset ?? 0, 0);
   const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
@@ -215,7 +272,10 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
   try {
     const allSections = await getSections(kinds);
     if (allSections.length === 0) {
-      return textReply(`No ${mediaType === "any" ? "movie or show" : mediaType} libraries found in Plex.`, true);
+      return textReply(
+        `No ${mediaType === "any" ? "movie or show" : mediaType} libraries found in Plex.`,
+        true,
+      );
     }
 
     // Genre and actor ids are server-wide, so they're resolved against every
@@ -227,13 +287,19 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       const wanted = library.trim().toLowerCase();
       sections = allSections.filter((s) => s.title.toLowerCase().includes(wanted));
       if (sections.length === 0) {
-        return textReply(`No ${mediaType === "any" ? "movie or show" : mediaType} library matching "${library}" in Plex. Libraries: ${allSections.map((s) => s.title).join(", ")}.`, true);
+        return textReply(
+          `No ${mediaType === "any" ? "movie or show" : mediaType} library matching "${library}" in Plex. Libraries: ${allSections.map((s) => s.title).join(", ")}.`,
+          true,
+        );
       }
     } else {
       const skipped = skippedLibraryNames();
       sections = allSections.filter((s) => !skipped.has(s.title.toLowerCase()));
       if (sections.length === 0) {
-        return textReply(`Every ${mediaType === "any" ? "movie and show" : mediaType} library is skipped by default (Plex "Libraries to skip" setting). Name one with the library filter: ${allSections.map((s) => s.title).join(", ")}.`, true);
+        return textReply(
+          `Every ${mediaType === "any" ? "movie and show" : mediaType} library is skipped by default (Plex "Libraries to skip" setting). Name one with the library filter: ${allSections.map((s) => s.title).join(", ")}.`,
+          true,
+        );
       }
     }
 
@@ -248,13 +314,17 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       described.push(watched === "inProgress" ? "in progress" : watched);
     }
     if (notWatchedInYears !== undefined) {
-      described.push(`not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}`);
+      described.push(
+        `not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}`,
+      );
     }
     if (network?.trim()) described.push(`network/studio "${network.trim()}"`);
     if (contentRating?.trim()) described.push(`rated ${contentRating.trim().toUpperCase()}`);
     if (minRating !== undefined) described.push(`audience rating at least ${minRating}`);
-    if (yearFrom !== undefined || yearTo !== undefined) described.push(`released ${yearFrom ?? "any"}-${yearTo ?? "any"}`);
-    if (addedWithinDays !== undefined) described.push(`added in the last ${addedWithinDays} day${addedWithinDays === 1 ? "" : "s"}`);
+    if (yearFrom !== undefined || yearTo !== undefined)
+      described.push(`released ${yearFrom ?? "any"}-${yearTo ?? "any"}`);
+    if (addedWithinDays !== undefined)
+      described.push(`added in the last ${addedWithinDays} day${addedWithinDays === 1 ? "" : "s"}`);
     if (year !== undefined) {
       filters.year = year;
       described.push(`year ${year}`);
@@ -265,7 +335,10 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     if (genre) {
       const resolved = await resolveGenre(genre, allSections);
       if ("available" in resolved) {
-        return textReply(`No genre "${genre}" in Plex. Available genres: ${resolved.available.join(", ")}.`, true);
+        return textReply(
+          `No genre "${genre}" in Plex. Available genres: ${resolved.available.join(", ")}.`,
+          true,
+        );
       }
       filters.genre = resolved.key;
       described.push(`genre "${genre}"`);
@@ -276,7 +349,10 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
         return textReply(`No actor matching "${actor}" found in the Plex library.`, true);
       }
       if ("candidates" in resolved) {
-        return textReply(`"${actor}" matches several people in Plex: ${resolved.candidates.join(", ")}. Ask again with the full name.`, true);
+        return textReply(
+          `"${actor}" matches several people in Plex: ${resolved.candidates.join(", ")}. Ask again with the full name.`,
+          true,
+        );
       }
       filters.actor = resolved.id;
       described.push(`actor ${resolved.name}`);
@@ -296,7 +372,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
         });
         const items: any[] = response.data?.MediaContainer?.Metadata ?? [];
         return { section, items };
-      })
+      }),
     );
 
     // One entry per title, listing every library that holds it (HD and 4K
@@ -320,7 +396,12 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
           existing.watch = mergeWatch(existing.watch, watchOf(item, section.kind));
           for (const k of keys) byKey.set(k, existing);
         } else {
-          const group: Group = { kind: section.kind, item, libraries: [section.title], watch: watchOf(item, section.kind) };
+          const group: Group = {
+            kind: section.kind,
+            item,
+            libraries: [section.title],
+            watch: watchOf(item, section.kind),
+          };
           groups.push(group);
           for (const k of keys) byKey.set(k, group);
         }
@@ -328,7 +409,9 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     }
 
     // Watch filters run on the whole title (all its libraries), before paging.
-    let candidates = watched ? groups.filter((g) => matchesWatch(g.kind, g.watch, watched)) : groups;
+    let candidates = watched
+      ? groups.filter((g) => matchesWatch(g.kind, g.watch, watched))
+      : groups;
     let undated = 0;
     if (notWatchedInYears !== undefined) {
       const cutoff = now - notWatchedInYears * 365.25 * DAY_MS;
@@ -347,7 +430,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     const wantRating = contentRating?.trim() ? normalizeRating(contentRating) : null;
     candidates = candidates.filter((g) => {
       if (wantNetwork && !fold(String(g.item.studio ?? "")).includes(wantNetwork)) return false;
-      if (wantRating && normalizeRating(String(g.item.contentRating ?? "")) !== wantRating) return false;
+      if (wantRating && normalizeRating(String(g.item.contentRating ?? "")) !== wantRating)
+        return false;
       if (minRating !== undefined) {
         const rating = numberOrNull(g.item.audienceRating ?? g.item.rating);
         if (rating === null || rating < minRating) return false;
@@ -355,30 +439,51 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       const released = numberOrNull(g.item.year);
       if (yearFrom !== undefined && (released === null || released < yearFrom)) return false;
       if (yearTo !== undefined && (released === null || released > yearTo)) return false;
-      if (addedWithinDays !== undefined && (g.watch.addedLast === null || g.watch.addedLast * 1000 < now - addedWithinDays * DAY_MS)) return false;
+      if (
+        addedWithinDays !== undefined &&
+        (g.watch.addedLast === null || g.watch.addedLast * 1000 < now - addedWithinDays * DAY_MS)
+      )
+        return false;
       return true;
     });
 
     const byTitle = (a: Group, b: Group) =>
-      String(a.item.titleSort ?? a.item.title).localeCompare(String(b.item.titleSort ?? b.item.title)) || (a.item.year ?? 0) - (b.item.year ?? 0);
+      String(a.item.titleSort ?? a.item.title).localeCompare(
+        String(b.item.titleSort ?? b.item.title),
+      ) || (a.item.year ?? 0) - (b.item.year ?? 0);
     // Newest / oldest first; a title with no date sorts last either way.
-    const byDate = (pick: (g: Group) => number | null, newestFirst: boolean) => (a: Group, b: Group) => {
-      const x = pick(a);
-      const y = pick(b);
-      if (x === null || y === null) return x === y ? byTitle(a, b) : x === null ? 1 : -1;
-      return (newestFirst ? y - x : x - y) || byTitle(a, b);
-    };
+    const byDate =
+      (pick: (g: Group) => number | null, newestFirst: boolean) => (a: Group, b: Group) => {
+        const x = pick(a);
+        const y = pick(b);
+        if (x === null || y === null) return x === y ? byTitle(a, b) : x === null ? 1 : -1;
+        return (newestFirst ? y - x : x - y) || byTitle(a, b);
+      };
     const comparator =
-      sort === "recentlyAdded" ? byDate((g) => g.watch.addedLast, true)
-      : sort === "lastWatched" ? byDate((g) => g.watch.lastViewed, true)
-      : sort === "leastRecentlyWatched" ? byDate((g) => lastActivity(g.kind, g.watch), false)
-      : byTitle;
+      sort === "recentlyAdded"
+        ? byDate((g) => g.watch.addedLast, true)
+        : sort === "lastWatched"
+          ? byDate((g) => g.watch.lastViewed, true)
+          : sort === "leastRecentlyWatched"
+            ? byDate((g) => lastActivity(g.kind, g.watch), false)
+            : byTitle;
     const sorted = candidates.sort(comparator);
     const total = sorted.length;
     const rows = sorted.slice(offset, offset + limit);
 
-    const withDates = Boolean(watched) || notWatchedInYears !== undefined || addedWithinDays !== undefined || sort !== "title";
-    const sortHeading = sort === "recentlyAdded" ? "newest additions first" : sort === "lastWatched" ? "most recently watched first" : sort === "leastRecentlyWatched" ? "longest unwatched first" : "";
+    const withDates =
+      Boolean(watched) ||
+      notWatchedInYears !== undefined ||
+      addedWithinDays !== undefined ||
+      sort !== "title";
+    const sortHeading =
+      sort === "recentlyAdded"
+        ? "newest additions first"
+        : sort === "lastWatched"
+          ? "most recently watched first"
+          : sort === "leastRecentlyWatched"
+            ? "longest unwatched first"
+            : "";
     const heading = described.join(", ") || sortHeading || "that request";
     const undatedNote =
       undated > 0
@@ -388,7 +493,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       return textReply(
         total > 0
           ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.`
-          : `No ${noun} in Plex match ${heading}.${undatedNote}`
+          : `No ${noun} in Plex match ${heading}.${undatedNote}`,
       );
     }
 
@@ -407,8 +512,14 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     if (total > shownEnd) {
       output += ` ${total - shownEnd} more are not listed: call again with offset ${shownEnd} for the next page (limit up to ${MAX_LIMIT}).`;
     }
-    output += " Each line is one title with every Plex library that holds it; the user sees the same titles in a table below your reply.";
-    if (watched || notWatchedInYears !== undefined || sort === "lastWatched" || sort === "leastRecentlyWatched") {
+    output +=
+      " Each line is one title with every Plex library that holds it; the user sees the same titles in a table below your reply.";
+    if (
+      watched ||
+      notWatchedInYears !== undefined ||
+      sort === "lastWatched" ||
+      sort === "leastRecentlyWatched"
+    ) {
       output += " Watch state is for the Plex account the app is connected with.";
     }
     output += undatedNote;
@@ -475,8 +586,10 @@ interface Watch {
 }
 
 const count = (value: unknown): number => numberOrNull(value) ?? 0;
-const latest = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.max(a, b));
-const earliest = (a: number | null, b: number | null) => (a === null ? b : b === null ? a : Math.min(a, b));
+const latest = (a: number | null, b: number | null) =>
+  a === null ? b : b === null ? a : Math.max(a, b);
+const earliest = (a: number | null, b: number | null) =>
+  a === null ? b : b === null ? a : Math.min(a, b);
 
 function watchOf(item: any, kind: MediaKind): Watch {
   return {
@@ -518,7 +631,8 @@ function matchesWatch(kind: MediaKind, w: Watch, want: WatchFilter): boolean {
   return w.seen > 0 && !showFinished(w);
 }
 
-const everWatched = (kind: MediaKind, w: Watch) => (kind === "movie" ? w.viewCount > 0 || w.viewOffset > 0 : w.seen > 0);
+const everWatched = (kind: MediaKind, w: Watch) =>
+  kind === "movie" ? w.viewCount > 0 || w.viewOffset > 0 : w.seen > 0;
 
 // When someone last did something with the title, in epoch seconds: the last
 // time it was watched, or for a never-watched title when it was added. Null
@@ -528,7 +642,8 @@ function lastActivity(kind: MediaKind, w: Watch): number | null {
   return everWatched(kind, w) ? null : w.addedFirst;
 }
 
-export const isoDay = (seconds: number | null): string | null => (seconds === null ? null : new Date(seconds * 1000).toISOString().slice(0, 10));
+export const isoDay = (seconds: number | null): string | null =>
+  seconds === null ? null : new Date(seconds * 1000).toISOString().slice(0, 10);
 
 function lastWatchedLabel(kind: MediaKind, w: Watch): string | null {
   if (w.lastViewed !== null) return isoDay(w.lastViewed);
@@ -543,8 +658,12 @@ function watchNoteOf(kind: MediaKind, w: Watch, showAdded: boolean): string {
   } else {
     const date = w.lastViewed !== null ? isoDay(w.lastViewed) : null;
     if (kind === "movie" && w.viewOffset > 0) {
-      const percent = w.duration ? Math.min(99, Math.round((w.viewOffset / w.duration) * 100)) : null;
-      parts.push(`in progress${percent !== null ? ` (${percent}%)` : ""}${date ? `, last watched ${date}` : ""}`);
+      const percent = w.duration
+        ? Math.min(99, Math.round((w.viewOffset / w.duration) * 100))
+        : null;
+      parts.push(
+        `in progress${percent !== null ? ` (${percent}%)` : ""}${date ? `, last watched ${date}` : ""}`,
+      );
     } else if (kind === "movie") {
       parts.push(date ? `watched ${date}` : "watched, date unknown");
     } else {
@@ -560,7 +679,8 @@ function showSummary(seasons: unknown, w: Watch): string {
   const seasonCount = numberOrNull(seasons);
   const parts: string[] = [];
   if (seasonCount !== null) parts.push(`${seasonCount} season${seasonCount === 1 ? "" : "s"}`);
-  if (w.leaf !== null) parts.push(`${w.leaf} episode${w.leaf === 1 ? "" : "s"} (${w.seen} watched)`);
+  if (w.leaf !== null)
+    parts.push(`${w.leaf} episode${w.leaf === 1 ? "" : "s"} (${w.seen} watched)`);
   return parts.join(", ") || "size unknown";
 }
 
@@ -575,7 +695,8 @@ function showSummary(seasons: unknown, w: Watch): string {
 // in a skipped library is still owned.
 const OWNED_INDEX_TTL_MS = 5 * 60_000;
 const INDEX_PAGE_SIZE = 1000;
-const ownedIndexCache: Partial<Record<MediaKind, { at: number; byTmdbId: Map<string, string[]> }>> = {};
+const ownedIndexCache: Partial<Record<MediaKind, { at: number; byTmdbId: Map<string, string[]> }>> =
+  {};
 
 export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<string, string[]>> {
   const cached = ownedIndexCache[kind];
@@ -590,7 +711,11 @@ export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<
     sections.map(async (section) => {
       for (let start = 0; ; start += INDEX_PAGE_SIZE) {
         const response = await plexClient.get(`/library/sections/${section.key}/all`, {
-          params: { includeGuids: 1, "X-Plex-Container-Start": start, "X-Plex-Container-Size": INDEX_PAGE_SIZE },
+          params: {
+            includeGuids: 1,
+            "X-Plex-Container-Start": start,
+            "X-Plex-Container-Size": INDEX_PAGE_SIZE,
+          },
         });
         const container = response.data?.MediaContainer ?? {};
         const items: any[] = container.Metadata ?? [];
@@ -603,7 +728,7 @@ export async function getOwnedTmdbIndex(kind: MediaKind = "movie"): Promise<Map<
         }
         if (items.length === 0 || start + items.length >= Number(container.totalSize ?? 0)) break;
       }
-    })
+    }),
   );
 
   ownedIndexCache[kind] = { at: Date.now(), byTmdbId };
@@ -637,31 +762,52 @@ const MAX_DECK_LIMIT = 50;
 // shows up once per library in Plex; here it is one entry listing both.
 export async function getOnDeck(args: OnDeckArgs = {}) {
   if (!isConfigured("PLEX")) {
-    return textReply("Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).", true);
+    return textReply(
+      "Plex isn't configured. Set the Plex URL and token on the Settings page (or PLEX_URL / PLEX_TOKEN in .env).",
+      true,
+    );
   }
   const mediaType = args.mediaType ?? "any";
   const limit = Math.min(Math.max(Math.trunc(args.limit ?? DEFAULT_DECK_LIMIT), 1), MAX_DECK_LIMIT);
 
   try {
-    const response = await plexClient.get("/library/onDeck", { params: { "X-Plex-Container-Start": 0, "X-Plex-Container-Size": MAX_DECK_LIMIT } });
-    const raw: any[] = (response.data?.MediaContainer?.Metadata ?? []).filter((item: any) => item.type === "episode" || item.type === "movie");
+    const response = await plexClient.get("/library/onDeck", {
+      params: { "X-Plex-Container-Start": 0, "X-Plex-Container-Size": MAX_DECK_LIMIT },
+    });
+    const raw: any[] = (response.data?.MediaContainer?.Metadata ?? []).filter(
+      (item: any) => item.type === "episode" || item.type === "movie",
+    );
     const kindOf = (item: any): MediaKind => (item.type === "episode" ? "show" : "movie");
 
     let items = raw.filter((item) => mediaType === "any" || kindOf(item) === mediaType);
     if (args.library) {
       const wanted = args.library.trim().toLowerCase();
-      const present = [...new Set(items.map((item) => String(item.librarySectionTitle ?? "")).filter(Boolean))];
-      items = items.filter((item) => String(item.librarySectionTitle ?? "").toLowerCase().includes(wanted));
+      const present = [
+        ...new Set(items.map((item) => String(item.librarySectionTitle ?? "")).filter(Boolean)),
+      ];
+      items = items.filter((item) =>
+        String(item.librarySectionTitle ?? "")
+          .toLowerCase()
+          .includes(wanted),
+      );
       if (items.length === 0) {
-        return textReply(`Nothing on deck in a library matching "${args.library}". Libraries with something on deck: ${present.join(", ") || "none"}.`);
+        return textReply(
+          `Nothing on deck in a library matching "${args.library}". Libraries with something on deck: ${present.join(", ") || "none"}.`,
+        );
       }
     }
 
     if (args.title?.trim()) {
       const wanted = args.title.trim().toLowerCase();
-      items = items.filter((item) => String(kindOf(item) === "show" ? item.grandparentTitle : item.title).toLowerCase().includes(wanted));
+      items = items.filter((item) =>
+        String(kindOf(item) === "show" ? item.grandparentTitle : item.title)
+          .toLowerCase()
+          .includes(wanted),
+      );
       if (items.length === 0) {
-        return textReply(`Nothing on deck matches "${args.title}". Plex lists a show here only once it has been started and has an episode left to watch, and a movie only while it is part way through.`);
+        return textReply(
+          `Nothing on deck matches "${args.title}". Plex lists a show here only once it has been started and has an episode left to watch, and a movie only while it is part way through.`,
+        );
       }
     }
 
@@ -675,7 +821,10 @@ export async function getOnDeck(args: OnDeckArgs = {}) {
     const byTitle = new Map<string, Entry>();
     for (const item of items) {
       const kind = kindOf(item);
-      const key = kind === "show" ? `show:${item.grandparentGuid ?? item.grandparentTitle}` : `movie:${item.guid ?? `${item.title}|${item.year}`}`;
+      const key =
+        kind === "show"
+          ? `show:${item.grandparentGuid ?? item.grandparentTitle}`
+          : `movie:${item.guid ?? `${item.title}|${item.year}`}`;
       const library = String(item.librarySectionTitle ?? "");
       const existing = byTitle.get(key);
       if (existing) {
@@ -696,21 +845,33 @@ export async function getOnDeck(args: OnDeckArgs = {}) {
     const describe = ({ item, kind }: Entry) => {
       const played = numberOrNull(item.viewOffset) ?? 0;
       const duration = numberOrNull(item.duration);
-      const percent = played > 0 && duration ? Math.min(99, Math.round((played / duration) * 100)) : null;
+      const percent =
+        played > 0 && duration ? Math.min(99, Math.round((played / duration) * 100)) : null;
       const date = isoDay(numberOrNull(item.lastViewedAt));
-      const state = played > 0 ? `${percent !== null ? `${percent}% watched` : "partly watched"}${date ? `, last watched ${date}` : ""}` : `next up${date ? `, last activity ${date}` : ""}`;
-      const episode = kind === "show" ? `S${item.parentIndex}E${String(item.index).padStart(2, "0")}${item.title ? ` "${item.title}"` : ""}` : null;
+      const state =
+        played > 0
+          ? `${percent !== null ? `${percent}% watched` : "partly watched"}${date ? `, last watched ${date}` : ""}`
+          : `next up${date ? `, last activity ${date}` : ""}`;
+      const episode =
+        kind === "show"
+          ? `S${item.parentIndex}E${String(item.index).padStart(2, "0")}${item.title ? ` "${item.title}"` : ""}`
+          : null;
       return { played, date, state, episode };
     };
 
     let output = `## On deck in Plex (the "continue watching" list): ${entries.length} ${entries.length === 1 ? "item" : "items"}\n`;
-    output += "Most recently active first. Each line is one movie, or the next episode of one show; the user sees the same list in a table below your reply. This is Plex's short On Deck list (at most 50 recent items), NOT every unfinished title: for a complete list of what is unwatched or unfinished use search_plex_library with its watched filter. Watch state is for the Plex account the app is connected with.\n";
-    if (entries.length > listed.length) output += `Listed the first ${listed.length}; ${entries.length - listed.length} more are not listed (limit up to ${MAX_DECK_LIMIT}).\n`;
+    output +=
+      "Most recently active first. Each line is one movie, or the next episode of one show; the user sees the same list in a table below your reply. This is Plex's short On Deck list (at most 50 recent items), NOT every unfinished title: for a complete list of what is unwatched or unfinished use search_plex_library with its watched filter. Watch state is for the Plex account the app is connected with.\n";
+    if (entries.length > listed.length)
+      output += `Listed the first ${listed.length}; ${entries.length - listed.length} more are not listed (limit up to ${MAX_DECK_LIMIT}).\n`;
     output += "\n";
     for (const entry of listed) {
       const { item, kind, libraries } = entry;
       const { state, episode } = describe(entry);
-      const name = kind === "show" ? `${item.grandparentTitle ?? "Unknown show"} ${episode}` : `${item.title}${item.year ? ` (${item.year})` : ""}`;
+      const name =
+        kind === "show"
+          ? `${item.grandparentTitle ?? "Unknown show"} ${episode}`
+          : `${item.title}${item.year ? ` (${item.year})` : ""}`;
       output += `- ${name} - ${libraries.join(", ")} - ${state}\n`;
     }
 
@@ -721,7 +882,9 @@ export async function getOnDeck(args: OnDeckArgs = {}) {
         kind,
         title: String(kind === "show" ? (item.grandparentTitle ?? "Unknown show") : item.title),
         year: kind === "movie" && typeof item.year === "number" ? item.year : null,
-        posterUrl: plexPosterUrl(kind === "show" ? (item.grandparentThumb ?? item.thumb) : item.thumb),
+        posterUrl: plexPosterUrl(
+          kind === "show" ? (item.grandparentThumb ?? item.thumb) : item.thumb,
+        ),
         libraries,
         genres: [],
         rating: null,
