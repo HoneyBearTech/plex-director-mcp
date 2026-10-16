@@ -23,7 +23,8 @@ Each check opens one SSH connection per host and runs only read-only commands: `
 
 The first time Plex Director connects to a host, it remembers the host's key. After that, a host that presents a
 different key is refused before any command runs, and it shows as offline with *SSH host key changed*. If you
-rebuilt or reinstalled it, use **Trust new key** on the Node Utilization page. If you didn't, don't: someone may
+rebuilt or reinstalled it, use **Trust new key** on the Node Utilization page (shown when `WEB_PASSWORD` is set),
+or ask Claude Desktop to run `trust_new_host_key` for that host. If you didn't, don't: someone may
 be pretending to be that host.
 
 ### The tools
@@ -31,6 +32,9 @@ be pretending to be that host.
 - **`get_cluster_infrastructure_health`**: "How are my hosts doing?" Per host: CPU, memory (percentage and MB),
   running containers, and the names of any stopped ones. Offline hosts show why.
 - **`get_cluster_hardware_analytics`**: CPU and memory per host, as a short table.
+- **`trust_new_host_key`**: "I rebuilt atlas, trust its new key." Forgets the remembered key of a configured
+  host, so the next check remembers the one it presents now: the same as the dashboard's **Trust new key**,
+  which is only offered when `WEB_PASSWORD` is set. Compare the fingerprint first.
 
 ## Servarr backups
 

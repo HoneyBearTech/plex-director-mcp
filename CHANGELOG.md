@@ -7,8 +7,16 @@ a security problem.
 
 ## [Unreleased]
 
+### Added
+
+- **`trust_new_host_key` MCP tool**: forgets a monitored host's remembered SSH key after you rebuilt it, the
+  Claude Desktop counterpart of the dashboard's **Trust new key** button. Not available to the Query chat.
+
 ### Security
 
+- **Trusting a changed SSH host key from the dashboard needs `WEB_PASSWORD`.** Without a login anyone on the
+  network could use it to make an impostor the trusted host; the button is replaced by an explanation, and the
+  API answers 403. Use `trust_new_host_key` in Claude Desktop instead.
 - **Poster downloads are limited.** `check_movie_status` only downloads a poster over HTTPS from TMDb's image
   server or the placeholder service, with no redirects, a 10-second timeout and a 5 MB cap. The URL comes
   from Radarr's metadata, and could otherwise point anywhere on your network.

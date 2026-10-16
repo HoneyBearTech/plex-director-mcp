@@ -60,7 +60,8 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 - Each host's key fingerprint (SHA-256) is remembered the first time it connects. A different key is
   refused before authentication completes and before any command runs, and the Node Utilization page shows
   the host as offline with the reason. Only a host in the configured host list can have its remembered key
-  cleared (**Trust new key**).
+  cleared: with **Trust new key**, which needs `WEB_PASSWORD` (with no login it is refused, since anyone on
+  the network could otherwise trust an impostor), or with the `trust_new_host_key` MCP tool.
 
 **Input from outside**
 

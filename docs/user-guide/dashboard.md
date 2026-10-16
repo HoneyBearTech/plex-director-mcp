@@ -44,7 +44,9 @@ The health of each Linux host you list on the **Nodes** tab of Settings, read ov
 
 **When a host's SSH key changes**, Plex Director refuses to connect (someone could be pretending to be that
 host), and the Status column says *SSH host key changed* with the key it now presents and a **Trust new key**
-button. Only press it if you rebuilt or reinstalled that host: the browser asks you to confirm, Plex Director
+button. The button is only there when `WEB_PASSWORD` is set: without a login, anyone on your network could use
+it to trust an impostor. Without one, ask Claude Desktop to run `trust_new_host_key` for the host instead.
+Only trust a new key if you rebuilt or reinstalled that host: the browser asks you to confirm, Plex Director
 forgets the old key, and the next check remembers the new one. Compare the fingerprint first
 ([installing.md](../installing.md#ssh-host-monitoring)).
 

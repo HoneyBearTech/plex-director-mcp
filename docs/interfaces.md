@@ -49,6 +49,7 @@ can use. **Changes** marks tools that change something in your services.
 | `execute_next_job_step` | yes | Run the next Radarr search of a job now. |
 | `get_cluster_infrastructure_health` | | CPU, memory and Docker container health per SSH host. |
 | `get_cluster_hardware_analytics` | | CPU and memory per host as a table. |
+| `trust_new_host_key` | yes | Forget a configured host's remembered SSH key after a rebuild, so the next check trusts the new one. |
 | `run_cluster_backup` | yes | Ask Radarr, Sonarr and Prowlarr to run their built-in backups and confirm a new file appeared. |
 | `get_plex_activity` | | Live streams and transcoding load, via Tautulli. |
 | `get_library_analytics` | | Most-watched titles, top users, platforms and libraries, via Tautulli. |

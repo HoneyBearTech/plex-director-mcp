@@ -31,7 +31,7 @@ history (personal data); the SSH host keys Plex Director trusts.
 | --- | --- | --- |
 | Unauthenticated LAN client | Nothing | Guess the password, forge or replay a session cookie, read settings, use the image proxies to reach other URLs, cross-site requests from a page the user visits. |
 | Signed-in dashboard user | Everything the dashboard offers (single user) | Out of scope as an attacker: the owner. Their browser must not be able to read stored secrets. |
-| MCP client user | All 25 tools and every credential | Out of scope as an attacker: whoever can launch the process already holds the env file. |
+| MCP client user | All 26 tools and every credential | Out of scope as an attacker: whoever can launch the process already holds the env file. |
 | The LLM (chat or MCP client) | Choosing tool calls | Be steered by injected text into calling tools the user did not want, or into leaking data. |
 | Hostile content in a service | Nothing | Titles, summaries, torrent names, indexer messages or host output crafted to inject into the LLM, the dashboard (XSS), shell commands or service requests. |
 | A compromised LAN service or impostor host | Nothing | Return malicious responses; impersonate an SSH host to capture commands or feed false data. |
@@ -66,7 +66,8 @@ download clients, TMDb or the Anthropic API; what a user approves an MCP client 
 | Artwork proxies (`/api/plex/image`, `/api/status/image`) | signed-in users | allowlist regex, fixed upstream | `src/web/routes/plex.ts`, `src/web/routes/status.ts` |
 | Query chat (`POST /api/chat/movies`) | signed-in users | read-only tools, bounded history and rounds | `src/web/chat.ts`, `src/web/routes/chat.ts` |
 | Settings (`PUT /api/settings/{service}`) | signed-in users | fixed field allowlist per service, strings only | `src/web/routes/settings.ts` |
-| Trust new key (`POST /api/nodes/trust-new-key`) | signed-in users | only configured hosts | `src/web/routes/nodes.ts`, `src/hostKeys.ts` |
+| Trust new key (`POST /api/nodes/trust-new-key`) | signed-in users; refused (403) when `WEB_PASSWORD` is unset | only configured hosts | `src/web/routes/nodes.ts`, `src/cluster.ts` |
+| `trust_new_host_key` (MCP) | the MCP client user, after the client's approval prompt | only configured hosts | `src/tools/infrastructure.ts`, `src/cluster.ts` |
 | MCP stdio | the process that launched it | zod schemas, client approval | `src/index.ts`, `src/tools/` |
 | Service responses | whoever controls a service or its content | typed mapping, text-only rendering, escaped tables | `src/tools/`, `web/src/components/ChatText.tsx` |
 | SSH hosts | whoever controls a host or the path to it | TOFU host key, constant commands | `src/ssh.ts`, `src/cluster.ts`, `src/hostKeys.ts` |

@@ -9,7 +9,7 @@ built yet is marked **Planned**.
 
 ## Where it stands
 
-Plex Director is one Node.js process that is both an MCP server for Claude Desktop (25 tools) and a web
+Plex Director is one Node.js process that is both an MCP server for Claude Desktop (26 tools) and a web
 dashboard with a Claude-powered Query chat. **v1.0.0**, **v1.1.0** (September 2026), **v1.2.0** and **v1.3.0** (October 2026) are released as
 signed multi-arch images on Docker Hub and GHCR.
 

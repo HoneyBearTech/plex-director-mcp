@@ -229,7 +229,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (25 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (26 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -430,7 +430,7 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-five tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
+Twenty-six tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
 
 The server also sends MCP clients short usage instructions: which tool answers which kind of question, and to confirm before anything that changes your services. The same guidance is in an [Agent Skill](skills/plex-director/SKILL.md) for agents that load skills (such as Claude Code), and in the Query chat's prompt. It is written once in [`src/guidance.ts`](src/guidance.ts).
 
@@ -475,6 +475,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 | :--- | :--- |
 | `get_cluster_infrastructure_health` | CPU, memory and Docker container health for each SSH host. |
 | `get_cluster_hardware_analytics` | CPU and memory per host as a table. |
+| `trust_new_host_key` | Forgets a monitored host's remembered SSH key after you rebuilt it, so the next check trusts the key it presents now. The dashboard's **Trust new key** button does the same, but only when `WEB_PASSWORD` is set. |
 | `run_cluster_backup` | Asks Radarr, Sonarr and Prowlarr (whichever are configured) to run their built-in database backups, waits for each (up to about a minute; a slower one is reported as still running), and confirms a new backup file appeared, with its name, size and time. The backups stay in each app's own backup folder; nothing is copied. |
 | `get_plex_activity` | Live playback streams and transcoding load, via Tautulli. |
 | `get_library_analytics` | Most-watched titles, top users, platforms and libraries, via Tautulli. |
@@ -486,7 +487,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 - **Run it on a trusted network.** It is designed for a home LAN and is not designed or tested to be exposed to the public internet. If you do reach it from outside, put it behind HTTPS and a reverse proxy you trust. See [SECURITY.md](SECURITY.md) to report a vulnerability.
 - **Set `WEB_PASSWORD`.** Without it, anyone who can reach the port can use the dashboard and change its settings.
 - **Secrets stay on the server.** The Settings page never returns a saved key or token, and Plex artwork is fetched through a server-side proxy so the Plex token never reaches your browser.
-- **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
+- **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it (that button needs `WEB_PASSWORD`; without one, ask Claude Desktop to use `trust_new_host_key`). Without a password anyone on your network could use that button to trust an impostor, so it is only offered with one. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
 - **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes torrents and their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
 - The image runs as a non-root user (UID 65532); see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down further.
 

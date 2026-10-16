@@ -252,7 +252,7 @@
         "tags": ["nodes"],
         "operationId": "trustNewHostKey",
         "summary": "Forget a host's remembered SSH key",
-        "description": "For a host whose key legitimately changed (rebuilt or reinstalled): forgets the remembered fingerprint so the next probe trusts whatever key the host presents. Only a host in the configured host list can be named.",
+        "description": "For a host whose key legitimately changed (rebuilt or reinstalled): forgets the remembered fingerprint so the next probe trusts whatever key the host presents. Only a host in the configured host list can be named, and only when WEB_PASSWORD is set.",
         "requestBody": {
           "required": true,
           "content": {
@@ -291,6 +291,14 @@
             }
           },
           "401": { "$ref": "#/components/responses/Unauthorized" },
+          "403": {
+            "description": "WEB_PASSWORD is not set. Without a login anyone on the network could re-trust a host, so this is refused; use the trust_new_host_key MCP tool instead.",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/Error" }
+              }
+            }
+          },
           "404": {
             "description": "The host is not in the configured host list.",
             "content": {

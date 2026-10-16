@@ -12,7 +12,7 @@ flowchart TB
     browser["Browser<br/>(React dashboard)"]
     desktop["MCP client<br/>(e.g. Claude Desktop)"]
     subgraph container["One Node.js process (Docker container or npm start)"]
-        mcp["MCP server<br/>stdio, 25 tools<br/>src/server.ts, src/tools/"]
+        mcp["MCP server<br/>stdio, 26 tools<br/>src/server.ts, src/tools/"]
         web["Web dashboard<br/>Express on WEB_PORT (3000)<br/>src/web/"]
         chat["Query chat<br/>src/web/chat.ts<br/>(12 read-only tools)"]
         runner["Job runner<br/>src/jobRunner.ts"]
@@ -48,7 +48,7 @@ flowchart TB
 
 | Component | Code | Responsibility |
 | --- | --- | --- |
-| **MCP server** | `src/index.ts`, `src/server.ts`, `src/tools/` | Speaks the Model Context Protocol over stdin/stdout using the official MCP SDK. Registers 25 tools: searching the library, diagnosing missing media, adding movies, download and indexer health, batch jobs, host monitoring and backups. Tool arguments are validated with zod schemas by the SDK before a handler runs. |
+| **MCP server** | `src/index.ts`, `src/server.ts`, `src/tools/` | Speaks the Model Context Protocol over stdin/stdout using the official MCP SDK. Registers 26 tools: searching the library, diagnosing missing media, adding movies, download and indexer health, batch jobs, host monitoring and backups. Tool arguments are validated with zod schemas by the SDK before a handler runs. |
 | **Web dashboard** | `src/web/app.ts`, `src/web/auth.ts`, `src/web/routes/` | An Express 5 server on `WEB_PORT` (default 3000). Serves the built React app from `web/dist` and a JSON API under `/api`. With `WEB_PASSWORD` set, every `/api` route except `/api/auth/*` needs a signed session cookie. The API is described in [api/openapi.json](api/openapi.json). |
 | **Frontend** | `web/` (React, TypeScript, Vite, Radix Themes) | A single-page app: Query (chat), Server Status, Node Utilization, Queues, Indexers, Jobs and Settings. It holds no secrets; everything comes from `/api`. Plex and Tautulli artwork is loaded through server-side proxies so the Plex token and Tautulli key never reach the browser. |
 | **Query chat** | `src/web/chat.ts`, `src/web/routes/chat.ts` | Sends the user's question, a bounded slice of chat history (12 turns, 4,000 characters each) and the 12 read-only tools in `movieTools` to the Anthropic API, runs the tools the model asks for (at most 4 rounds; each tool checks the model's arguments against its zod schema first), and returns the answer text, any images and the rows for the results table. The chat cannot add, delete or start anything. |
@@ -62,8 +62,8 @@ flowchart TB
 
 | Actor | Reaches Plex Director through | Can do |
 | --- | --- | --- |
-| **Dashboard user** | A browser on the LAN, port 3000, signed in with `WEB_PASSWORD` (or anyone who can reach the port when it is unset) | Read status, queues, indexers, host health and jobs; ask the Query chat (read-only tools); view and change service settings (secrets are write-only); approve a changed SSH host key with **Trust new key**. Cannot start, pause or cancel jobs, add movies or delete downloads. |
-| **MCP client** (e.g. Claude Desktop) | The process's stdin/stdout, launched by the client on the same machine | Call any of the 25 tools, including the ones that change things: add movies to Radarr and start searches (`confirm_selected_choices`), delete stalled torrents and their files (`manage_stalled_downloads` with `PURGE_STALLED`), plan, start, pause and cancel batch jobs, and trigger Servarr backups. The client asks the user before each tool call. |
+| **Dashboard user** | A browser on the LAN, port 3000, signed in with `WEB_PASSWORD` (or anyone who can reach the port when it is unset) | Read status, queues, indexers, host health and jobs; ask the Query chat (read-only tools); view and change service settings (secrets are write-only); approve a changed SSH host key with **Trust new key** (only when `WEB_PASSWORD` is set). Cannot start, pause or cancel jobs, add movies or delete downloads. |
+| **MCP client** (e.g. Claude Desktop) | The process's stdin/stdout, launched by the client on the same machine | Call any of the 26 tools, including the ones that change things: add movies to Radarr and start searches (`confirm_selected_choices`), delete stalled torrents and their files (`manage_stalled_downloads` with `PURGE_STALLED`), plan, start, pause and cancel batch jobs, and trigger Servarr backups. The client asks the user before each tool call. |
 | **The LLM** | Indirectly: the Anthropic model in the Query chat, or whichever model drives the MCP client | Chooses which tools to call and with which arguments. In the Query chat it can only use the 12 read-only tools. Through an MCP client it can request any tool, subject to that client's approval prompts. |
 | **External services** | Plex Director calls them; they never call in | Return data (titles, summaries, torrent names, indexer messages, host command output) that is shown to users and given to the LLM. A compromised or malicious service controls that data. |
 | **Maintainer and CI** | GitHub: pull requests to protected `main`, GitHub Actions | Change the code, publish signed images to Docker Hub and GHCR, cut releases. See [dependencies.md](dependencies.md). |
