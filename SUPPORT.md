@@ -22,7 +22,7 @@ those projects; this one can only help with how Plex Director talks to them.
 
 | Version | Supported with | Until |
 | --- | --- | --- |
-| The latest release (currently 1.2.x) | bug fixes and security fixes | the next release is published |
+| The [latest release](https://github.com/HoneyBearTech/plex-director-mcp/releases/latest) | bug fixes and security fixes | the next release is published |
 | An older release | nothing | it stopped being supported when the next release came out |
 | `main` (the `latest` image tag) | bug fixes and security fixes | always (it's where fixes land first) |
 
