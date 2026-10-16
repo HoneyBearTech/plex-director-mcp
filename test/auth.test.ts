@@ -71,7 +71,9 @@ describe("requireAuth middleware", () => {
         return this;
       },
     } as unknown as Response;
-    requireAuth(req, res, () => void (nextCalled = true));
+    requireAuth(req, res, () => {
+      nextCalled = true;
+    });
     return { status, body, nextCalled };
   }
 

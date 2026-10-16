@@ -279,7 +279,7 @@ export async function checkSeriesCompleteness(title: string, year?: number) {
     } else {
       output += `NOT complete: you have ${analysis.have} of ${analysis.released} aired episodes (${analysis.missing} missing). In Sonarr the show is ${monitoringNote(series, analysis)}.\n`;
     }
-    if (analysis.released > 0) output += describeSeasons(analysis).map((line) => `- ${line}`).join("\n") + "\n";
+    if (analysis.released > 0) output += `${describeSeasons(analysis).map((line) => `- ${line}`).join("\n")}\n`;
     if (analysis.specials.total > 0) {
       output += `Specials (season 0, not counted above): ${analysis.specials.have} of ${analysis.specials.total} downloaded.\n`;
     }

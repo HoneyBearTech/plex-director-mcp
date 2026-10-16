@@ -374,7 +374,7 @@ describe("dashboard authentication", () => {
 
   it("marks the cookie Secure when the request arrived over HTTPS", async () => {
     process.env.WEB_PASSWORD = PASSWORD;
-    const res = await fetch(app.base + "/api/auth/login", {
+    const res = await fetch(`${app.base}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
       body: JSON.stringify({ password: PASSWORD }),

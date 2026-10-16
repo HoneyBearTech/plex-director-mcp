@@ -48,7 +48,7 @@ beforeEach(async () => {
   for (const key of ["RADARR_URL", "SONARR_URL", "PROWLARR_URL"] as const) setSetting(key, "http://app");
 });
 afterEach(() => {
-  fakes.forEach((f) => f.restore());
+  for (const f of fakes) f.restore();
   fakes = [];
 });
 

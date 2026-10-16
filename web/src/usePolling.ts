@@ -17,13 +17,19 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
   const [state, setState] = useState<PollState<T>>({ data: null, error: null, loading: true });
   const tickRef = useRef<() => void>(() => {});
   const refresh = useCallback(() => tickRef.current(), []);
+  // Callers pass a fresh closure each render; reading it through a ref keeps
+  // the latest one without restarting the polling interval every render.
+  const fetcherRef = useRef(fetcher);
+  useEffect(() => {
+    fetcherRef.current = fetcher;
+  });
 
   useEffect(() => {
     let cancelled = false;
 
     async function tick() {
       try {
-        const data = await fetcher();
+        const data = await fetcherRef.current();
         if (!cancelled) {
           setState({ data, error: null, loading: false });
         }
@@ -41,8 +47,6 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
       cancelled = true;
       clearInterval(id);
     };
-    // fetcher deliberately excluded - callers pass a fresh closure each
-    // render, and including it would restart polling on every render.
   }, [intervalMs]);
 
   return { ...state, refresh };

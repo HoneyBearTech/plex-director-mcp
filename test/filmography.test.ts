@@ -387,7 +387,7 @@ describe("resolveActorFilmography: TV shows", () => {
       assert.equal(titles(result).filter((t) => t === "Long Show").length, 1);
       assert.equal(rows(result).length, 8, "same rows as without the repeats");
       const byTitle = Object.fromEntries(rows(result).map((m) => [m.title, m]));
-      assert.equal(byTitle["Middle"].detail, "As Role in Middle / Second Role", "the same role twice is kept once");
+      assert.equal(byTitle.Middle.detail, "As Role in Middle / Second Role", "the same role twice is kept once");
       assert.equal(byTitle["Long Show"].detail, "As Part in Long Show / Voice", "an empty role adds nothing");
       assert.match(text(result), /In your Plex library: 3 of 8 \(2 of 4 movies, 1 of 4 TV shows\)\./, "counts titles, not credits");
     } finally {

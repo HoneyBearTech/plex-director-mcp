@@ -1,7 +1,7 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { z } from "zod";
+import type { z } from "zod";
 import { server } from "../src/server.js";
 import { movieTools, registerMovieTools } from "../src/tools/movies.js";
 

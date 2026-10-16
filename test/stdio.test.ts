@@ -70,14 +70,15 @@ describe("stdout stays clean for MCP", () => {
       let buffer = "";
       child.stdout.on("data", (chunk) => {
         buffer += chunk;
-        let newline;
-        while ((newline = buffer.indexOf("\n")) >= 0) {
+        let newline = buffer.indexOf("\n");
+        while (newline >= 0) {
           lines.push(buffer.slice(0, newline));
           buffer = buffer.slice(newline + 1);
+          newline = buffer.indexOf("\n");
         }
       });
 
-      const send = (message: unknown) => child.stdin.write(JSON.stringify(message) + "\n");
+      const send = (message: unknown) => child.stdin.write(`${JSON.stringify(message)}\n`);
       send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1" } } });
       send({ jsonrpc: "2.0", method: "notifications/initialized" });
       send({ jsonrpc: "2.0", id: 2, method: "tools/list" });

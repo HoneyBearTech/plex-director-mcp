@@ -1,0 +1,64 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.15/schema.json",
+  "vcs": {
+    "enabled": true,
+    "clientKind": "git",
+    "useIgnoreFile": true
+  },
+  "files": {
+    "includes": ["**", "!**/package-lock.json", "!data", "!web/dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "space",
+    "indentWidth": 2,
+    "lineWidth": 100
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "preset": "recommended"
+    }
+  },
+  "javascript": {
+    "formatter": {
+      "quoteStyle": "double",
+      "semicolons": "always",
+      "trailingCommas": "all"
+    }
+  },
+  "assist": {
+    "enabled": true,
+    "actions": {
+      "source": {
+        // Off for now: reordering every import is churn with no bug-catching
+        // value, and side-effect imports (CSS in web/src/main.tsx) are order-sensitive.
+        "organizeImports": "off"
+      }
+    }
+  },
+  "overrides": [
+    {
+      // Tests read untyped service payloads and use `!` after assertions that
+      // have already proven the value exists. src/ keeps both rules on.
+      "includes": ["test/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noExplicitAny": "off" },
+          "style": { "noNonNullAssertion": "off" }
+        }
+      }
+    },
+    {
+      // Every list the dashboard renders is display-only and rebuilt from each
+      // poll or chat answer, with no per-row state and no stable id from the
+      // API, so the array index is the correct key.
+      "includes": ["web/src/**"],
+      "linter": {
+        "rules": {
+          "suspicious": { "noArrayIndexKey": "off" }
+        }
+      }
+    }
+  ]
+}
