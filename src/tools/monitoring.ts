@@ -5,10 +5,13 @@ import type { TautulliActivity, TautulliHomeStat, TautulliResponse } from "../ty
 
 // Plex playback and historical usage metrics.
 export function registerMonitoringTools() {
-  server.tool(
+  server.registerTool(
     "get_plex_activity",
-    "Fetches real-time playback streaming analytics from Plex via Tautulli to monitor user context and transcoding strain.",
-    {},
+    {
+      description:
+        "Fetches real-time playback streaming analytics from Plex via Tautulli to monitor user context and transcoding strain.",
+      inputSchema: {},
+    },
     async () => {
       try {
         const response = await tautulliClient.get<TautulliResponse<TautulliActivity>>("", {
@@ -40,10 +43,13 @@ export function registerMonitoringTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "get_library_analytics",
-    "Queries historical statistics regarding most watched movies, total user count, and overall watch metrics.",
-    {},
+    {
+      description:
+        "Queries historical statistics regarding most watched movies, total user count, and overall watch metrics.",
+      inputSchema: {},
+    },
     async () => {
       try {
         const response = await tautulliClient.get<TautulliResponse<TautulliHomeStat[]>>("", {

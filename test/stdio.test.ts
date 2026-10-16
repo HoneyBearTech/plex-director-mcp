@@ -156,6 +156,35 @@ describe("stdout stays clean for MCP", () => {
         26,
         `tool count changed - update the counts in README.md too. tools: ${tools}`,
       );
+
+      // Calling tools end to end: arguments reach the handler as the SDK parsed
+      // them, and arguments that don't match the schema never reach it.
+      const reply = async (id: number) => {
+        const until = Date.now() + 15_000;
+        while (Date.now() < until && !lines.some((l) => l.includes(`"id":${id}`)))
+          await new Promise((r) => setTimeout(r, 50));
+        const line = lines.find((l) => l.includes(`"id":${id}`));
+        assert.ok(line, `no reply to request ${id}`);
+        return JSON.parse(line);
+      };
+      const call = (id: number, name: string, args: unknown) =>
+        send({ jsonrpc: "2.0", id, method: "tools/call", params: { name, arguments: args } });
+
+      call(3, "get_background_jobs", {});
+      assert.match((await reply(3)).result.content[0].text, /No background batch jobs found/);
+
+      call(4, "update_job_status", { jobId: 999, action: "CANCEL" });
+      const missing = (await reply(4)).result;
+      assert.equal(missing.isError, true);
+      assert.match(missing.content[0].text, /Job #999 could not be found/);
+
+      call(5, "update_job_status", { jobId: "not a number", action: "EXPLODE" });
+      const invalid = await reply(5);
+      assert.ok(
+        invalid.error || invalid.result?.isError,
+        `invalid arguments are refused: ${JSON.stringify(invalid)}`,
+      );
+      assert.doesNotMatch(JSON.stringify(invalid), /Successfully updated/);
     } finally {
       child.kill("SIGKILL");
       fs.rmSync(dir, { recursive: true, force: true });

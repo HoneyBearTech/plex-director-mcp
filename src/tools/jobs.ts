@@ -11,10 +11,13 @@ const MAX_BATCH_SIZE = 100;
 
 // Durable batch-job planning, execution, and status management.
 export function registerJobTools() {
-  server.tool(
+  server.registerTool(
     "get_background_jobs",
-    "Retrieves active, pending, or completed persistent media processing jobs running on the server cluster.",
-    {},
+    {
+      description:
+        "Retrieves active, pending, or completed persistent media processing jobs running on the server cluster.",
+      inputSchema: {},
+    },
     async () => {
       const stmt = db.prepare("SELECT * FROM system_jobs ORDER BY created_at DESC LIMIT 10");
       const jobs = stmt.all() as SystemJobRow[];
@@ -34,14 +37,16 @@ export function registerJobTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "update_job_status",
-    "Updates the operational state of an active or pending background batch job.",
     {
-      jobId: z.number().describe("The unique ID of the target job"),
-      action: z
-        .enum(["PAUSE", "RESUME", "CANCEL"])
-        .describe("The action to execute on the queue runtime."),
+      description: "Updates the operational state of an active or pending background batch job.",
+      inputSchema: {
+        jobId: z.number().describe("The unique ID of the target job"),
+        action: z
+          .enum(["PAUSE", "RESUME", "CANCEL"])
+          .describe("The action to execute on the queue runtime."),
+      },
     },
     async ({ jobId, action }) => {
       const { ok, message } = updateJobStatus(jobId, action);
@@ -49,24 +54,29 @@ export function registerJobTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "plan_media_upgrade",
-    "Evaluates and safely schedules a controlled batch upgrade for specified media classes while enforcing storage policies.",
     {
-      mediaType: z
-        .enum(["movie", "tv"])
-        .describe("The structural classification targeting upgrades."),
-      targetResolution: z
-        .enum(["1080p", "4k"])
-        .describe("The target processing quality resolution threshold."),
-      maxBatchSize: z
-        .number()
-        .int()
-        .min(1)
-        .max(MAX_BATCH_SIZE)
-        .optional()
-        .default(25)
-        .describe(`Limits the maximum number of edits in a single batch (1 to ${MAX_BATCH_SIZE}).`),
+      description:
+        "Evaluates and safely schedules a controlled batch upgrade for specified media classes while enforcing storage policies.",
+      inputSchema: {
+        mediaType: z
+          .enum(["movie", "tv"])
+          .describe("The structural classification targeting upgrades."),
+        targetResolution: z
+          .enum(["1080p", "4k"])
+          .describe("The target processing quality resolution threshold."),
+        maxBatchSize: z
+          .number()
+          .int()
+          .min(1)
+          .max(MAX_BATCH_SIZE)
+          .optional()
+          .default(25)
+          .describe(
+            `Limits the maximum number of edits in a single batch (1 to ${MAX_BATCH_SIZE}).`,
+          ),
+      },
     },
     async ({ mediaType, targetResolution, maxBatchSize }) => {
       if (mediaType === "tv") {
@@ -138,11 +148,16 @@ export function registerJobTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "execute_next_job_step",
-    "Processes a single sequential block item from an active background batch queue entry to prevent API flooding. (Jobs that have been started are also advanced automatically, one item per minute, by the job runner.)",
     {
-      jobId: z.number().describe("The unique tracking ID of the active job array to step execute."),
+      description:
+        "Processes a single sequential block item from an active background batch queue entry to prevent API flooding. (Jobs that have been started are also advanced automatically, one item per minute, by the job runner.)",
+      inputSchema: {
+        jobId: z
+          .number()
+          .describe("The unique tracking ID of the active job array to step execute."),
+      },
     },
     async ({ jobId }) => {
       const result = await stepJob(jobId);

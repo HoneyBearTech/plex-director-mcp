@@ -407,10 +407,13 @@ export async function confirmSelectedChoices({
 
 // TMDb discovery, indexer health, and interactive movie selection.
 export function registerDiscoveryTools() {
-  server.tool(
+  server.registerTool(
     "check_indexer_health",
-    "Audits all Usenet indexers and torrent trackers configured in Prowlarr to flag connection failures or bans, and reports Prowlarr's own system health warnings.",
-    {},
+    {
+      description:
+        "Audits all Usenet indexers and torrent trackers configured in Prowlarr to flag connection failures or bans, and reports Prowlarr's own system health warnings.",
+      inputSchema: {},
+    },
     async () => {
       try {
         const { indexers, warnings } = await getIndexerHealth();
@@ -450,11 +453,16 @@ export function registerDiscoveryTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "search_and_select_movies",
-    "Searches TMDb for matching movies and renders a structured Markdown multi-choice grid interface for confirmation.",
     {
-      query: z.string().describe("The film name or fuzzy query text to search for (e.g. 'Heat')."),
+      description:
+        "Searches TMDb for matching movies and renders a structured Markdown multi-choice grid interface for confirmation.",
+      inputSchema: {
+        query: z
+          .string()
+          .describe("The film name or fuzzy query text to search for (e.g. 'Heat')."),
+      },
     },
     async ({ query }) => {
       try {
@@ -505,23 +513,26 @@ export function registerDiscoveryTools() {
     },
   );
 
-  server.tool(
+  server.registerTool(
     "confirm_selected_choices",
-    "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Settings page, otherwise Radarr's first quality profile; and Radarr's first root folder unless told otherwise.",
     {
-      chosenIndexes: z
-        .array(z.number())
-        .describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
-      qualityProfile: z
-        .string()
-        .optional()
-        .describe("Radarr quality profile name to use instead of the default."),
-      rootFolder: z
-        .string()
-        .optional()
-        .describe(
-          "Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids').",
-        ),
+      description:
+        "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Settings page, otherwise Radarr's first quality profile; and Radarr's first root folder unless told otherwise.",
+      inputSchema: {
+        chosenIndexes: z
+          .array(z.number())
+          .describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
+        qualityProfile: z
+          .string()
+          .optional()
+          .describe("Radarr quality profile name to use instead of the default."),
+        rootFolder: z
+          .string()
+          .optional()
+          .describe(
+            "Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids').",
+          ),
+      },
     },
     async (args) => confirmSelectedChoices(args),
   );
