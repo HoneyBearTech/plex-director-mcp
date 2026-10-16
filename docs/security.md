@@ -95,7 +95,7 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   environment has the key too. Protect the directory and its backups either way.
 - **What the MCP client or its model decides to do.** Through Claude Desktop (or another MCP client) a
   model can call every tool, including `confirm_selected_choices` (adds movies and starts downloads),
-  `manage_stalled_downloads` with `PURGE_STALLED` (deletes torrents and their files, immediately),
+  `manage_stalled_downloads` with `PURGE_STALLED` (deletes the torrents named by hash from an earlier `AUDIT`, with their files),
   `update_job_status` and `run_cluster_backup`. The MCP client's approval prompt is the control; review
   what it proposes. Whoever can start the process (or `docker run` the image with your env file) has all
   your service credentials.
