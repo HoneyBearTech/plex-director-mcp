@@ -14,6 +14,13 @@ a security problem.
   deletes nothing. Before, it deleted every torrent that counted as stalled at that moment. The reply lists
   what was deleted and what was left alone.
 
+### Security
+
+- **A strict Content-Security-Policy for the dashboard.** Scripts, styles, fonts and requests may only come
+  from the dashboard itself, with nothing inline and no `eval`; images may also be `data:` or `https:`
+  (posters). Markup that ever slipped into the page couldn't run code or send data elsewhere. Checked in
+  Chrome on every page: no violations.
+
 ## [1.4.0] - 2026-10-16
 
 **Upgrading:** behind a reverse proxy, set `WEB_TRUST_PROXY`; "Trust new key" now needs `WEB_PASSWORD`. Setting

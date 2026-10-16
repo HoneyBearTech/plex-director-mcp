@@ -119,10 +119,12 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   all capabilities dropped and `no-new-privileges`; the README's
   [Read-only and non-root operation](../README.md#read-only-and-non-root-operation) shows how.
   `/app/data` is the only place it writes.
-- **HTTP headers:** every response carries `X-Frame-Options: DENY` and `Content-Security-Policy:
-  frame-ancestors 'none'` (the dashboard can't be framed), `X-Content-Type-Options: nosniff` and
-  `Referrer-Policy: no-referrer`; `X-Powered-By` is off. There is no full script/style CSP or HSTS yet
-  (HSTS belongs on the reverse proxy that terminates TLS). Responses are JSON (or images from the two
+- **HTTP headers:** every response carries a strict `Content-Security-Policy`: scripts, styles, fonts and
+  requests only from the dashboard's own origin, nothing inline and no `eval`, images also from `data:` and
+  `https:` (posters), no plugins, no `<base>`, and `frame-ancestors 'none'` (the dashboard can't be framed).
+  So even markup that slipped into the page couldn't run code or send data elsewhere. Also
+  `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff` and `Referrer-Policy: no-referrer`;
+  `X-Powered-By` is off. There is no HSTS: it belongs on the reverse proxy that terminates TLS. Responses are JSON (or images from the two
   artwork proxies); errors are `{"error": "..."}`.
 - **Reverse proxies:** `X-Forwarded-For` and `X-Forwarded-Proto` are honoured only from the addresses in
   `WEB_TRUST_PROXY` (`src/web/trustProxy.ts`), and ignored when it is unset. A client can't fake its address
