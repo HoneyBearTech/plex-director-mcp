@@ -3,6 +3,7 @@ import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 import type { MediaRow } from "./plex.js";
 import { fetchEpisodes, label, NOT_CONFIGURED, resolveSeries } from "./series.js";
+import type { SonarrCalendarEpisode, SonarrEpisode, SonarrSeries } from "../types/sonarr.js";
 
 // "What's on this week?" and "when does <show> come back?", from Sonarr's
 // calendar and episode lists. Dates are Sonarr's `airDate`: the day in the
@@ -28,22 +29,25 @@ export interface UpcomingOptions {
   monitored?: "monitored" | "unmonitored" | "any";
 }
 
-const dateOf = (episode: any): string => {
+const dateOf = (episode: SonarrEpisode): string => {
   const airDate = typeof episode.airDate === "string" && episode.airDate ? episode.airDate : null;
   return (airDate ?? String(episode.airDateUtc ?? "")).slice(0, 10);
 };
-const utc = (episode: any): number =>
+const utc = (episode: SonarrEpisode): number =>
   episode.airDateUtc ? Date.parse(episode.airDateUtc) : Number.POSITIVE_INFINITY;
-const code = (episode: any) =>
+const code = (episode: SonarrEpisode) =>
   `S${episode.seasonNumber}E${String(episode.episodeNumber).padStart(2, "0")}`;
-const named = (episode: any) => `${code(episode)}${episode.title ? ` "${episode.title}"` : ""}`;
+const named = (episode: SonarrEpisode) =>
+  `${code(episode)}${episode.title ? ` "${episode.title}"` : ""}`;
 const weekday = (date: string) => {
   const day = new Date(`${date}T00:00:00Z`).getUTCDay();
   return Number.isNaN(day) ? "" : `${WEEKDAYS[day]} `;
 };
 
 // What is special about an episode, when Sonarr or its number says so.
-export function episodeNotes(episode: any): string[] {
+export function episodeNotes(
+  episode: Pick<SonarrEpisode, "finaleType" | "seasonNumber" | "episodeNumber">,
+): string[] {
   const notes: string[] = [];
   if (episode.finaleType === "series") notes.push("series finale");
   else if (episode.finaleType === "season") notes.push("season finale");
@@ -53,7 +57,7 @@ export function episodeNotes(episode: any): string[] {
   return notes;
 }
 
-function toRow(episode: any, series: any): MediaRow {
+function toRow(episode: SonarrEpisode, series: SonarrSeries | undefined): MediaRow {
   const notes = episodeNotes(episode);
   return {
     kind: "show",
@@ -91,7 +95,7 @@ async function upcomingCalendar(options: UpcomingOptions, now: number) {
   const start = new Date(now);
   const end = new Date(start.getTime() + days * DAY_MS);
 
-  const response = await sonarrClient.get("/api/v3/calendar", {
+  const response = await sonarrClient.get<SonarrCalendarEpisode[]>("/api/v3/calendar", {
     params: {
       start: start.toISOString(),
       end: end.toISOString(),
@@ -99,10 +103,11 @@ async function upcomingCalendar(options: UpcomingOptions, now: number) {
       unmonitored: true,
     },
   });
-  const all = ((response.data ?? []) as any[]).sort(
+  const all = (response.data ?? []).sort(
     (a, b) => utc(a) - utc(b) || String(a.series?.title).localeCompare(String(b.series?.title)),
   );
-  const tracked = (episode: any) => Boolean(episode.series?.monitored && episode.monitored);
+  const tracked = (episode: SonarrCalendarEpisode) =>
+    Boolean(episode.series?.monitored && episode.monitored);
   const shown =
     mode === "any" ? all : all.filter((episode) => (mode === "monitored") === tracked(episode));
   const hidden = mode === "monitored" ? all.length - shown.length : 0;
@@ -168,8 +173,8 @@ async function upcomingForShow(title: string, year: number | undefined, now: num
     : " Sonarr is not monitoring it, so it would not download new episodes.";
 
   let output = `## ${label(series)} - Sonarr: ${[series.status, series.monitored ? "monitored" : "not monitored"].filter(Boolean).join(", ")}\n`;
-  if (upcoming.length > 0) {
-    const next = upcoming[0]!;
+  const [next] = upcoming;
+  if (next) {
     const notes = episodeNotes(next);
     const startsSeason = next.episodeNumber === 1 && next.seasonNumber > 1;
     output += `${startsSeason ? `Season ${next.seasonNumber} starts` : "Next episode"}: ${named(next)} airs ${weekday(dateOf(next))}${dateOf(next)}${notes.length > 0 ? ` (${notes.join(", ")})` : ""}.${monitoring}\n`;
@@ -179,7 +184,7 @@ async function upcomingForShow(title: string, year: number | undefined, now: num
       output += `- ${named(episode)} - ${weekday(dateOf(episode))}${dateOf(episode)}${restNotes.length > 0 ? ` - ${restNotes.join(", ")}` : ""}\n`;
     }
     if (upcoming.length > MAX_SHOW_EPISODES)
-      output += `...and ${upcoming.length - MAX_SHOW_EPISODES} more scheduled through ${dateOf(upcoming[upcoming.length - 1])}.\n`;
+      output += `...and ${upcoming.length - MAX_SHOW_EPISODES} more scheduled through ${dateOf(upcoming.at(-1) ?? next)}.\n`;
   } else if (series.status === "ended") {
     output += `It has ended${series.lastAired ? ` (last aired ${String(series.lastAired).slice(0, 10)})` : ""}; no more episodes are coming.\n`;
   } else if (

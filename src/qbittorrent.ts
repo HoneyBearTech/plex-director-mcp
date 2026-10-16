@@ -1,5 +1,6 @@
 import { qbitClient } from "./clients.js";
 import { getSetting } from "./settings.js";
+import type { QbitTorrent } from "./types/qbittorrent.js";
 
 // The one place that knows how to talk to qBittorrent's Web API: log in, reuse
 // the session cookie, list downloads, delete torrents. Used by the dashboard's
@@ -33,8 +34,11 @@ export async function loginToQbittorrent(): Promise<QbitSession> {
   return { headers: { Cookie: sessionCookie } };
 }
 
-export async function getDownloadingTorrents(session: QbitSession): Promise<any[]> {
-  const response = await qbitClient.get("/api/v2/torrents/info?filter=downloading", session);
+export async function getDownloadingTorrents(session: QbitSession): Promise<QbitTorrent[]> {
+  const response = await qbitClient.get<QbitTorrent[]>(
+    "/api/v2/torrents/info?filter=downloading",
+    session,
+  );
   return response.data || [];
 }
 

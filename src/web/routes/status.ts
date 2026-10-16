@@ -1,6 +1,12 @@
 import { Router } from "express";
 import { tautulliClient } from "../../clients.js";
 import { getErrorMessage, rowLabel, rowPlays } from "../../util.js";
+import type {
+  TautulliActivity,
+  TautulliHomeStat,
+  TautulliResponse,
+  TautulliStatRow,
+} from "../../types/tautulli.js";
 
 export const statusRouter = Router();
 
@@ -20,7 +26,7 @@ function posterProxyUrl(imgPath: string | undefined | null): string | null {
 // viewer fields), none for platforms/concurrent-streams rows.
 function rowImage(
   statId: string,
-  item: any,
+  item: TautulliStatRow,
 ): { posterUrl: string | null; userThumb: string | null } {
   if (statId === "top_users") {
     return { posterUrl: null, userThumb: item.user_thumb || null };
@@ -33,14 +39,16 @@ function rowImage(
 
 statusRouter.get("/activity", async (_req, res) => {
   try {
-    const response = await tautulliClient.get("", { params: { cmd: "get_activity" } });
+    const response = await tautulliClient.get<TautulliResponse<TautulliActivity>>("", {
+      params: { cmd: "get_activity" },
+    });
     const data = response.data?.response?.data;
 
     res.json({
       streamCount: Number(data?.stream_count ?? 0),
       transcodeCount: Number(data?.stream_count_transcode ?? 0),
       directPlayCount: Number(data?.stream_count_direct_play ?? 0),
-      sessions: (data?.sessions ?? []).map((session: any) => ({
+      sessions: (data?.sessions ?? []).map((session) => ({
         user: session.user,
         userThumb: session.user_thumb || null,
         title: session.title,
@@ -59,16 +67,18 @@ statusRouter.get("/activity", async (_req, res) => {
 
 statusRouter.get("/library-analytics", async (_req, res) => {
   try {
-    const response = await tautulliClient.get("", { params: { cmd: "get_home_stats" } });
+    const response = await tautulliClient.get<TautulliResponse<TautulliHomeStat[]>>("", {
+      params: { cmd: "get_home_stats" },
+    });
     const stats = response.data?.response?.data || [];
 
     res.json({
-      categories: stats.map((category: any) => ({
+      categories: stats.map((category) => ({
         title: category.stat_title || category.stat_id || "Watch statistics",
-        rows: (category.rows || []).slice(0, 5).map((item: any) => ({
-          label: rowLabel(category.stat_id, item),
+        rows: (category.rows || []).slice(0, 5).map((item) => ({
+          label: rowLabel(String(category.stat_id ?? ""), item),
           plays: rowPlays(item),
-          ...rowImage(category.stat_id, item),
+          ...rowImage(String(category.stat_id ?? ""), item),
         })),
       })),
     });

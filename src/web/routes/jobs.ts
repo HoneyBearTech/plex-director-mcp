@@ -1,18 +1,10 @@
 import { Router } from "express";
-import { db } from "../../db.js";
+import { db, type SystemJobRow } from "../../db.js";
 import { getErrorMessage } from "../../util.js";
 
 export const jobsRouter = Router();
 
-interface JobRecord {
-  id: number;
-  task_name: string;
-  status: string;
-  total_items: number;
-  processed_items: number;
-  created_at: string;
-  updated_at: string;
-}
+type JobRecord = Omit<SystemJobRow, "payload">;
 
 // SQLite's CURRENT_TIMESTAMP is UTC but written as "YYYY-MM-DD HH:MM:SS" with
 // no zone, which browsers would parse as local time. Make it an ISO string.

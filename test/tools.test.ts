@@ -34,6 +34,30 @@ describe("movieTools", () => {
     });
   }
 
+  // The web chat hands the model's tool input straight to the handler, so the
+  // handler must check it against the zod shape itself (the MCP SDK does too).
+  it("rejects input that does not match the zod shape before running the tool", async () => {
+    const tool = movieTools.find((t) => t.name === "check_movie_status");
+    assert.ok(tool);
+    for (const input of [{}, { title: 42 }, undefined, "Heat"]) {
+      const result = await tool.handler(input);
+      assert.equal(result.isError, true, `${JSON.stringify(input)} is rejected`);
+      const [block] = result.content;
+      assert.ok(block?.type === "text");
+      assert.match(block.text, /^Invalid arguments for check_movie_status: /);
+    }
+  });
+
+  it("rejects an out-of-range value the JSON schema alone would let through", async () => {
+    const tool = movieTools.find((t) => t.name === "search_plex_library");
+    assert.ok(tool);
+    const result = await tool.handler({ mediaType: "music" });
+    assert.equal(result.isError, true);
+    const [block] = result.content;
+    assert.ok(block?.type === "text");
+    assert.match(block.text, /^Invalid arguments for search_plex_library: .*mediaType/s);
+  });
+
   it("registers every tool with the MCP server", () => {
     registerMovieTools();
     const registered = Object.keys((server as any)._registeredTools);

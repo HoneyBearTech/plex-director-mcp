@@ -1,4 +1,9 @@
 import { prowlarrClient } from "./clients.js";
+import type {
+  ProwlarrHealthCheck,
+  ProwlarrIndexer,
+  ProwlarrIndexerStatus,
+} from "./types/prowlarr.js";
 
 // Prowlarr's view of indexer health, shared by the check_indexer_health MCP
 // tool and the dashboard's Indexers page.
@@ -42,17 +47,16 @@ const STATE_ORDER: Record<IndexerState, number> = {
 
 export async function getIndexerHealth(): Promise<IndexerHealth> {
   const [configs, statuses, health] = await Promise.all([
-    prowlarrClient.get("/api/v1/indexer"),
-    prowlarrClient.get("/api/v1/indexerstatus"),
-    prowlarrClient.get("/api/v1/health"),
+    prowlarrClient.get<ProwlarrIndexer[]>("/api/v1/indexer"),
+    prowlarrClient.get<ProwlarrIndexerStatus[]>("/api/v1/indexerstatus"),
+    prowlarrClient.get<ProwlarrHealthCheck[]>("/api/v1/health"),
   ]);
 
-  const statusByIndexer = new Map<number, any>();
-  for (const status of (statuses.data ?? []) as any[])
-    statusByIndexer.set(status.indexerId, status);
+  const statusByIndexer = new Map<number, ProwlarrIndexerStatus>();
+  for (const status of statuses.data ?? []) statusByIndexer.set(status.indexerId, status);
 
   const now = Date.now();
-  const indexers: IndexerRow[] = ((configs.data ?? []) as any[]).map((config) => {
+  const indexers: IndexerRow[] = (configs.data ?? []).map((config) => {
     const status = statusByIndexer.get(config.id);
     const disabledTill: string | null = status?.disabledTill ?? null;
     const isBackingOff = disabledTill !== null && new Date(disabledTill).getTime() > now;
@@ -79,7 +83,7 @@ export async function getIndexerHealth(): Promise<IndexerHealth> {
     (a, b) => STATE_ORDER[a.state] - STATE_ORDER[b.state] || a.name.localeCompare(b.name),
   );
 
-  const warnings: ProwlarrWarning[] = ((health.data ?? []) as any[]).map((h) => ({
+  const warnings: ProwlarrWarning[] = (health.data ?? []).map((h) => ({
     type: String(h.type),
     source: String(h.source),
     message: String(h.message),

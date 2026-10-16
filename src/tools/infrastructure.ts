@@ -3,7 +3,7 @@ import { server } from "../server.js";
 import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
 import { getConfiguredHosts, probeAllHosts } from "../cluster.js";
 import { runServarrBackups } from "../backups.js";
-import { textReply } from "../util.js";
+import { textReply, getErrorMessage } from "../util.js";
 
 // Backups, download-client remediation, and remote host/cluster telemetry.
 export function registerInfrastructureTools() {
@@ -42,7 +42,7 @@ export function registerInfrastructureTools() {
         const torrents = await getDownloadingTorrents(session);
 
         // Include fully stalled downloads and downloads below the configured rate.
-        const stalledTorrents = torrents.filter((t: any) => {
+        const stalledTorrents = torrents.filter((t) => {
           const speedKbps = t.dlspeed / 1024;
           return t.state === "stalledDL" || (speedKbps > 0 && speedKbps < minSpeedKbps);
         });
@@ -62,7 +62,7 @@ export function registerInfrastructureTools() {
           let auditReport = `📋 **Stalled Torrent Audit Log:**\n`;
           auditReport += `Detected ${stalledTorrents.length} items failing to meet your minimum speed threshold of ${minSpeedKbps} KB/s:\n\n`;
 
-          stalledTorrents.forEach((t: any) => {
+          stalledTorrents.forEach((t) => {
             const currentSpeed = (t.dlspeed / 1024).toFixed(2);
             auditReport += `  ▪ **${t.name}**\n`;
             auditReport += `    ↳ Speed: ${currentSpeed} KB/s | Progress: ${(t.progress * 100).toFixed(1)}% | Seeders: ${t.num_seeds}\n`;
@@ -82,12 +82,12 @@ export function registerInfrastructureTools() {
 
         purgeReport += `\nAll stalled items successfully dropped. Servarr RSS routines will automatically cycle to alternative indexer releases.`;
         return { content: [{ type: "text", text: purgeReport }] };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           content: [
             {
               type: "text",
-              text: `Failed to execute qBittorrent cleanup routines: ${error.message}`,
+              text: `Failed to execute qBittorrent cleanup routines: ${getErrorMessage(error)}`,
             },
           ],
           isError: true,
@@ -172,10 +172,13 @@ export function registerInfrastructureTools() {
         }
 
         return { content: [{ type: "text", text: report }] };
-      } catch (error: any) {
+      } catch (error: unknown) {
         return {
           content: [
-            { type: "text", text: `Failed to compile host telemetry metrics: ${error.message}` },
+            {
+              type: "text",
+              text: `Failed to compile host telemetry metrics: ${getErrorMessage(error)}`,
+            },
           ],
           isError: true,
         };

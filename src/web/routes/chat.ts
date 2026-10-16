@@ -12,7 +12,7 @@ function sanitizeMedia(raw: unknown): MediaRow[] {
   return raw
     .filter(
       (row): row is Record<string, unknown> =>
-        typeof row === "object" && row !== null && typeof (row as any).title === "string",
+        typeof row === "object" && row !== null && "title" in row && typeof row.title === "string",
     )
     .map(
       (row): MediaRow => ({

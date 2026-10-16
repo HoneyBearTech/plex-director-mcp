@@ -1,11 +1,19 @@
+import { isAxiosError } from "axios";
 import { z } from "zod";
 import { server } from "../server.js";
-import { db } from "../db.js";
+import { db, type SelectionRow } from "../db.js";
 import { tmdbClient, radarrClient } from "../clients.js";
 import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 import { getSetting, isConfigured } from "../settings.js";
 import { getOwnedTmdbIndex, type MediaKind, type MediaRow } from "./plex.js";
 import { getIndexerHealth } from "../indexers.js";
+import type {
+  RadarrLibraryMovie,
+  RadarrQualityProfile,
+  RadarrRootFolder,
+  RadarrValidationError,
+} from "../types/radarr.js";
+import type { TmdbCastCredit, TmdbMovie, TmdbPage, TmdbPerson } from "../types/tmdb.js";
 
 const DEFAULT_FILMOGRAPHY_LIMIT = 15;
 
@@ -44,7 +52,7 @@ interface Credit {
   rating: number | null;
 }
 
-function toCredit(kind: MediaKind, raw: any): Credit {
+function toCredit(kind: MediaKind, raw: TmdbCastCredit): Credit {
   return {
     kind,
     id: String(raw.id),
@@ -58,7 +66,7 @@ function toCredit(kind: MediaKind, raw: any): Credit {
 
 // Drops appearances as themselves, uncredited parts and documentaries; for TV
 // also talk shows and news, where a big TV career is mostly "Self".
-function isStructuralCredit(kind: MediaKind, raw: any): boolean {
+function isStructuralCredit(kind: MediaKind, raw: TmdbCastCredit): boolean {
   const character = raw.character ? String(raw.character).toLowerCase() : "";
   const isSelf =
     character.includes("self") ||
@@ -105,7 +113,7 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
   } = options;
   const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
   try {
-    const personSearch = await tmdbClient.get(
+    const personSearch = await tmdbClient.get<TmdbPage<TmdbPerson>>(
       `/search/person?query=${encodeURIComponent(actorName)}`,
     );
     const person = personSearch.data?.results?.[0];
@@ -116,10 +124,10 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 
     const creditLists = await Promise.all(
       kinds.map(async (kind) => {
-        const response = await tmdbClient.get(
+        const response = await tmdbClient.get<{ cast?: TmdbCastCredit[] }>(
           `/person/${person.id}/${kind === "movie" ? "movie_credits" : "tv_credits"}`,
         );
-        return ((response.data?.cast || []) as any[])
+        return (response.data?.cast || [])
           .filter((raw) => isStructuralCredit(kind, raw))
           .map((raw) => toCredit(kind, raw));
       }),
@@ -134,21 +142,23 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
     let plexNote = "";
     if (isConfigured("PLEX")) {
       try {
-        const indexes = await Promise.all(kinds.map((kind) => getOwnedTmdbIndex(kind)));
+        const indexes = await Promise.all(
+          kinds.map(async (kind) => [kind, await getOwnedTmdbIndex(kind)] as const),
+        );
         const built = { movie: new Map<string, string[]>(), show: new Map<string, string[]>() };
-        kinds.forEach((kind, i) => {
-          built[kind] = indexes[i]!;
-        });
+        for (const [kind, index] of indexes) built[kind] = index;
         owned = built;
 
         if (library) {
           const wanted = library.trim().toLowerCase();
-          const libraryNames = [...new Set(indexes.flatMap((index) => [...index.values()].flat()))];
+          const libraryNames = [
+            ...new Set(indexes.flatMap(([, index]) => [...index.values()].flat())),
+          ];
           if (!libraryNames.some((name) => name.toLowerCase().includes(wanted))) {
             const label =
               mediaType === "any"
                 ? "Libraries"
-                : `${mediaType[0]!.toUpperCase()}${mediaType.slice(1)} libraries`;
+                : `${mediaType === "movie" ? "Movie" : "Show"} libraries`;
             return textReply(
               `No Plex ${mediaType === "any" ? "" : `${mediaType} `}library matching "${library}". ${label} with titles: ${libraryNames.join(", ")}.`,
               true,
@@ -254,10 +264,10 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 // Radarr validation failures come back as an array of { errorMessage }, which
 // getErrorMessage() (built for a single { message }) would flatten to "Bad Request".
 function radarrErrorMessage(error: unknown): string {
-  const data = (error as any)?.response?.data;
+  const data: unknown = isAxiosError(error) ? error.response?.data : undefined;
   if (Array.isArray(data) && data.length > 0) {
-    return data
-      .map((d: any) => d.errorMessage || d.message)
+    return (data as RadarrValidationError[])
+      .map((d) => d.errorMessage || d.message)
       .filter(Boolean)
       .join("; ");
   }
@@ -311,12 +321,12 @@ export async function confirmSelectedChoices({
 }: ConfirmChoicesArgs) {
   try {
     const stmt = db.prepare("SELECT * FROM interaction_context WHERE selection_index = ?");
-    const matchedSelections: any[] = [];
+    const matchedSelections: SelectionRow[] = [];
 
-    chosenIndexes.forEach((index: number) => {
-      const record = stmt.get(index) as any;
+    for (const index of chosenIndexes) {
+      const record = stmt.get(index) as SelectionRow | undefined;
       if (record) matchedSelections.push(record);
-    });
+    }
 
     if (matchedSelections.length === 0) {
       return textReply(
@@ -325,14 +335,14 @@ export async function confirmSelectedChoices({
       );
     }
 
-    const profiles: Array<{ id: number; name: string }> =
-      (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
+    const profiles =
+      (await radarrClient.get<RadarrQualityProfile[]>("/api/v3/qualityprofile")).data ?? [];
     const choice = chooseQualityProfile(profiles, qualityProfile);
     if ("error" in choice) return textReply(choice.error, true);
     const { profile, source } = choice;
 
-    const rootFolders: Array<{ path: string }> =
-      (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
+    const rootFolders =
+      (await radarrClient.get<RadarrRootFolder[]>("/api/v3/rootfolder")).data ?? [];
     const folder = rootFolder
       ? rootFolders.find((f) => f.path.replace(/\/+$/, "") === rootFolder.replace(/\/+$/, ""))
       : rootFolders[0];
@@ -354,23 +364,27 @@ export async function confirmSelectedChoices({
       const label = `**Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]`;
       try {
         const existing =
-          (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } }))
-            .data ?? [];
-        if (existing.length > 0) {
-          const state = existing[0].hasFile
-            ? "already downloaded"
-            : "monitored but not downloaded yet";
+          (
+            await radarrClient.get<RadarrLibraryMovie[]>("/api/v3/movie", {
+              params: { tmdbId: selection.tmdb_id },
+            })
+          ).data ?? [];
+        const [already] = existing;
+        if (already) {
+          const state = already.hasFile ? "already downloaded" : "monitored but not downloaded yet";
           report += `  ⏭️ ${label} - already in Radarr (${state}); not added again.\n`;
           continue;
         }
 
         // Radarr wants the full resolved movie record, not just an id, so start
         // from its own TMDb lookup and layer our choices on top.
-        const lookup = (
-          await radarrClient.get("/api/v3/movie/lookup/tmdb", {
-            params: { tmdbId: selection.tmdb_id },
-          })
-        ).data;
+        const lookup =
+          // Passed back whole, so kept as Radarr sent it.
+          (
+            await radarrClient.get<Record<string, unknown>>("/api/v3/movie/lookup/tmdb", {
+              params: { tmdbId: selection.tmdb_id },
+            })
+          ).data;
         await radarrClient.post("/api/v3/movie", {
           ...lookup,
           qualityProfileId: profile.id,
@@ -446,7 +460,9 @@ export function registerDiscoveryTools() {
       try {
         db.prepare("DELETE FROM interaction_context").run();
 
-        const response = await tmdbClient.get(`/search/movie?query=${encodeURIComponent(query)}`);
+        const response = await tmdbClient.get<TmdbPage<TmdbMovie>>(
+          `/search/movie?query=${encodeURIComponent(query)}`,
+        );
         const results = response.data?.results || [];
 
         if (results.length === 0) {
@@ -464,9 +480,9 @@ export function registerDiscoveryTools() {
         markdownOutput += "| Choice ID | Poster Preview | Film Details & Cast Overview |\n";
         markdownOutput += "| :---: | :---: | :--- |\n";
 
-        choices.forEach((movie: any, index: number) => {
+        choices.forEach((movie, index) => {
           const choiceId = index + 1;
-          const year = movie.release_date ? movie.release_date.split("-")[0] : "N/A";
+          const year = movie.release_date?.split("-")[0] || "N/A";
           const poster = movie.poster_path
             ? `![${movie.title}](https://image.tmdb.org/t/p/w500${movie.poster_path})`
             : "*No poster*";

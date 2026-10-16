@@ -2,6 +2,7 @@ import { sonarrClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 import type { MediaRow } from "./plex.js";
+import type { SonarrEpisode, SonarrSeries } from "../types/sonarr.js";
 
 // "Do I have every episode?" answered from Sonarr's episode list rather than
 // its statistics. Sonarr's own counts only include episodes that are monitored
@@ -45,15 +46,24 @@ export interface SeriesAnalysis {
   specials: { total: number; have: number };
 }
 
+// The fields of a Sonarr episode that the counting below reads.
+type EpisodeCounts = Pick<
+  SonarrEpisode,
+  "seasonNumber" | "episodeNumber" | "hasFile" | "monitored" | "airDateUtc"
+>;
+
 // An episode counts once it has aired, or if a file exists for it (a file means
 // it is out, even if Sonarr has no air date). This matches how Sonarr counts.
-function isReleased(episode: any, now: number): boolean {
+function isReleased(episode: EpisodeCounts, now: number): boolean {
   if (episode.hasFile) return true;
   const aired = episode.airDateUtc ? Date.parse(episode.airDateUtc) : NaN;
   return Number.isFinite(aired) && aired <= now;
 }
 
-export function analyzeEpisodes(episodes: any[], now: number = Date.now()): SeriesAnalysis {
+export function analyzeEpisodes(
+  episodes: EpisodeCounts[],
+  now: number = Date.now(),
+): SeriesAnalysis {
   const bySeason = new Map<number, SeasonStatus>();
   const specials = { total: 0, have: 0 };
   let missingMonitored = 0;
@@ -98,15 +108,20 @@ export function analyzeEpisodes(episodes: any[], now: number = Date.now()): Seri
   };
 }
 
+// [4, 5, 6, 9] -> [[4, 6], [9, 9]]: runs of consecutive numbers, in order.
+function runs(numbers: number[]): [number, number][] {
+  const result: [number, number][] = [];
+  for (const n of numbers) {
+    const last = result[result.length - 1];
+    if (last && n === last[1] + 1) last[1] = n;
+    else result.push([n, n]);
+  }
+  return result;
+}
+
 // [4, 5, 6, 9] -> "E4-E6, E9", shortened when there are many separate holes.
 export function episodeRanges(numbers: number[]): string {
-  const ranges: string[] = [];
-  for (let i = 0; i < numbers.length; ) {
-    let j = i;
-    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j]! + 1) j++;
-    ranges.push(j > i ? `E${numbers[i]}-E${numbers[j]}` : `E${numbers[i]}`);
-    i = j + 1;
-  }
+  const ranges = runs(numbers).map(([from, to]) => (to > from ? `E${from}-E${to}` : `E${from}`));
   if (ranges.length <= MAX_RANGES_PER_SEASON) return ranges.join(", ");
   return `${ranges.slice(0, MAX_RANGES_PER_SEASON).join(", ")} and ${ranges.length - MAX_RANGES_PER_SEASON} more gaps`;
 }
@@ -128,50 +143,56 @@ function normalizeTitle(title: string): string {
 }
 
 // "Title (2018)"; Sonarr sometimes already has the year in the title.
-export const label = (series: any) => {
+export const label = (series: Titled) => {
   const title = String(series.title);
   return series.year && !/\(\d{4}\)\s*$/.test(title) ? `${title} (${series.year})` : title;
 };
 
-export type SeriesLookup = { series: any } | { candidates: any[] } | null;
+// What findSeries matches on: a Sonarr series, or a show grouped from Plex.
+export interface Titled {
+  title?: string;
+  year?: number | null;
+  alternateTitles?: { title?: string }[];
+}
+
+export type SeriesLookup<T> = { series: T } | { candidates: T[] } | null;
 
 // Exact title (or alternate title) first, then a title that contains the text.
 // One match is used; several are returned so the caller can ask which one.
-export function findSeries(all: any[], title: string, year?: number): SeriesLookup {
+export function findSeries<T extends Titled>(
+  all: T[],
+  title: string,
+  year?: number,
+): SeriesLookup<T> {
   const wanted = normalizeTitle(title);
   if (!wanted) return null;
-  const withYear = (list: any[]) =>
-    year === undefined ? list : list.filter((s) => s.year === year);
+  const withYear = (list: T[]) => (year === undefined ? list : list.filter((s) => s.year === year));
 
   const exact = withYear(
     all.filter(
       (s) =>
         normalizeTitle(String(s.title ?? "")) === wanted ||
-        (s.alternateTitles ?? []).some(
-          (alt: any) => normalizeTitle(String(alt.title ?? "")) === wanted,
-        ),
+        (s.alternateTitles ?? []).some((alt) => normalizeTitle(String(alt.title ?? "")) === wanted),
     ),
   );
-  if (exact.length === 1) return { series: exact[0] };
-  if (exact.length > 1) return { candidates: exact };
+  const pick = ([only, ...rest]: T[]): SeriesLookup<T> =>
+    !only ? null : rest.length === 0 ? { series: only } : { candidates: [only, ...rest] };
 
-  const partial = withYear(
-    all.filter((s) => normalizeTitle(String(s.title ?? "")).includes(wanted)),
+  return (
+    pick(exact) ??
+    pick(withYear(all.filter((s) => normalizeTitle(String(s.title ?? "")).includes(wanted))))
   );
-  if (partial.length === 1) return { series: partial[0] };
-  if (partial.length > 1) return { candidates: partial };
-  return null;
 }
 
 // What Sonarr will do about a series' missing episodes, in words.
-function monitoringNote(series: any, analysis: SeriesAnalysis): string {
+function monitoringNote(series: SonarrSeries, analysis: SeriesAnalysis): string {
   if (!series.monitored) return "not monitored (Sonarr will not look for missing episodes)";
   if (analysis.missingMonitored > 0)
     return `monitored (Sonarr is looking for ${analysis.missingMonitored} of them)`;
   return "monitored, but its missing episodes are unmonitored";
 }
 
-function toRow(series: any, analysis: SeriesAnalysis): MediaRow {
+function toRow(series: SonarrSeries, analysis: SeriesAnalysis): MediaRow {
   const missingNote =
     analysis.missing > 0
       ? `Missing ${analysis.missing} - ${series.monitored ? (analysis.missingMonitored > 0 ? "Sonarr is searching" : "monitored, episodes unmonitored") : "not monitored"}`
@@ -195,26 +216,23 @@ function toRow(series: any, analysis: SeriesAnalysis): MediaRow {
   };
 }
 
-export async function fetchAllSeries(): Promise<any[]> {
-  const response = await sonarrClient.get("/api/v3/series");
-  return (response.data ?? []) as any[];
+export async function fetchAllSeries(): Promise<SonarrSeries[]> {
+  const response = await sonarrClient.get<SonarrSeries[]>("/api/v3/series");
+  return response.data ?? [];
 }
 
-export async function fetchEpisodes(seriesId: number): Promise<any[]> {
-  const response = await sonarrClient.get("/api/v3/episode", { params: { seriesId } });
-  return (response.data ?? []) as any[];
+export async function fetchEpisodes(seriesId: number): Promise<SonarrEpisode[]> {
+  const response = await sonarrClient.get<SonarrEpisode[]>("/api/v3/episode", {
+    params: { seriesId },
+  });
+  return response.data ?? [];
 }
 
 // [1, 2, 3, 5] -> "1-3, 5"
 export function seasonRanges(numbers: number[]): string {
-  const parts: string[] = [];
-  for (let i = 0; i < numbers.length; ) {
-    let j = i;
-    while (j + 1 < numbers.length && numbers[j + 1] === numbers[j]! + 1) j++;
-    parts.push(j > i ? `${numbers[i]}-${numbers[j]}` : `${numbers[i]}`);
-    i = j + 1;
-  }
-  return parts.join(", ");
+  return runs(numbers)
+    .map(([from, to]) => (to > from ? `${from}-${to}` : `${from}`))
+    .join(", ");
 }
 
 // The per-season breakdown for one show. Complete seasons share one line, and
@@ -234,16 +252,18 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
     const last = groups[groups.length - 1];
     const previous = last?.[last.length - 1];
     if (
-      season.have === 0 &&
+      last &&
       previous &&
+      season.have === 0 &&
       previous.have === 0 &&
       previous.season + 1 === season.season
     )
-      last!.push(season);
+      last.push(season);
     else groups.push([season]);
   }
   for (const group of groups.slice(0, MAX_SEASON_LINES)) {
-    const first = group[0]!;
+    const [first] = group;
+    if (!first) continue;
     if (group.length > 1) {
       lines.push(
         `Seasons ${seasonRanges(group.map((s) => s.season))}: nothing downloaded (${group.reduce((sum, s) => sum + s.released, 0)} episodes).`,
@@ -273,7 +293,7 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
 export async function resolveSeries(
   title: string,
   year?: number,
-): Promise<{ series: any } | { reply: ReturnType<typeof textReply> }> {
+): Promise<{ series: SonarrSeries } | { reply: ReturnType<typeof textReply> }> {
   const found = findSeries(await fetchAllSeries(), title, year);
   if (!found) {
     return {
@@ -351,13 +371,11 @@ export async function mapWithLimit<T, R>(
   task: (item: T) => Promise<R>,
 ): Promise<R[]> {
   const results: R[] = new Array(items.length);
-  let next = 0;
+  // One iterator shared by every worker: each takes the next item when free.
+  const pending = items.entries();
   await Promise.all(
     Array.from({ length: Math.min(limit, items.length) }, async () => {
-      while (next < items.length) {
-        const index = next++;
-        results[index] = await task(items[index]!);
-      }
+      for (const [index, item] of pending) results[index] = await task(item);
     }),
   );
   return results;

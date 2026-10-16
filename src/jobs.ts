@@ -1,4 +1,4 @@
-import { db } from "./db.js";
+import { db, type SystemJobRow } from "./db.js";
 import { radarrClient } from "./clients.js";
 import { safeJsonParse, getErrorMessage } from "./util.js";
 import { sendDiscordNotification } from "./notify.js";
@@ -22,7 +22,9 @@ export interface StepResult {
 // and the web/dev server) to both be stepping - only one wins each item, so no
 // movie is searched twice. If the search then fails, the claim is released.
 export async function stepJob(jobId: number): Promise<StepResult> {
-  const job = db.prepare("SELECT * FROM system_jobs WHERE id = ?").get(jobId) as any;
+  const job = db.prepare("SELECT * FROM system_jobs WHERE id = ?").get(jobId) as
+    | SystemJobRow
+    | undefined;
 
   if (!job) {
     return { outcome: "failed", message: `Job #${jobId} does not exist.` };

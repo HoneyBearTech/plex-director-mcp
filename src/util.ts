@@ -1,4 +1,5 @@
 import { AxiosError } from "axios";
+import type { TautulliStatRow } from "./types/tautulli.js";
 
 export function textReply(text: string, isError = false) {
   return {
@@ -36,7 +37,7 @@ export function safeJsonParse<T>(value: string | null | undefined, fallback: T):
 // streams" row), so the field that actually identifies each row - and its
 // play count - varies by category rather than by which fields happen to be
 // populated on any given row.
-export function rowLabel(statId: string, item: any): string {
+export function rowLabel(statId: string, item: TautulliStatRow): string {
   switch (statId) {
     case "top_users":
       return item.friendly_name || item.user || item.username || "Unknown";
@@ -53,7 +54,7 @@ export function rowLabel(statId: string, item: any): string {
   }
 }
 
-export function rowPlays(item: any): number {
+export function rowPlays(item: TautulliStatRow): number {
   return item.total_plays ?? item.play_count ?? item.count ?? 0;
 }
 

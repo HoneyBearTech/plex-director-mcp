@@ -25,6 +25,19 @@ db.exec(`
   );
 `);
 
+// A system_jobs row as SELECT * returns it. payload is a JSON array of Radarr
+// movie ids; the timestamps are SQLite's "YYYY-MM-DD HH:MM:SS" in UTC.
+export interface SystemJobRow {
+  id: number;
+  task_name: string;
+  status: string;
+  total_items: number;
+  processed_items: number;
+  payload: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // Store the user's current interactive multi-choice selection state for follow-up confirmation.
 db.exec(`
   CREATE TABLE IF NOT EXISTS interaction_context (
@@ -36,6 +49,14 @@ db.exec(`
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+// An interaction_context row: one choice from the last search_and_select_movies grid.
+export interface SelectionRow {
+  selection_index: number;
+  tmdb_id: number;
+  title: string;
+  year: string | null;
+}
 
 // Service configuration set via the web UI's Settings page. Overrides .env
 // once saved; .env only seeds a key's initial value on first boot.

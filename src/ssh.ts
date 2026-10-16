@@ -6,8 +6,8 @@ import { checkHostKey, fingerprintFromHex, HostKeyMismatchError } from "./hostKe
 // "192.168.1.10" or "192.168.1.10:2222". The host string is also the key the
 // remembered host key is stored under.
 function splitHostPort(target: string): { host: string; port: number } {
-  const match = /^(.+):(\d{1,5})$/.exec(target);
-  return match ? { host: match[1]!, port: Number(match[2]) } : { host: target, port: 22 };
+  const [, host, port] = /^(.+):(\d{1,5})$/.exec(target) ?? [];
+  return host && port ? { host, port: Number(port) } : { host: target, port: 22 };
 }
 
 // Execute one read-only telemetry command on a configured remote host.
@@ -32,7 +32,7 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
             conn.end();
             return reject(err);
           }
-          stream.on("data", (data: any) => {
+          stream.on("data", (data: Buffer) => {
             output += data.toString();
           });
           stream.on("close", () => {
