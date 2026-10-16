@@ -12,6 +12,9 @@ before you start.
 - Use [GitHub Issues](https://github.com/HoneyBearTech/plex-director-mcp/issues) for bugs, questions and feature
   ideas. There are forms for a bug report and a feature request. For anything bigger than a small fix, please
   open an issue first so we can agree on the approach before you spend time on it.
+- New here? Issues labelled [`good first issue`](https://github.com/HoneyBearTech/plex-director-mcp/labels/good%20first%20issue)
+  are small, self-contained tasks (a test, a docs gap, an accessibility check) that don't need the whole
+  codebase in your head.
 - **Never paste API keys, tokens or passwords** into an issue: your Plex token, your Radarr, Sonarr, Prowlarr,
   SABnzbd, Tautulli, TMDb or Anthropic keys, your qBittorrent password or your Discord webhook URL. Redact
   them from logs and screenshots too. If one has been posted by mistake, revoke it in the app it belongs to.
@@ -156,6 +159,32 @@ Signed commits (GPG or SSH, so GitHub shows them as "Verified") are welcome, but
 - Plex Director holds API keys for your whole media stack, can add and delete downloads, and connects to hosts
   over SSH, so treat changes to authentication, settings, secret handling, SSH or the tools that change
   things with extra care, and call them out in the pull request description.
+
+## Code review
+
+Every change reaches `main` through a pull request and is reviewed before it is merged. GitHub enforces the
+required checks; the review covers what tools can't.
+
+**How it is done.** The maintainer reviews each pull request on GitHub, Dependabot's included, reading the
+whole diff and the CI results, and leaves questions or change requests as review comments. The project has
+one maintainer (see [GOVERNANCE.md](GOVERNANCE.md)), so for now the maintainer's own changes are reviewed by
+the maintainer against the same list, with no second reviewer.
+
+**What is checked:**
+
+- It does one thing, the thing it says, and the description explains why.
+- It is correct for the cases that matter, including errors and empty or unexpected service responses.
+- Tests cover the new behaviour, and a bug fix has a regression test ([test policy](#test-policy)).
+- Security: no secret reaches the browser, a log or stdout; input from the browser, the model or a service
+  is validated; anything that changes a real system is explicit and confirmed; new dependencies are needed,
+  maintained and licensed acceptably.
+- One implementation per capability: the MCP tools and the dashboard share logic rather than copying it.
+- Docs, `README.md`, `.env.example` and the changelog are updated where users would notice the change.
+
+**What is required to merge:** every required check passes (typecheck, Biome lint and format with no
+warnings, tests with the coverage floor, dependency audits and review, CodeQL with no high or critical
+alerts, secret scan, DCO sign-off, image build and smoke test); every review comment is resolved; and the
+maintainer approves.
 
 ## License
 
