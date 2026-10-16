@@ -117,6 +117,22 @@ and restore over that.
 
 A job that was running carries on where it stopped: progress is saved after every movie.
 
+### Upgrading to 1.4.0: reverse proxies, host keys and encrypted credentials
+
+Nothing has to change for a plain LAN setup, but check these:
+
+- **Behind a reverse proxy, set `WEB_TRUST_PROXY`** to the proxy's address (or subnet, or `loopback`).
+  1.4.0 ignores `X-Forwarded-For` and `X-Forwarded-Proto` from anyone not listed, so without it every visitor
+  shares one sign-in limit and, over HTTPS, the session cookie is no longer marked `Secure`
+  ([installing.md](installing.md#keep-the-port-off-the-internet)).
+- **"Trust new key" needs `WEB_PASSWORD`.** Without a password the Node Utilization page explains instead of
+  offering the button; ask Claude Desktop to run `trust_new_host_key`, or set a password.
+- **Recommended: set `SETTINGS_ENCRYPTION_KEY`** to encrypt the saved credentials. They are encrypted at the
+  next start; give every container that shares the data the same key, and keep a copy apart from your backups
+  ([installing.md](installing.md#encrypt-the-saved-credentials)). Once set, an older version can't read them:
+  to roll back below 1.4.0, see [Roll back](#roll-back).
+- Cancelled and completed batch jobs can't be resumed any more, and a job holds at most 100 movies.
+
 ### Upgrading to 1.3.0: the container no longer runs as root
 
 From 1.3.0 the image runs as UID and GID 65532 instead of root. Data written by an earlier version belongs to
@@ -162,7 +178,7 @@ Desktop. If you use `latest`, `docker run` doesn't check for a newer image by it
   yet. Pin a release (1.2.0 or later) to choose when you upgrade.
 - A `sha-` tag, such as `sha-d2bca8a`, is one build of `main` and stays on it. Pin one to keep the `latest`
   build you have tried, and move it on when you choose.
-- A version tag such as `1.3.0` stays on that release. `1.3` moves to each new 1.3.x patch release.
+- A version tag such as `1.4.0` stays on that release. `1.4` moves to each new 1.4.x patch release.
 - A digest (`honeybeartech/plex-director-mcp@sha256:…`, optionally with the tag in front) can't be moved at
   all, not even by someone who could push to the registry. [verifying-releases.md](verifying-releases.md#pin-the-digest)
   shows how to find and check it.
@@ -174,10 +190,13 @@ adds features without breaking existing setups, and a major release can need you
 
 Set the tag back to the version you had and run `docker compose up -d` again.
 
-So far, no release has changed the database in a way an older version can't read: each version only creates
-the tables it needs if they are missing, and settings are simple name and value pairs, so an older version
-ignores what it doesn't know. That may not stay true forever. If a release changes it, its notes should say
-so, and the backup you took before upgrading is your way back: restore it with the old tag.
+Each version only creates the tables it needs if they are missing, and settings are simple name and value
+pairs, so an older version ignores what it doesn't know. **One exception:** once 1.4.0 or later has run with
+`SETTINGS_ENCRYPTION_KEY`, the saved credentials are encrypted, and an older version would send that
+ciphertext to your services as if it were the key, so every service would fail to sign in. To go back below
+1.4.0 then, restore the backup you took before setting the key, or enter the credentials again on the older
+version's Settings page. Future releases that change the database should say so in their notes; the backup
+from before the upgrade is always your way back.
 
 Rolling back also takes away whatever the newer build added. In particular, never roll back below 1.2.0:
 1.1.0 ignores `WEB_PASSWORD` and leaves the dashboard open. Roll back to an earlier 1.2.x release or `sha-`

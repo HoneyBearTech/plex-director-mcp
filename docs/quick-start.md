@@ -25,7 +25,7 @@ services:
     restart: unless-stopped
 ```
 
-Change `choose-a-password`. `latest` follows the newest build; to choose when you upgrade, pin `1.3.0` instead
+Change `choose-a-password`. `latest` follows the newest build; to choose when you upgrade, pin `1.4.0` instead
 ([installing.md](installing.md#choose-an-image-and-a-tag)). Then start it:
 
 ```sh
