@@ -1,12 +1,15 @@
 import { Router } from "express";
-import { getSetting, setSetting, type SettingsKey } from "../../settings.js";
+import { getSetting, SECRET_SETTINGS_KEYS, setSetting, type SettingsKey } from "../../settings.js";
 import { refreshClients } from "../../clients.js";
 
 interface FieldDef {
   field: string;
   key: SettingsKey;
-  secret?: boolean;
 }
+
+// Secret fields (from SECRET_SETTINGS_KEYS) are write-only: the browser only
+// learns whether one is set.
+const isSecret = (f: FieldDef) => SECRET_SETTINGS_KEYS.has(f.key);
 
 // Service -> editable fields, and the .env/DB key each one maps to. The
 // Settings page's 9 tabs (Sonarr, Radarr, Prowlarr, SABnzbd, qBittorrent,
@@ -14,36 +17,36 @@ interface FieldDef {
 const SERVICES: Record<string, FieldDef[]> = {
   sonarr: [
     { field: "url", key: "SONARR_URL" },
-    { field: "apiKey", key: "SONARR_API_KEY", secret: true },
+    { field: "apiKey", key: "SONARR_API_KEY" },
   ],
   radarr: [
     { field: "url", key: "RADARR_URL" },
-    { field: "apiKey", key: "RADARR_API_KEY", secret: true },
+    { field: "apiKey", key: "RADARR_API_KEY" },
     { field: "defaultQualityProfile", key: "RADARR_DEFAULT_QUALITY_PROFILE" },
   ],
   prowlarr: [
     { field: "url", key: "PROWLARR_URL" },
-    { field: "apiKey", key: "PROWLARR_API_KEY", secret: true },
+    { field: "apiKey", key: "PROWLARR_API_KEY" },
   ],
   sabnzbd: [
     { field: "url", key: "SABNZBD_URL" },
-    { field: "apiKey", key: "SABNZBD_API_KEY", secret: true },
+    { field: "apiKey", key: "SABNZBD_API_KEY" },
   ],
   qbittorrent: [
     { field: "url", key: "QBITTORRENT_URL" },
     { field: "username", key: "QBITTORRENT_USER" },
-    { field: "password", key: "QBITTORRENT_PASS", secret: true },
+    { field: "password", key: "QBITTORRENT_PASS" },
   ],
   tautulli: [
     { field: "url", key: "TAUTULLI_URL" },
-    { field: "apiKey", key: "TAUTULLI_API_KEY", secret: true },
+    { field: "apiKey", key: "TAUTULLI_API_KEY" },
   ],
   plex: [
     { field: "url", key: "PLEX_URL" },
-    { field: "token", key: "PLEX_TOKEN", secret: true },
+    { field: "token", key: "PLEX_TOKEN" },
     { field: "skipLibraries", key: "PLEX_SKIP_LIBRARIES" },
   ],
-  tmdb: [{ field: "apiKey", key: "TMDB_API_KEY", secret: true }],
+  tmdb: [{ field: "apiKey", key: "TMDB_API_KEY" }],
   // SSH_KEY_PATH deliberately excluded - stays a server-side file path, never
   // typed into the browser or stored in the database.
   nodes: [
@@ -70,7 +73,7 @@ settingsRouter.get("/", (_req, res) => {
       const value = getSetting(f.key);
       // Secret-shaped fields never round-trip to the browser in full - an
       // unauthenticated GET shouldn't hand out live credentials.
-      serviceResult[f.field] = f.secret ? { configured: value !== "" } : value;
+      serviceResult[f.field] = isSecret(f) ? { configured: value !== "" } : value;
     }
     result[service] = serviceResult;
   }
@@ -98,7 +101,7 @@ settingsRouter.put("/:service", (req, res) => {
       : undefined;
   if (urlField && newUrl !== undefined && newUrl !== "" && newUrl !== getSetting(urlField.key)) {
     const missing = fields.filter((f) => {
-      if (!f.secret || getSetting(f.key) === "") return false;
+      if (!isSecret(f) || getSetting(f.key) === "") return false;
       const raw = body[f.field];
       return typeof raw !== "string" || raw.trim() === "";
     });
@@ -113,7 +116,7 @@ settingsRouter.put("/:service", (req, res) => {
   for (const f of fields) {
     const raw = body[f.field];
     if (typeof raw !== "string") continue; // field omitted - leave unchanged
-    if (f.secret && raw.trim() === "") continue; // blank secret - keep the existing value
+    if (isSecret(f) && raw.trim() === "") continue; // blank secret - keep the existing value
     setSetting(f.key, raw.trim());
   }
 

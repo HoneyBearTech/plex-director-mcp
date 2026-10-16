@@ -6,9 +6,30 @@ import { registerJobTools } from "./tools/jobs.js";
 import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerInfrastructureTools } from "./tools/infrastructure.js";
 import { createWebApp } from "./web/app.js";
-import { seedSettingsFromEnv } from "./settings.js";
+import { prepareStoredSecrets, seedSettingsFromEnv } from "./settings.js";
+import { getErrorMessage } from "./util.js";
 import { refreshClients } from "./clients.js";
 import { startJobRunner } from "./jobRunner.js";
+
+// Before anything reads a credential: check the encryption key fits what is
+// stored, and encrypt any credential still in plain text. stderr only:
+// stdout belongs to the MCP protocol.
+try {
+  const secrets = prepareStoredSecrets();
+  if (secrets.forgotten.length > 0)
+    console.error(`Deleted unreadable saved credentials: ${secrets.forgotten.join(", ")}.`);
+  if (secrets.encrypted > 0)
+    console.error(
+      `🔐 Encrypted ${secrets.encrypted} saved credential${secrets.encrypted === 1 ? "" : "s"} with SETTINGS_ENCRYPTION_KEY.`,
+    );
+  if (!secrets.keySet)
+    console.error(
+      "WARNING: SETTINGS_ENCRYPTION_KEY is not set - saved service credentials are stored in plain text in the database.",
+    );
+} catch (error) {
+  console.error(`❌ ${getErrorMessage(error)}`);
+  process.exit(1);
+}
 
 // First boot: copy any configured .env values into the settings store so
 // there's something to seed from. After that, whatever's saved via the
