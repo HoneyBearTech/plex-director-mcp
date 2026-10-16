@@ -554,14 +554,30 @@ describe("dashboard authentication", () => {
     });
   });
 
-  it("marks the cookie Secure when the request arrived over HTTPS", async () => {
-    process.env.WEB_PASSWORD = PASSWORD;
-    const res = await fetch(`${app.base}/api/auth/login`, {
+  const loginOverHttps = (base: string) =>
+    fetch(`${base}/api/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Forwarded-Proto": "https" },
       body: JSON.stringify({ password: PASSWORD }),
     });
-    assert.match(res.headers.getSetCookie()[0]!, /Secure/i);
+
+  it("ignores X-Forwarded-Proto from a client that isn't a trusted proxy", async () => {
+    process.env.WEB_PASSWORD = PASSWORD;
+    const res = await loginOverHttps(app.base);
+    assert.equal(res.status, 200);
+    assert.doesNotMatch(res.headers.getSetCookie()[0]!, /Secure/i);
+  });
+
+  it("marks the cookie Secure when a proxy named in WEB_TRUST_PROXY says it was HTTPS", async () => {
+    process.env.WEB_PASSWORD = PASSWORD;
+    process.env.WEB_TRUST_PROXY = "loopback";
+    const proxied = await startApp();
+    try {
+      assert.match((await loginOverHttps(proxied.base)).headers.getSetCookie()[0]!, /Secure/i);
+    } finally {
+      await proxied.close();
+      delete process.env.WEB_TRUST_PROXY;
+    }
   });
 
   it("rejects a tampered cookie, and everyone is signed out when the password changes", async () => {

@@ -97,12 +97,10 @@ function readSessionCookie(req: Request): string | undefined {
   return undefined;
 }
 
-function isHttps(req: Request): boolean {
-  return req.secure || req.headers["x-forwarded-proto"] === "https";
-}
-
+// req.secure follows X-Forwarded-Proto only from a proxy named in
+// WEB_TRUST_PROXY; any other client sending it is ignored.
 function cookieOptions(req: Request) {
-  return { httpOnly: true, sameSite: "strict" as const, secure: isHttps(req), path: "/" };
+  return { httpOnly: true, sameSite: "strict" as const, secure: req.secure, path: "/" };
 }
 
 export function requireAuth(req: Request, res: Response, next: NextFunction) {
