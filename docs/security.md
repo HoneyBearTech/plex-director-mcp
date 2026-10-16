@@ -122,6 +122,10 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   `Referrer-Policy: no-referrer`; `X-Powered-By` is off. There is no full script/style CSP or HSTS yet
   (HSTS belongs on the reverse proxy that terminates TLS). Responses are JSON (or images from the two
   artwork proxies); errors are `{"error": "..."}`.
+- **Reverse proxies:** `X-Forwarded-For` and `X-Forwarded-Proto` are honoured only from the addresses in
+  `WEB_TRUST_PROXY` (`src/web/trustProxy.ts`), and ignored when it is unset. A client can't fake its address
+  to get a fresh sign-in limit, or fake HTTPS; values that would trust anyone (`true`, hop counts) are
+  refused at start-up.
 - **DNS rebinding:** while `WEB_PASSWORD` is unset, requests whose `Host` header is not an IP address,
   `localhost`, a single-word name, a `.local` / `.lan` / `.home.arpa` / `.internal` name or a name listed
   in `WEB_ALLOWED_HOSTS` get a 403 (`src/web/hostCheck.ts`). That stops a web page on a public domain from

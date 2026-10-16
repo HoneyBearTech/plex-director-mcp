@@ -14,6 +14,10 @@ a security problem.
 
 ### Security
 
+- **`WEB_TRUST_PROXY` for reverse proxies.** Behind a proxy, every visitor used to share the proxy's address
+  for the sign-in limit, and any client could send `X-Forwarded-Proto: https`. Now `X-Forwarded-For` and
+  `X-Forwarded-Proto` are honoured only from the proxy addresses you list, and ignored otherwise. **If you use
+  a reverse proxy with HTTPS, set `WEB_TRUST_PROXY`** to keep the session cookie marked `Secure`.
 - **Trusting a changed SSH host key from the dashboard needs `WEB_PASSWORD`.** Without a login anyone on the
   network could use it to make an impostor the trusted host; the button is replaced by an explanation, and the
   API answers 403. Use `trust_new_host_key` in Claude Desktop instead.
