@@ -1,11 +1,24 @@
 import { runRemoteCommand } from "./ssh.js";
 import { getSetting } from "./settings.js";
-import { HostKeyMismatchError } from "./hostKeys.js";
+import { forgetHostKey, HostKeyMismatchError } from "./hostKeys.js";
 import { getErrorMessage } from "./util.js";
 
 // The one place that knows how to read a cluster host's health over SSH. Used
 // by the web dashboard's Node Utilization page and by both cluster MCP tools,
 // so the probe commands can't drift apart between them.
+
+// For a host whose SSH key legitimately changed (rebuilt, reinstalled): forget
+// the remembered key so the next connection trusts what the host presents.
+// Only configured hosts can be named, so this can't wipe arbitrary rows.
+// Shared by the trust_new_host_key MCP tool and the dashboard's button.
+export function trustNewHostKey(
+  host: string,
+): { ok: true; hadRememberedKey: boolean } | { ok: false; error: string } {
+  if (!getConfiguredHosts().includes(host)) {
+    return { ok: false, error: "That host is not in the configured host list." };
+  }
+  return { ok: true, hadRememberedKey: forgetHostKey(host) };
+}
 
 export function getConfiguredHosts(): string[] {
   return getSetting("UBUNTU_HOSTS")

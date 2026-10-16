@@ -6,7 +6,7 @@ import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
-import { probeHost } from "../src/cluster.js";
+import { probeHost, trustNewHostKey } from "../src/cluster.js";
 import { db } from "../src/db.js";
 import {
   checkHostKey,
@@ -15,7 +15,9 @@ import {
   HostKeyMismatchError,
 } from "../src/hostKeys.js";
 import { setSetting } from "../src/settings.js";
+import { server as mcpServer } from "../src/server.js";
 import { runRemoteCommand } from "../src/ssh.js";
+import { registerInfrastructureTools } from "../src/tools/infrastructure.js";
 import { resetDb, startApp } from "./helpers.js";
 import { generateKeyPair, startSshServer, type KeyPair, type TestSshServer } from "./sshServer.js";
 
@@ -296,16 +298,24 @@ describe("probeHost and the dashboard's Trust new key", () => {
   });
 
   it("POST /api/nodes/trust-new-key forgets the key so the host comes back online", async () => {
+    process.env.WEB_PASSWORD = "pw";
     const app = await startApp();
     try {
       await probeHost(target);
       db.prepare("UPDATE ssh_host_keys SET fingerprint = 'SHA256:old' WHERE host = ?").run(target);
       assert.equal((await probeHost(target)).online, false);
 
+      const login = await fetch(`${app.base}/api/auth/login`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: "pw" }),
+      });
+      const cookie = (login.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
+      assert.match(cookie, /^pd_session=/);
       const post = (host: string) =>
         fetch(`${app.base}/api/nodes/trust-new-key`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: { "Content-Type": "application/json", Cookie: cookie },
           body: JSON.stringify({ host }),
         });
 
@@ -322,7 +332,60 @@ describe("probeHost and the dashboard's Trust new key", () => {
       assert.equal((await probeHost(target)).online, true);
     } finally {
       await app.close();
+      delete process.env.WEB_PASSWORD;
     }
+  });
+
+  it("without WEB_PASSWORD the endpoint refuses, so nobody on the network can re-trust a host", async () => {
+    const app = await startApp();
+    try {
+      await probeHost(target);
+      db.prepare("UPDATE ssh_host_keys SET fingerprint = 'SHA256:old' WHERE host = ?").run(target);
+      const res = await fetch(`${app.base}/api/nodes/trust-new-key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host: target }),
+      });
+      assert.equal(res.status, 403);
+      assert.match(((await res.json()) as { error: string }).error, /trust_new_host_key/);
+      assert.equal(storedFingerprint(target), "SHA256:old", "the remembered key is untouched");
+    } finally {
+      await app.close();
+    }
+  });
+
+  it("the trust_new_host_key MCP tool forgets a configured host's key and refuses others", async () => {
+    registerInfrastructureTools();
+    const tool = (mcpServer as any)._registeredTools.trust_new_host_key;
+    const call = async (host: string) => {
+      const result = await tool.handler({ host }, {});
+      return { isError: Boolean(result.isError), text: String(result.content[0].text) };
+    };
+    await probeHost(target);
+
+    const unknown = await call("192.0.2.99");
+    assert.equal(unknown.isError, true);
+    assert.match(unknown.text, new RegExp(`not in the configured host list.*${target}`));
+    assert.ok(storedFingerprint(target));
+
+    assert.deepEqual(await call(target), {
+      isError: false,
+      text: `Forgot the remembered SSH key for ${target}. The next check (or get_cluster_infrastructure_health) remembers the key it presents now.`,
+    });
+    assert.equal(storedFingerprint(target), undefined);
+    assert.match((await call(target)).text, /No key was remembered/);
+  });
+
+  it("trustNewHostKey (shared with the MCP tool) only forgets configured hosts", async () => {
+    await probeHost(target);
+    assert.deepEqual(trustNewHostKey("192.0.2.99"), {
+      ok: false,
+      error: "That host is not in the configured host list.",
+    });
+    assert.ok(storedFingerprint(target), "an unknown host didn't touch anything");
+    assert.deepEqual(trustNewHostKey(target), { ok: true, hadRememberedKey: true });
+    assert.equal(storedFingerprint(target), undefined);
+    assert.deepEqual(trustNewHostKey(target), { ok: true, hadRememberedKey: false });
   });
 
   it("the endpoint needs a login when WEB_PASSWORD is set", async () => {

@@ -25,7 +25,7 @@ export const RULES: string[] = [
 
 // Rules only for clients that can change things (the MCP tools; the chat is read-only).
 export const CHANGE_RULES: string[] = [
-  "Tools that change something (confirm_selected_choices, manage_stalled_downloads with PURGE_STALLED, plan_media_upgrade, update_job_status, execute_next_job_step, run_cluster_backup) act on the user's real services. Say what will happen and get the user's go-ahead first; PURGE_STALLED deletes torrents and their files.",
+  "Tools that change something (confirm_selected_choices, manage_stalled_downloads with PURGE_STALLED, plan_media_upgrade, update_job_status, execute_next_job_step, run_cluster_backup, trust_new_host_key) act on the user's real services. Say what will happen and get the user's go-ahead first; PURGE_STALLED deletes torrents and their files.",
   "TV is never batch-upgraded: plan_media_upgrade only plans movie upgrades and refuses TV.",
   "Adding a movie is two steps: search_and_select_movies shows a numbered grid, then confirm_selected_choices adds the numbers the user picks.",
 ];
@@ -93,6 +93,10 @@ export const ROUTES: Route[] = [
   {
     question: "How are my servers doing (CPU, memory, disk, containers)?",
     tools: ["get_cluster_infrastructure_health", "get_cluster_hardware_analytics"],
+  },
+  {
+    question: "A host's SSH key changed after I rebuilt it",
+    tools: ["trust_new_host_key"],
   },
   { question: "Back up Radarr, Sonarr and Prowlarr", tools: ["run_cluster_backup"] },
 ];
