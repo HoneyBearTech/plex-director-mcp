@@ -14,6 +14,24 @@ import { plexRouter } from "./routes/plex.js";
 import { indexersRouter } from "./routes/indexers.js";
 import { jobsRouter } from "./routes/jobs.js";
 
+// The built dashboard is one script and one stylesheet from this origin, with
+// nothing inline, so injected markup (say a hostile title in a chat answer)
+// can't run code or load anything from elsewhere. Images may also be data:
+// (chat artwork) or any https URL (public posters from Sonarr and TMDb); the
+// page only talks to this server.
+export const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self'",
+  "img-src 'self' data: https:",
+  "connect-src 'self'",
+  "font-src 'self'",
+  "object-src 'none'",
+  "base-uri 'none'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+].join("; ");
+
 export function createWebApp() {
   const app = express();
   app.disable("x-powered-by");
@@ -27,12 +45,13 @@ export function createWebApp() {
     console.error(`Trusting X-Forwarded-For and X-Forwarded-Proto from: ${trustProxy.join(", ")}`);
   }
   // Browser hardening for every response: the dashboard is never framed (no
-  // clickjacking), content types are not sniffed, and links don't leak the
-  // dashboard's address to other sites.
+  // clickjacking), content types are not sniffed, links don't leak the
+  // dashboard's address to other sites, and the page can only run its own
+  // script and styles (see CONTENT_SECURITY_POLICY).
   app.use((_req, res, next) => {
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("X-Frame-Options", "DENY");
-    res.setHeader("Content-Security-Policy", "frame-ancestors 'none'");
+    res.setHeader("Content-Security-Policy", CONTENT_SECURITY_POLICY);
     res.setHeader("Referrer-Policy", "no-referrer");
     next();
   });

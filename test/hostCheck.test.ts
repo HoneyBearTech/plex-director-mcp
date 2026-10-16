@@ -128,7 +128,20 @@ describe("DNS-rebinding guard on the dashboard", () => {
     const res = await request("/healthz", "127.0.0.1");
     assert.equal(res.headers["x-content-type-options"], "nosniff");
     assert.equal(res.headers["x-frame-options"], "DENY");
-    assert.equal(res.headers["content-security-policy"], "frame-ancestors 'none'");
+    const csp = String(res.headers["content-security-policy"]);
+    // Only this origin's own script and styles; nothing inline, no plugins, never framed.
+    for (const directive of [
+      "default-src 'self'",
+      "script-src 'self'",
+      "style-src 'self'",
+      "img-src 'self' data: https:",
+      "connect-src 'self'",
+      "object-src 'none'",
+      "base-uri 'none'",
+      "frame-ancestors 'none'",
+    ])
+      assert.ok(csp.split("; ").includes(directive), `CSP has ${directive}: ${csp}`);
+    assert.doesNotMatch(csp, /unsafe-inline|unsafe-eval/);
     assert.equal(res.headers["referrer-policy"], "no-referrer");
     assert.equal(res.headers["x-powered-by"], undefined);
   });
