@@ -3,8 +3,8 @@
 > [!WARNING]
 > **Some tools change things, and there is no undo.** Plex Director holds the API keys for every service
 > you connect. Adding movies (`confirm_selected_choices`) adds them to Radarr and starts download searches;
-> `manage_stalled_downloads` with `PURGE_STALLED` deletes torrents **and their files** from qBittorrent as
-> soon as it is asked; a started batch job sends one Radarr search per minute until it finishes; and
+> `manage_stalled_downloads` with `PURGE_STALLED` deletes the torrents you agreed to, after an `AUDIT`,
+> **and their files** from qBittorrent; a started batch job sends one Radarr search per minute until it finishes; and
 > `run_cluster_backup` starts the Radarr, Sonarr and Prowlarr backups. Claude Desktop asks before it uses a
 > tool, so read what it proposes.
 >

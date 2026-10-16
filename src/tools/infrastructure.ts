@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { server } from "../server.js";
-import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
+import { auditStalled, DEFAULT_MIN_SPEED_KBPS, purgeStalled } from "../stalledDownloads.js";
 import { getConfiguredHosts, probeAllHosts, trustNewHostKey } from "../cluster.js";
 import { runServarrBackups } from "../backups.js";
 import { textReply, getErrorMessage } from "../util.js";
@@ -19,80 +19,37 @@ export function registerInfrastructureTools() {
     },
   );
 
-  // qBittorrent queue auditing and stalled-download remediation.
+  // qBittorrent queue auditing and stalled-download clean-up (src/stalledDownloads.ts).
   server.tool(
     "manage_stalled_downloads",
-    "Scans qBittorrent download queues to isolate, pause, or blocklist items stuck below threshold download speeds.",
+    "Lists qBittorrent downloads that are stalled or slower than a threshold (AUDIT), and deletes chosen ones with their downloaded files (PURGE_STALLED). PURGE_STALLED only deletes the torrents whose hashes you pass, taken from an AUDIT the user has seen and agreed to; it never deletes anything else, and Radarr and Sonarr are not told.",
     {
       action: z
         .enum(["AUDIT", "PURGE_STALLED"])
         .describe(
-          "AUDIT returns stalled candidates; PURGE_STALLED wipes them and flags a re-search.",
+          "AUDIT lists stalled downloads with their hashes and changes nothing; PURGE_STALLED deletes the torrents named in hashes, with their files.",
+        ),
+      hashes: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "PURGE_STALLED only: the hashes, from AUDIT, of the torrents the user agreed to delete. Required for PURGE_STALLED.",
         ),
       minSpeedKbps: z
         .number()
+        .min(0)
         .optional()
-        .default(50)
-        .describe("The minimum allowed speed threshold before a torrent is considered stalled."),
+        .default(DEFAULT_MIN_SPEED_KBPS)
+        .describe(
+          "A download slower than this (KB/s) counts as stalled, as does one qBittorrent reports as stalled.",
+        ),
     },
-    async ({ action, minSpeedKbps }) => {
-      try {
-        // Authenticate once and reuse the session for queue operations.
-        const session = await loginToQbittorrent();
-        const torrents = await getDownloadingTorrents(session);
-
-        // Include fully stalled downloads and downloads below the configured rate.
-        const stalledTorrents = torrents.filter((t) => {
-          const speedKbps = t.dlspeed / 1024;
-          return t.state === "stalledDL" || (speedKbps > 0 && speedKbps < minSpeedKbps);
-        });
-
-        if (stalledTorrents.length === 0) {
-          return {
-            content: [
-              {
-                type: "text",
-                text: "✅ Queue Audit: Zero stalled or low-bandwidth torrent items detected in qBittorrent.",
-              },
-            ],
-          };
-        }
-
-        if (action === "AUDIT") {
-          let auditReport = `📋 **Stalled Torrent Audit Log:**\n`;
-          auditReport += `Detected ${stalledTorrents.length} items failing to meet your minimum speed threshold of ${minSpeedKbps} KB/s:\n\n`;
-
-          stalledTorrents.forEach((t) => {
-            const currentSpeed = (t.dlspeed / 1024).toFixed(2);
-            auditReport += `  ▪ **${t.name}**\n`;
-            auditReport += `    ↳ Speed: ${currentSpeed} KB/s | Progress: ${(t.progress * 100).toFixed(1)}% | Seeders: ${t.num_seeds}\n`;
-          });
-
-          return { content: [{ type: "text", text: auditReport }] };
-        }
-
-        let purgeReport = `🧹 **Executing Torrent Remediation Strategy:**\n`;
-        for (const torrent of stalledTorrents) {
-          // Delete both the torrent metadata and its downloaded files.
-          await deleteTorrent(session, torrent.hash);
-
-          purgeReport += `  ✓ Deleted from qBittorrent, with its files: *${torrent.name}*\n`;
-        }
-
-        // Only qBittorrent is touched: nothing is blocklisted in Radarr or Sonarr.
-        purgeReport += `\nDeleted ${stalledTorrents.length} stalled torrent${stalledTorrents.length === 1 ? "" : "s"}. Radarr and Sonarr were not told, so nothing was blocklisted: they may grab the same release again. To avoid that, remove it from their queue with the blocklist option instead.`;
-        return { content: [{ type: "text", text: purgeReport }] };
-      } catch (error: unknown) {
-        return {
-          content: [
-            {
-              type: "text",
-              text: `Failed to execute qBittorrent cleanup routines: ${getErrorMessage(error)}`,
-            },
-          ],
-          isError: true,
-        };
-      }
+    async ({ action, hashes, minSpeedKbps }) => {
+      const { text, isError } =
+        action === "AUDIT"
+          ? await auditStalled(minSpeedKbps)
+          : await purgeStalled(hashes ?? [], minSpeedKbps);
+      return textReply(text, isError);
     },
   );
 

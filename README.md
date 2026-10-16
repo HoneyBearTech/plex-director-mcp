@@ -459,7 +459,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 
 | Tool | What it does |
 | :--- | :--- |
-| `manage_stalled_downloads` | `AUDIT` lists stalled or slow qBittorrent downloads; `PURGE_STALLED` deletes them and their files. |
+| `manage_stalled_downloads` | `AUDIT` lists stalled or slow qBittorrent downloads with their hashes; `PURGE_STALLED` deletes the ones you name by hash, with their files, and nothing else. |
 | `check_indexer_health` | Reports failing, backing-off and disabled Prowlarr indexers, and Prowlarr's own warnings. |
 
 **Background jobs**
@@ -490,7 +490,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 - **Set `WEB_PASSWORD`.** Without it, anyone who can reach the port can use the dashboard and change its settings.
 - **Secrets stay on the server.** The Settings page never returns a saved key or token, and Plex artwork is fetched through a server-side proxy so the Plex token never reaches your browser.
 - **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it (that button needs `WEB_PASSWORD`; without one, ask Claude Desktop to use `trust_new_host_key`). Without a password anyone on your network could use that button to trust an impostor, so it is only offered with one. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
-- **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes torrents and their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
+- **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes the torrents you agreed to after an `AUDIT`, with their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
 - The image runs as a non-root user (UID 65532); see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down further.
 
 ## Development

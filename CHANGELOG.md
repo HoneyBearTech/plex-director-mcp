@@ -7,6 +7,13 @@ a security problem.
 
 ## [Unreleased]
 
+### Changed
+
+- **`manage_stalled_downloads` with `PURGE_STALLED` only deletes the torrents you name.** It takes the hashes
+  from an `AUDIT` (which now lists them) and deletes just those, if they are still stalled; without hashes it
+  deletes nothing. Before, it deleted every torrent that counted as stalled at that moment. The reply lists
+  what was deleted and what was left alone.
+
 ## [1.4.0] - 2026-10-16
 
 **Upgrading:** behind a reverse proxy, set `WEB_TRUST_PROXY`; "Trust new key" now needs `WEB_PASSWORD`. Setting
