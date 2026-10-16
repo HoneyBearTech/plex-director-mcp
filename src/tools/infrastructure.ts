@@ -76,11 +76,11 @@ export function registerInfrastructureTools() {
           // Delete both the torrent metadata and its downloaded files.
           await deleteTorrent(session, torrent.hash);
 
-          // Servarr RSS routines can then search for an alternative release.
-          purgeReport += `  ✓ Purged and blocklisted release: *${torrent.name}*\n`;
+          purgeReport += `  ✓ Deleted from qBittorrent, with its files: *${torrent.name}*\n`;
         }
 
-        purgeReport += `\nAll stalled items successfully dropped. Servarr RSS routines will automatically cycle to alternative indexer releases.`;
+        // Only qBittorrent is touched: nothing is blocklisted in Radarr or Sonarr.
+        purgeReport += `\nDeleted ${stalledTorrents.length} stalled torrent${stalledTorrents.length === 1 ? "" : "s"}. Radarr and Sonarr were not told, so nothing was blocklisted: they may grab the same release again. To avoid that, remove it from their queue with the blocklist option instead.`;
         return { content: [{ type: "text", text: purgeReport }] };
       } catch (error: unknown) {
         return {

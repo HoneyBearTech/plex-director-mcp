@@ -67,4 +67,10 @@ describe("torrent calls", () => {
     assert.equal(call.headers.Cookie, "SID=abc");
     assert.equal(call.headers["Content-Type"], "application/x-www-form-urlencoded");
   });
+
+  it("deleteTorrent encodes the hash, so it can't add form fields", async () => {
+    fake = fakeApi(qbitClient, () => ({ data: "" }));
+    await deleteTorrent({ headers: { Cookie: "SID=abc" } }, "abc&deleteFiles=false|def");
+    assert.equal(fake.calls[0]!.body, "hashes=abc%26deleteFiles%3Dfalse%7Cdef&deleteFiles=true");
+  });
 });

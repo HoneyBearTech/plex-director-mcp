@@ -47,7 +47,11 @@ export async function deleteTorrent(
   hash: string,
   deleteFiles = true,
 ): Promise<void> {
-  await qbitClient.post("/api/v2/torrents/delete", `hashes=${hash}&deleteFiles=${deleteFiles}`, {
-    headers: { ...session.headers, ...FORM },
-  });
+  await qbitClient.post(
+    "/api/v2/torrents/delete",
+    `hashes=${encodeURIComponent(hash)}&deleteFiles=${deleteFiles}`,
+    {
+      headers: { ...session.headers, ...FORM },
+    },
+  );
 }
