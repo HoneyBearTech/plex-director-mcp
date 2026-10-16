@@ -7,6 +7,11 @@ a security problem.
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-10-16
+
+**Upgrading:** behind a reverse proxy, set `WEB_TRUST_PROXY`; "Trust new key" now needs `WEB_PASSWORD`. Setting
+`SETTINGS_ENCRYPTION_KEY` is recommended. See [docs/upgrading.md](docs/upgrading.md#upgrading-to-140-reverse-proxies-host-keys-and-encrypted-credentials).
+
 ### Added
 
 - **Encrypted credentials at rest.** Set `SETTINGS_ENCRYPTION_KEY` (32 random bytes: `openssl rand -base64 32`)
@@ -221,7 +226,8 @@ a security problem.
 - CodeQL analysis of the source.
 - The MIT license.
 
-[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.3.0...HEAD
+[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.4.0...HEAD
+[1.4.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.3.0...v1.4.0
 [1.3.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.0.0...v1.1.0
