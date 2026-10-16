@@ -229,6 +229,7 @@ shown on the Settings page.
 | :--- | :---: | :--- |
 | `WEB_PASSWORD` | *(none)* | Requires a sign-in for the dashboard. **Strongly recommended.** Changing it signs everyone out. |
 | `WEB_ALLOWED_HOSTS` | *(none)* | Only used without `WEB_PASSWORD`. Extra host names the dashboard answers to, comma-separated, for example the public name a reverse proxy serves it on. IP addresses, `localhost`, single-word names and `.local`, `.lan`, `.home.arpa` and `.internal` names always work; any other name gets a 403 explaining this, which stops DNS-rebinding pages from reaching an open dashboard. `*` turns the check off. |
+| `WEB_TRUST_PROXY` | *(none)* | Set it when a reverse proxy sits in front: the proxy's address or subnet, comma-separated, or `loopback` for one on the same host. Only requests from there may set `X-Forwarded-For` and `X-Forwarded-Proto` ([below](#keep-the-port-off-the-internet)). Unset, both are ignored. |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Turns on the Query chat. A pay-per-use Anthropic API key. |
 | `SSH_KEY_PATH` | *(none)* | Path inside the container to the private key for host monitoring. |
@@ -293,8 +294,13 @@ password; there are no separate users.
 - If only this machine needs the dashboard, or a reverse proxy runs on the same host, publish it on loopback
   only: `127.0.0.1:3000:3000` in Compose, or `-p 127.0.0.1:3000:3000`.
 - The dashboard speaks plain HTTP. To reach it from outside your LAN, use a VPN, or a reverse proxy you trust
-  that adds HTTPS and some sign-in of its own. Have the proxy send `X-Forwarded-Proto: https`; the session
-  cookie is then marked `Secure`. With [Caddy](https://caddyserver.com/), which does that already:
+  that adds HTTPS and some sign-in of its own.
+- **Behind a reverse proxy, set `WEB_TRUST_PROXY`** to the proxy's address as the container sees it (or its
+  subnet; `loopback` when it runs on the same host). Plex Director then takes the client's address from
+  `X-Forwarded-For`, so the sign-in limit counts each client instead of the proxy as one, and marks the
+  session cookie `Secure` when the proxy says, in `X-Forwarded-Proto`, that the visit was HTTPS. Without it,
+  those headers are ignored, which keeps anyone who reaches the port directly from faking them. Nginx Proxy
+  Manager and [Caddy](https://caddyserver.com/) send both headers already; with Caddy:
 
   ```caddyfile
   plex-director.example.com {
@@ -302,7 +308,8 @@ password; there are no separate users.
   }
   ```
 
-  With nginx, add `proxy_set_header X-Forwarded-Proto $scheme;` to the `location` block.
+  With plain nginx, add `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;` and
+  `proxy_set_header X-Forwarded-Proto $scheme;` to the `location` block.
 
 ### Run as a non-root user, with a read-only filesystem
 

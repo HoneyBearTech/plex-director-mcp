@@ -276,6 +276,7 @@ Nothing is required to start the container: it boots with no configuration and l
 | :--- | :---: | :--- |
 | `WEB_PASSWORD` | *(none)* | Requires a login for the dashboard. Changing it signs everyone out. |
 | `WEB_ALLOWED_HOSTS` | *(none)* | Only matters without `WEB_PASSWORD`: extra host names the dashboard answers to, comma-separated (e.g. `plex.example.com` behind a reverse proxy). IP addresses, `localhost`, single-word names and `.local` / `.lan` / `.home.arpa` / `.internal` names always work; any other name gets a 403, which blocks DNS-rebinding attacks. `*` turns the check off. |
+| `WEB_TRUST_PROXY` | *(none)* | The reverse proxy in front of the dashboard: its address or subnet, comma-separated (e.g. `192.168.40.10` or `192.168.40.0/24`), or `loopback`. Only requests from there may set `X-Forwarded-For` and `X-Forwarded-Proto`, so the login limit applies per real client and the session cookie is `Secure` over HTTPS. Unset, both headers are ignored. `true` and hop counts are refused. |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Anthropic API key for the Query chat. |
 | `SSH_KEY_PATH` | *(none)* | Path (inside the container) to the private key for host monitoring. It must be readable by the container's user. |

@@ -4,6 +4,7 @@ import path from "node:path";
 import { projectRoot } from "../env.js";
 import { authRouter, requireAuth, isAuthEnabled } from "./auth.js";
 import { requireAllowedHost } from "./hostCheck.js";
+import { trustProxyFromEnv } from "./trustProxy.js";
 import { statusRouter } from "./routes/status.js";
 import { nodesRouter } from "./routes/nodes.js";
 import { queuesRouter } from "./routes/queues.js";
@@ -16,6 +17,15 @@ import { jobsRouter } from "./routes/jobs.js";
 export function createWebApp() {
   const app = express();
   app.disable("x-powered-by");
+  // Behind a reverse proxy, req.ip (the rate limits) and req.secure (the
+  // cookie's Secure flag) come from its X-Forwarded-* headers, but only when
+  // WEB_TRUST_PROXY names it (see trustProxy.ts). An invalid value stops
+  // start-up rather than trusting the wrong thing.
+  const trustProxy = trustProxyFromEnv();
+  app.set("trust proxy", trustProxy);
+  if (trustProxy) {
+    console.error(`Trusting X-Forwarded-For and X-Forwarded-Proto from: ${trustProxy.join(", ")}`);
+  }
   // Browser hardening for every response: the dashboard is never framed (no
   // clickjacking), content types are not sniffed, and links don't leak the
   // dashboard's address to other sites.
