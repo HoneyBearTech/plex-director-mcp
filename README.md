@@ -121,7 +121,7 @@ Multi-arch manifests are published, so pulling the image gets the right one for 
 | Tag | Description |
 | :---: | :--- |
 | `latest` | The most recent build of the `main` branch. Includes changes that have not been given a version number yet. |
-| `1.2.0` | A specific release. Pin one of these if you want to choose when to upgrade. |
+| `1.3.0` | A specific release. Pin one of these if you want to choose when to upgrade. |
 | `1.1` | The newest patch release of a minor version. |
 | `sha-<commit>` | The build of one specific commit, for pinning or bisecting. |
 

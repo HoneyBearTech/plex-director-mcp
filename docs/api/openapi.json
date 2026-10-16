@@ -2,7 +2,7 @@
   "openapi": "3.1.0",
   "info": {
     "title": "Plex Director dashboard API",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "summary": "The JSON API behind the Plex Director web dashboard.",
     "description": "The HTTP API served by the Plex Director web dashboard (src/web/app.ts and src/web/routes/). It is the dashboard's own API, served on the same origin as the dashboard, and may change between versions.\n\nAuthentication: when the WEB_PASSWORD environment variable is set, every /api route except /api/auth/status, /api/auth/login and /api/auth/logout requires the pd_session cookie set by POST /api/auth/login, and answers 401 without it. When WEB_PASSWORD is unset, no route requires authentication. /healthz and the static dashboard files are always public.\n\nAll requests share a rate limit of 300 per minute per client address (429 when exceeded). JSON request bodies are limited to 1 MB (413 when exceeded). Errors are {\"error\": \"...\"}. Any other path under /api returns 404 {\"error\": \"Not found\"}. While WEB_PASSWORD is unset, every route except /healthz answers 403 (text/plain) when the Host header is not an IP address, localhost, a single-label name, a .local/.lan/.home.arpa/.internal name or a name listed in WEB_ALLOWED_HOSTS.",
     "license": {

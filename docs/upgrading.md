@@ -159,7 +159,7 @@ Desktop. If you use `latest`, `docker run` doesn't check for a newer image by it
   yet. Pin a release (1.2.0 or later) to choose when you upgrade.
 - A `sha-` tag, such as `sha-d2bca8a`, is one build of `main` and stays on it. Pin one to keep the `latest`
   build you have tried, and move it on when you choose.
-- A version tag such as `1.2.0` stays on that release. `1.2` moves to each new 1.2.x patch release.
+- A version tag such as `1.3.0` stays on that release. `1.3` moves to each new 1.3.x patch release.
 - A digest (`honeybeartech/plex-director-mcp@sha256:…`, optionally with the tag in front) can't be moved at
   all, not even by someone who could push to the registry. [verifying-releases.md](verifying-releases.md#pin-the-digest)
   shows how to find and check it.

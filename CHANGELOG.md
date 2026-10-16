@@ -7,6 +7,8 @@ a security problem.
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-10-16
+
 ### Changed
 
 - **The Docker image runs as a non-root user** (UID and GID 65532, distroless's `nonroot`) instead of root.
@@ -184,7 +186,8 @@ a security problem.
 - CodeQL analysis of the source.
 - The MIT license.
 
-[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.2.0...HEAD
+[Unreleased]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.3.0...HEAD
+[1.3.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.2.0...v1.3.0
 [1.2.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.1.0...v1.2.0
 [1.1.0]: https://github.com/HoneyBearTech/plex-director-mcp/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/HoneyBearTech/plex-director-mcp/releases/tag/v1.0.0

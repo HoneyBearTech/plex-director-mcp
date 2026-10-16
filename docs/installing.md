@@ -48,11 +48,12 @@ signed ([verifying-releases.md](verifying-releases.md)):
 | :--- | :--- |
 | `latest` | The newest build of the `main` branch, **including changes that are not in a release yet**. |
 | `sha-<commit>` | The build of one commit of `main`, such as `sha-d2bca8a`. It never changes. |
-| `1.2.0` | One release. Pin a release to choose when you upgrade. |
-| `1.2` | The newest patch release of 1.2. |
+| `1.3.0` | One release. Pin a release to choose when you upgrade. |
+| `1.3` | The newest patch release of 1.3. |
 
 > [!IMPORTANT]
-> **Use 1.2.0 or later.** These docs describe 1.2.0. Releases before it are much older: 1.1.0 has **no
+> **Use 1.2.0 or later.** These docs describe 1.3.0, which runs as a non-root user
+> ([upgrading from 1.2.x](upgrading.md#upgrading-to-130-the-container-no-longer-runs-as-root)). Releases before 1.2.0 are much older: 1.1.0 has **no
 > dashboard password** (`WEB_PASSWORD` is ignored), no health check, no Plex or TV tools, no Indexers or Jobs
 > pages and no job runner. See the [changelog](../CHANGELOG.md).
 
@@ -176,7 +177,7 @@ Node.js 24 and Git.
 ```sh
 git clone https://github.com/HoneyBearTech/plex-director-mcp.git
 cd plex-director-mcp
-# main is what these docs describe; for the release instead: git checkout v1.2.0
+# main is what these docs describe; for the release instead: git checkout v1.3.0
 npm install
 (cd web && npm install && npm run build)   # builds the dashboard; without it the web pages don't load
 ```

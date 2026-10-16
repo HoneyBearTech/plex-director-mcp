@@ -24,7 +24,7 @@ GitHub Actions:
 
 | Image | Certificate identity | OIDC issuer |
 | :--- | :--- | :--- |
-| A release, such as `1.2.0` or `1.2` | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.2.0` | `https://token.actions.githubusercontent.com` |
+| A release, such as `1.3.0` or `1.3` | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.3.0` | `https://token.actions.githubusercontent.com` |
 | `latest` and `sha-<commit>` builds | `https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/heads/main` | `https://token.actions.githubusercontent.com` |
 
 Only pushes sign. Pull-request builds are never published.
@@ -32,21 +32,21 @@ Only pushes sign. Pull-request builds are never published.
 ## Verify a release image
 
 ```sh
-cosign verify honeybeartech/plex-director-mcp:1.2.0 \
-  --certificate-identity 'https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.2.0' \
+cosign verify honeybeartech/plex-director-mcp:1.3.0 \
+  --certificate-identity 'https://github.com/HoneyBearTech/plex-director-mcp/.github/workflows/ci.yml@refs/tags/v1.3.0' \
   --certificate-oidc-issuer https://token.actions.githubusercontent.com
 ```
 
-For the GHCR copy, use `ghcr.io/honeybeartech/plex-director-mcp:1.2.0` with the same flags. cosign lists the
+For the GHCR copy, use `ghcr.io/honeybeartech/plex-director-mcp:1.3.0` with the same flags. cosign lists the
 checks it made and prints the signature's claims as JSON. Among them you should see the repository
-(`HoneyBearTech/plex-director-mcp`), the ref (`refs/tags/v1.2.0`), the commit it was built from, and the
+(`HoneyBearTech/plex-director-mcp`), the ref (`refs/tags/v1.3.0`), the commit it was built from, and the
 digest of the image index that was signed.
 
 To check those claims as part of the command rather than by reading them, add:
 
 ```sh
   --certificate-github-workflow-repository HoneyBearTech/plex-director-mcp \
-  --certificate-github-workflow-ref refs/tags/v1.2.0 \
+  --certificate-github-workflow-ref refs/tags/v1.3.0 \
   --certificate-github-workflow-trigger push
 ```
 

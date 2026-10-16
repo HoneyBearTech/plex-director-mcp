@@ -1,6 +1,6 @@
 {
   "name": "plex-director-mcp",
-  "version": "1.2.0",
+  "version": "1.3.0",
   "description": "A Plex Director MCP that will manage my Servarr Stack",
   "main": "index.js",
   "scripts": {
