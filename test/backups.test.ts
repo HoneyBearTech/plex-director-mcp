@@ -6,7 +6,10 @@ import { setSetting } from "../src/settings.js";
 import { runServarrBackups } from "../src/backups.js";
 import { fakeApi, resetDb, type FakeReply, type RecordedRequest } from "./helpers.js";
 
-const FAST = { pollMs: 1, timeoutMs: 200 };
+// Polls fast. The deadline only has to be long enough never to hit on a
+// loaded machine (200 ms once expired mid-test); the test that is about the
+// deadline passes its own short one.
+const FAST = { pollMs: 1, timeoutMs: 10_000 };
 const NOW = Date.now();
 const iso = (offsetMs: number) => new Date(NOW + offsetMs).toISOString().replace(/\.\d{3}Z$/, "Z");
 
