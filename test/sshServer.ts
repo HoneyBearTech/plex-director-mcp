@@ -45,6 +45,8 @@ export async function startSshServer(opts: {
   authorizedPublicKey: string;
   user?: string;
   output?: string;
+  // Accept the command but never answer or finish it.
+  hang?: boolean;
 }): Promise<TestSshServer> {
   const hostKey = opts.hostKey ?? generateKeyPair();
   const user = opts.user ?? "tester";
@@ -69,6 +71,7 @@ export async function startSshServer(opts: {
         accept().on("exec", (acceptExec) => {
           commands++;
           const stream = acceptExec();
+          if (opts.hang) return;
           stream.write(opts.output ?? "ok\n");
           stream.exit(0);
           stream.end();

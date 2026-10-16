@@ -2,6 +2,7 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import { createRequire } from "node:module";
+import net from "node:net";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
@@ -196,6 +197,54 @@ describe("runRemoteCommand: keys and configuration", () => {
 
   it("reports a host that isn't listening", async () => {
     await assert.rejects(runRemoteCommand("127.0.0.1:1", "x"), /ECONNREFUSED/);
+  });
+});
+
+describe("runRemoteCommand: limits", () => {
+  it("gives up on a command that never finishes", async () => {
+    const hung = await startSshServer({ authorizedPublicKey: client.publicKey, hang: true });
+    try {
+      const started = Date.now();
+      await assert.rejects(
+        runRemoteCommand(`127.0.0.1:${hung.port}`, "x", { timeoutMs: 1500 }),
+        /did not finish within 1\.5 seconds/,
+      );
+      assert.ok(Date.now() - started < 5000, "stopped at the deadline");
+      assert.equal(hung.commandsRun(), 1);
+    } finally {
+      await hung.close();
+    }
+  });
+
+  it("gives up on a host that accepts the connection but never speaks SSH", async () => {
+    const silent = net.createServer(() => {});
+    await new Promise<void>((resolve) => silent.listen(0, "127.0.0.1", () => resolve()));
+    try {
+      const { port } = silent.address() as net.AddressInfo;
+      await assert.rejects(runRemoteCommand(`127.0.0.1:${port}`, "x", { timeoutMs: 1000 }));
+    } finally {
+      silent.close();
+    }
+  });
+
+  it("stops reading output beyond the cap instead of buffering it", async () => {
+    const noisy = await startSshServer({
+      authorizedPublicKey: client.publicKey,
+      output: "x".repeat(64 * 1024),
+    });
+    try {
+      await assert.rejects(
+        runRemoteCommand(`127.0.0.1:${noisy.port}`, "x", { maxOutputBytes: 1024 }),
+        /sent more than 1024 bytes of output/,
+      );
+      // Under the cap, the same output is returned whole.
+      const output = await runRemoteCommand(`127.0.0.1:${noisy.port}`, "x", {
+        maxOutputBytes: 128 * 1024,
+      });
+      assert.equal(output.length, 64 * 1024);
+    } finally {
+      await noisy.close();
+    }
   });
 });
 
