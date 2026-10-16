@@ -285,13 +285,12 @@ Nothing is required to start the container: it boots with no configuration and l
 
 ### Read-only and non-root operation
 
-By default the container runs as root, which lets it write to whatever you mount at `/app/data`. The image itself has no shell or package manager. If you would rather it didn't run as root, or want a read-only filesystem, both work; the data directory is the only place it writes, so it just has to be writable by the user you choose.
+The container runs as a non-root user, UID and GID **65532** (distroless's `nonroot`), from 1.3.0 on; earlier versions ran as root. The image has no shell or package manager, and the data directory is the only place it writes, so it also runs with a read-only filesystem and no capabilities:
 
 ```yaml
 services:
   plex-director:
     image: honeybeartech/plex-director-mcp:latest
-    user: "1000:1000"
     read_only: true
     cap_drop:
       - ALL
@@ -303,9 +302,9 @@ services:
       - 3000:3000
 ```
 
-Or with the CLI: `--user 1000:1000 --read-only --cap-drop ALL --security-opt no-new-privileges:true`.
+Or with the CLI: `--read-only --cap-drop ALL --security-opt no-new-privileges:true`.
 
-Make sure the data directory is writable by that user first, for example `chown -R 1000:1000 /path/to/plex-director/data` (a Docker-created named volume is owned by root). If it is not, the container exits at startup with `SqliteError: unable to open database file`. If you use SSH host monitoring, the mounted key must also be readable by that user.
+A **named volume** works as it is: Docker gives a new volume the image's ownership of `/app/data`. A **host folder** must belong to UID 65532 first: `sudo chown -R 65532:65532 /path/to/plex-director/data`. To run as another user instead, for example one that already owns the folder, add `user: "1000:1000"` (or `--user 1000:1000`). If the data directory isn't writable, the container stops at startup and prints the `chown` to run. Upgrading from 1.2.x or earlier, whose data belongs to root: see [upgrading](docs/upgrading.md#upgrading-to-130-the-container-no-longer-runs-as-root). If you use SSH host monitoring, the mounted key must also be readable by the container's user.
 
 ### Updating
 
@@ -489,7 +488,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 - **Secrets stay on the server.** The Settings page never returns a saved key or token, and Plex artwork is fetched through a server-side proxy so the Plex token never reaches your browser.
 - **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
 - **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes torrents and their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
-- The image runs as root by default; see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down.
+- The image runs as a non-root user (UID 65532); see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down further.
 
 ## Development
 

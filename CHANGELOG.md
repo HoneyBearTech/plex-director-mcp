@@ -7,6 +7,14 @@ a security problem.
 
 ## [Unreleased]
 
+### Changed
+
+- **The Docker image runs as a non-root user** (UID and GID 65532, distroless's `nonroot`) instead of root.
+  A new named volume gets the right owner automatically. **Upgrading:** a data folder or volume written by an
+  earlier version belongs to root, so `chown -R 65532:65532` it once (or set `user:` to its owner); until then
+  the container stops at start-up and prints the command to run. See
+  [docs/upgrading.md](docs/upgrading.md#upgrading-to-130-the-container-no-longer-runs-as-root).
+
 ### Added
 
 - **Linting and formatting in CI.** [Biome](https://biomejs.dev/) checks the backend, tests and dashboard on
@@ -21,6 +29,9 @@ a security problem.
 
 ### Fixed
 
+- A local `docker build` copied the host's `web/node_modules` into the image build and failed:
+  `.dockerignore` patterns only matched at the top level. They now match in every folder, which also keeps
+  stray `.env`, key and database files in subfolders out of the build context.
 - The dashboard's polling hook now always calls the latest fetch function instead of the one from the first
   render.
 
