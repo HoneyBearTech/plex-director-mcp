@@ -63,9 +63,8 @@ What works today:
 
 **Security and project health**
 - **Done (October 2026):** [Biome](https://biomejs.dev/) lints and formats the backend, tests and
-  dashboard in CI; a lint error or unformatted file fails the build.
-- **Planned:** type the service payloads that are still `any` in `src/` (about 130 warnings today) so that
-  lint warnings can fail the build too.
+  dashboard in CI; a lint error, a lint warning or an unformatted file fails the build. Every service
+  response is typed (`src/types/`), with no `any` left in `src/`.
 - **Done (October 2026):** a test coverage floor in CI (80% of lines; 93% today), secret scanning with
   gitleaks, dependency review and a DCO sign-off check on every pull request.
 - **Done (October 2026, first shipped in v1.2.0):** an SPDX SBOM and SLSA build provenance attached to every
