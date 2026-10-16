@@ -111,10 +111,10 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 ## Hardening facts
 
 - **Container:** the runtime image is distroless (`gcr.io/distroless/nodejs24-debian12`), with no shell,
-  package manager, `curl` or `wget`, and base images are pinned by digest. It **runs as root by default**
-  (the Dockerfile has no `USER`) so that it can write to a root-owned data volume. It works unchanged as
-  a non-root user, with a read-only root filesystem, all capabilities dropped and `no-new-privileges`; the
-  README's [Read-only and non-root operation](../README.md#read-only-and-non-root-operation) shows how.
+  package manager, `curl` or `wget`, and base images are pinned by digest. It runs as a **non-root
+  user** (UID 65532, `USER` in the Dockerfile) from 1.3.0, and also works with a read-only root filesystem,
+  all capabilities dropped and `no-new-privileges`; the README's
+  [Read-only and non-root operation](../README.md#read-only-and-non-root-operation) shows how.
   `/app/data` is the only place it writes.
 - **HTTP headers:** every response carries `X-Frame-Options: DENY` and `Content-Security-Policy:
   frame-ancestors 'none'` (the dashboard can't be framed), `X-Content-Type-Options: nosniff` and
@@ -139,7 +139,7 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 2. Keep port 3000 on your LAN; do not forward it from your router.
 3. Give each service the least access that works (for example a dedicated qBittorrent user, an
    unprivileged SSH user that can run `docker ps`).
-4. Run the container as a non-root user with a read-only filesystem.
+4. Keep the container's default non-root user, and add a read-only filesystem with no capabilities.
 5. Keep tool approval on in Claude Desktop, and read what a tool will do before allowing it.
 6. Back up `/app/data` somewhere only you can read.
 7. Pin a version tag and verify the image signature before upgrading.

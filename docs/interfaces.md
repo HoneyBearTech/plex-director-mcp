@@ -111,7 +111,7 @@ Outside Docker, a `.env` file in the repository root is read at start-up (`src/e
 | Volume | `/app/data` (SQLite database: settings, credentials, jobs, session secret, SSH host keys). The only path written to. |
 | Optional mount | a private SSH key, read-only, at the path given in `SSH_KEY_PATH` |
 | Health check | built in: every 30 s, timeout 5 s, start period 15 s, 3 retries; Node fetches `http://127.0.0.1:$WEB_PORT/healthz` |
-| User | root by default; runs as any user that can write `/app/data` |
+| User | `65532:65532` (distroless `nonroot`) from 1.3.0, root before; runs as any user that can write `/app/data` |
 | Signature | cosign keyless (GitHub OIDC); see [verifying-releases.md](verifying-releases.md) |
 
 ## Interfaces Plex Director uses

@@ -2,13 +2,24 @@ import fs from "node:fs";
 import path from "node:path";
 import Database from "better-sqlite3";
 import { projectRoot } from "./env.js";
+import { dataDirProblem } from "./dataDir.js";
 
 const dataDir = path.join(projectRoot, "data");
 // PLEX_DIRECTOR_DB_PATH lets the test suite use a throwaway database instead
 // of the real one in data/.
 const dbPath = process.env.PLEX_DIRECTOR_DB_PATH || path.join(dataDir, "plex_director.db");
 
-fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+try {
+  fs.mkdirSync(path.dirname(dbPath), { recursive: true });
+} catch {
+  // Reported just below, with the fix.
+}
+const problem = dataDirProblem(dbPath);
+if (problem) {
+  // stderr: stdout belongs to the MCP protocol.
+  console.error(`❌ ${problem}`);
+  process.exit(1);
+}
 export const db: Database.Database = new Database(dbPath);
 
 // Keep job state durable so long-running media operations can resume across MCP restarts.

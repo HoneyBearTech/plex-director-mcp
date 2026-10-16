@@ -79,7 +79,7 @@ cd /opt/plex-director
 sudo docker compose stop
 sudo rm -f data/plex_director.db data/plex_director.db-journal
 sudo tar xzf plex-director-data-2026-10-15.tgz -C data      # or: sudo cp plex_director-2026-10-15.db data/plex_director.db
-sudo chown -R 1000:1000 data                                # the user the container runs as, if not root
+sudo chown -R 65532:65532 data                              # the container's user (or the one you set with user:)
 sudo docker compose start
 ```
 
@@ -113,6 +113,35 @@ and restore over that.
    ```
 
 A job that was running carries on where it stopped: progress is saved after every movie.
+
+### Upgrading to 1.3.0: the container no longer runs as root
+
+From 1.3.0 the image runs as UID and GID 65532 instead of root. Data written by an earlier version belongs to
+root, so give it to the new user once, with Plex Director stopped (including any Claude Desktop container on
+the same data). Without this the container stops at start-up and prints the same advice.
+
+- **A host folder** (the Compose example's `./data`):
+
+  ```sh
+  cd /opt/plex-director
+  sudo docker compose stop
+  sudo chown -R 65532:65532 data
+  sudo docker compose up -d
+  ```
+
+- **A named volume** (for example `plex-director-data`), with a throwaway container since the image has no
+  `chown` of its own:
+
+  ```sh
+  docker run --rm -v plex-director-data:/data busybox chown -R 65532:65532 /data
+  ```
+
+- **Or keep the old owner:** set `user:` (or `--user`) to the UID that owns the data, for example
+  `user: "1000:1000"` if you already ran it that way, or `user: "0:0"` to stay root (not recommended).
+
+The same applies to a database you copy into a volume by hand (`docker cp` writes files as root): `chown` it
+as above afterwards. Rolling back to 1.2.x after the `chown` works without changes, since that image runs as
+root.
 
 **Docker CLI:** `docker pull` the new tag, `docker stop plex-director && docker rm plex-director`, then run the
 same `docker run` command with the new tag.

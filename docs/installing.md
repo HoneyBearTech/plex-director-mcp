@@ -95,7 +95,6 @@ services:
       # - /home/you/.ssh/plex_director_ed25519:/ssh/id_ed25519:ro   # optional, host monitoring
     ports:
       - 3000:3000
-    user: "1000:1000"
     read_only: true
     cap_drop:
       - ALL
@@ -104,12 +103,12 @@ services:
     restart: unless-stopped
 ```
 
-The `user`, `read_only`, `cap_drop` and `security_opt` lines are optional but recommended
-([below](#run-as-a-non-root-user-with-a-read-only-filesystem)). With them, the data directory must belong to
-that user first:
+The `read_only`, `cap_drop` and `security_opt` lines are optional but recommended
+([below](#run-as-a-non-root-user-with-a-read-only-filesystem)). The container runs as UID 65532, not root, so
+the data directory must belong to that user first:
 
 ```sh
-sudo chown -R 1000:1000 data
+sudo chown -R 65532:65532 data
 sudo docker compose up -d
 sudo docker compose ps
 ```
@@ -125,12 +124,13 @@ docker run -d \
   --env-file /opt/plex-director/plex-director.env \
   -p 3000:3000 \
   -v /opt/plex-director/data:/app/data \
-  --user 1000:1000 --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+  --read-only --cap-drop ALL --security-opt no-new-privileges:true \
   --restart unless-stopped \
   honeybeartech/plex-director-mcp:latest
 ```
 
-Add more variables with more `-e NAME=value` flags or lines in the env file. For host monitoring, add
+As with Compose, `sudo chown -R 65532:65532 /opt/plex-director/data` first. Add more variables with more
+`-e NAME=value` flags or lines in the env file. For host monitoring, add
 `-v /home/you/.ssh/plex_director_ed25519:/ssh/id_ed25519:ro` and `SSH_KEY_PATH=/ssh/id_ed25519`.
 
 ## Option 3: Claude Desktop
@@ -162,9 +162,9 @@ Restart Claude Desktop, and the `plex-director` server appears with its 25 tools
 - Use the same data folder (or named volume, such as `-v plex-director-data:/app/data`) as your dashboard
   container, so both see the same settings and jobs. Without a dashboard, put the service settings in the env
   file instead ([Settings](#settings)).
-- You can add `--read-only`, `--cap-drop ALL` and `--security-opt no-new-privileges:true` here too. If your
-  dashboard container runs with `user: "1000:1000"`, add the same `--user 1000:1000`, so both can write the
-  shared database.
+- You can add `--read-only`, `--cap-drop ALL` and `--security-opt no-new-privileges:true` here too. Both
+  containers run as UID 65532, so they can share the database; if you gave the dashboard another `user:`,
+  give this container the same `--user`.
 - If Claude Desktop can't find `docker`, give its full path in `command` (see `which docker`).
 - Quitting Claude Desktop stops the container; `--rm` removes it.
 
@@ -305,11 +305,13 @@ password; there are no separate users.
 
 ### Run as a non-root user, with a read-only filesystem
 
-By default the container runs as root. The image is distroless (no shell or package manager), and
-`/app/data` is the only place it writes, so it runs fine as any user, read-only, with no capabilities, as in
-the Compose example above. The data directory must be writable by that user (`chown -R 1000:1000 data`; a
-volume Docker creates is owned by root). If it isn't, the container stops at start-up with
-`SqliteError: unable to open database file`.
+From 1.3.0 the container runs as UID and GID 65532 (distroless's `nonroot` user), not root. The image is
+distroless (no shell or package manager), and `/app/data` is the only place it writes, so it also runs
+read-only with no capabilities, as in the Compose example above. The data directory must be writable by the
+container's user: `chown -R 65532:65532 data` for a host folder, while a new named volume already is. To run
+as a different user, for example one that owns an existing folder, set `user:` (or `--user`). If the folder
+isn't writable, the container stops at start-up and prints the command that fixes it. Coming from 1.2.x or
+earlier, see [upgrading](upgrading.md#upgrading-to-130-the-container-no-longer-runs-as-root).
 
 ### Keep secrets out of files others can read
 
@@ -328,7 +330,7 @@ volume Docker creates is owned by root). If it isn't, the container stops at sta
   systems that group is as good as root on that host. If you'd rather not give it, leave the user out of the
   group: the containers column then shows 0.
 - Mount the key read-only (`:ro`), as a single file, and make sure the container's user can read it
-  (with `user: "1000:1000"`, `chown 1000:1000` the key file on the host).
+  (`sudo chown 65532:65532` the key file on the host, or the UID you set with `user:`).
 - Each host's key is remembered the first time it connects, and a different key is refused after that. That
   protects against a host being swapped *after* first contact, not during the first connection itself, so add
   hosts while you are on a network you trust. When the **Node Utilization** page reports a changed key, it
