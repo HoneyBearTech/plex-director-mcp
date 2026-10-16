@@ -898,6 +898,10 @@ export const movieTools: MovieTool[] = definitions.map(withValidation);
 // Movie lookup and missing-media diagnostics.
 export function registerMovieTools() {
   for (const tool of movieTools) {
-    server.tool(tool.name, tool.description, tool.zodSchema, tool.handler);
+    server.registerTool(
+      tool.name,
+      { description: tool.description, inputSchema: tool.zodSchema },
+      tool.handler,
+    );
   }
 }
