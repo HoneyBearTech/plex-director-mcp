@@ -142,6 +142,42 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 - **Releases:** images are signed with cosign keyless signing; see
   [verifying-releases.md](verifying-releases.md).
 
+## Dependency and code-scanning policy
+
+**Checked on every change.** Each pull request and push runs `npm audit --audit-level=high` for the
+server and the dashboard, GitHub's dependency review (which fails on a new dependency with a moderate or
+worse advisory, a malware advisory, or a licence outside the allow-list in
+`.github/workflows/dependency-review.yml`), CodeQL's security queries and a secret scan. These are
+required checks on `main`, and the branch ruleset also blocks a pull request that introduces a CodeQL
+alert of high or critical severity, or an error. Each published image is scanned with Docker Scout; that scan reports but doesn't block, since a new base-image finding usually needs an upstream rebuild first.
+
+**How fast findings are fixed:**
+
+| Finding | Fixed within |
+| --- | --- |
+| Known vulnerability in an npm dependency, critical or high | 30 days of it being known; a pull request that adds one can't merge |
+| Known vulnerability in the base image, critical or high | 30 days of the scan reporting it, by moving to a fixed base image |
+| Either kind, moderate | 90 days |
+| Either kind, low | the next routine update |
+| A dependency with a disallowed licence | never merged; replaced if a licence changes later |
+| CodeQL security alert, high or critical | before merge (blocked) |
+| CodeQL security alert, medium | 30 days |
+| CodeQL security alert, low, or a note | reviewed before the next release |
+
+**Before a release** there must be no open critical or high finding of either kind, from `npm audit`,
+dependency review, CodeQL or the image scan, unless it is shown not to affect Plex Director and recorded
+as below.
+
+**Not affected.** A false positive is dismissed in GitHub code scanning with the reason written down. A
+known vulnerability in a component that Plex Director doesn't use in an affected way is recorded as an
+[OpenVEX](https://openvex.dev/) statement in the release notes and in the advisory, if there is one, saying
+why it doesn't apply. None is open at the moment.
+
+## Security reviews
+
+The latest review, its scope and what came of it are in
+[security-review-2026-10.md](security-review-2026-10.md).
+
 ## Using it safely
 
 1. Set `WEB_PASSWORD` to a long, unique password.
