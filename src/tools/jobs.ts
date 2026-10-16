@@ -3,8 +3,11 @@ import { server } from "../server.js";
 import { db, type SystemJobRow } from "../db.js";
 import { radarrClient } from "../clients.js";
 import { textReply, getErrorMessage } from "../util.js";
-import { stepJob } from "../jobs.js";
+import { stepJob, updateJobStatus } from "../jobs.js";
 import type { RadarrLibraryMovie } from "../types/radarr.js";
+
+// One job never schedules more searches than this, however it is asked.
+const MAX_BATCH_SIZE = 100;
 
 // Durable batch-job planning, execution, and status management.
 export function registerJobTools() {
@@ -41,21 +44,8 @@ export function registerJobTools() {
         .describe("The action to execute on the queue runtime."),
     },
     async ({ jobId, action }) => {
-      let targetStatus = "PENDING";
-      if (action === "PAUSE") targetStatus = "PAUSED";
-      if (action === "RESUME") targetStatus = "RUNNING";
-      if (action === "CANCEL") targetStatus = "CANCELLED";
-
-      const stmt = db.prepare(
-        "UPDATE system_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-      );
-      const result = stmt.run(targetStatus, jobId);
-
-      if (result.changes === 0) {
-        return textReply(`Job #${jobId} could not be found to modify.`, true);
-      }
-
-      return textReply(`Successfully updated Job #${jobId} status to ${targetStatus}.`);
+      const { ok, message } = updateJobStatus(jobId, action);
+      return textReply(message, !ok);
     },
   );
 
@@ -71,9 +61,12 @@ export function registerJobTools() {
         .describe("The target processing quality resolution threshold."),
       maxBatchSize: z
         .number()
+        .int()
+        .min(1)
+        .max(MAX_BATCH_SIZE)
         .optional()
         .default(25)
-        .describe("Limits the maximum number of edits in a single batch."),
+        .describe(`Limits the maximum number of edits in a single batch (1 to ${MAX_BATCH_SIZE}).`),
     },
     async ({ mediaType, targetResolution, maxBatchSize }) => {
       if (mediaType === "tv") {

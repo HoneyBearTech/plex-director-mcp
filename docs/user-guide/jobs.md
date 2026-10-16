@@ -9,7 +9,7 @@ controlled from Claude Desktop; the dashboard's **Jobs** page shows their progre
 
 "Plan an upgrade of my movies below 1080p." It reads every movie in Radarr and picks the **monitored** ones that
 either have no file yet or whose file is below 1080p (anything not 1080p, 2160p or 4K). It takes up to 25 of them
-(or the number you ask for) into a new job, and replies with the job number, how many movies qualified, and a
+(or the number you ask for, at most 100) into a new job, and replies with the job number, how many movies qualified, and a
 few of the titles.
 
 - The job starts as **`PENDING`**: nothing has been searched yet.
@@ -42,9 +42,12 @@ total, not per job: with two jobs running, the older one is worked through first
 | :--- | :--- | :--- |
 | "Pause job 3" | `update_job_status` `PAUSE` | **`PAUSED`**: the runner leaves it alone until it is resumed. |
 | "Resume job 3" | `update_job_status` `RESUME` | **`RUNNING`** again, from where it stopped. |
-| "Cancel job 3" | `update_job_status` `CANCEL` | **`CANCELLED`**: the runner never touches it. (Resuming a cancelled job does start it again.) |
+| "Cancel job 3" | `update_job_status` `CANCEL` | **`CANCELLED`**, for good: a cancelled or completed job can't be resumed or paused. Plan a new one instead. |
 | "Run the next step of job 3" | `execute_next_job_step` | Searches the next movie straight away, without waiting for the runner. Stepping a `PENDING` job this way also starts it. A paused job has to be resumed first. |
 | "What jobs are there?" | `get_background_jobs` | The ten newest jobs, with their status and progress. |
+
+A change that doesn't fit the job's state (pausing a job that is already paused, resuming one that is running)
+is refused with the job's current state, and nothing changes.
 
 Already-searched movies stay searched: pausing or cancelling stops further searches, but doesn't undo the ones
 that were sent or anything Radarr has grabbed since.
