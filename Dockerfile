@@ -12,6 +12,9 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npx tsc --outDir dist --rootDir src
 RUN npm prune --omit=dev
+# An empty data folder for the runtime stage to own (distroless has no shell to
+# mkdir/chown with).
+RUN mkdir -p /out/data
 
 # Separate stage (no native compilation, no toolchain needed) so it builds
 # independently of - and in parallel with - the backend.
@@ -35,6 +38,14 @@ COPY package.json package-lock.json LICENSE ./
 COPY --from=backend-builder /app/node_modules ./node_modules
 COPY --from=backend-builder /app/dist ./dist
 COPY --from=frontend-builder /app/web/dist ./web/dist
+# Owned by the user below. Docker copies this ownership into a named volume the
+# first time it is mounted here, so a fresh volume works without a chown; a host
+# folder (bind mount) still needs one: see docs/upgrading.md.
+COPY --from=backend-builder --chown=65532:65532 /out/data ./data
+
+# distroless's built-in "nonroot" user, by number so runAsNonRoot checks can
+# verify it. Override with --user (e.g. to match a host folder's owner).
+USER 65532:65532
 
 EXPOSE 3000
 

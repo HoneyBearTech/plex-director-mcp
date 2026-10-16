@@ -137,9 +137,21 @@ jobs:
           echo "image label: $label / server.json: $name"
           [ "$label" = "$name" ]
 
+      # The image must not drift back to root (see docs/upgrading.md, 1.3.0).
+      - name: Check the image runs as the non-root user
+        run: |
+          user=$(docker inspect smoke-test:latest --format '{{ .Config.User }}')
+          echo "image user: $user"
+          [ "$user" = "65532:65532" ]
+
+      # Runs hardened and on a fresh named volume, as the docs recommend: proves
+      # the image's /app/data ownership carries into a new volume and that
+      # nothing writes outside it.
       - name: Smoke test - verify the image boots
         run: |
           docker run -d --name smoke-test \
+            -v smoke-data:/app/data \
+            --read-only --cap-drop ALL --security-opt no-new-privileges:true \
             -e RADARR_URL=http://smoke-test.invalid -e RADARR_API_KEY=dummy \
             -e SABNZBD_URL=http://smoke-test.invalid -e SABNZBD_API_KEY=dummy \
             -e TAUTULLI_URL=http://smoke-test.invalid -e TAUTULLI_API_KEY=dummy \
@@ -160,6 +172,7 @@ jobs:
             if [ -n "$stdio_ok" ] && [ -n "$web_ok" ]; then
               echo "Smoke test passed (stdio + web UI both up)"
               docker rm -f smoke-test
+              docker volume rm smoke-data
               exit 0
             fi
             sleep 1
@@ -168,6 +181,7 @@ jobs:
           echo "::error::Smoke test failed within 10s - stdio ready: ${stdio_ok:-no}, web UI ready: ${web_ok:-no}"
           docker logs smoke-test
           docker rm -f smoke-test
+          docker volume rm smoke-data
           exit 1
 
       - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
