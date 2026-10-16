@@ -629,7 +629,7 @@
         }
       },
       "Image": {
-        "description": "The image, with the content type the upstream server reported (image/jpeg by default) and Cache-Control: public, max-age=86400.",
+        "description": "The image (JPEG, PNG, WebP or GIF; image/jpeg when the upstream server names no type) with Cache-Control: private, max-age=86400. A reply of any other type is refused with a 502.",
         "content": {
           "image/*": {
             "schema": { "type": "string", "contentMediaType": "image/*" }

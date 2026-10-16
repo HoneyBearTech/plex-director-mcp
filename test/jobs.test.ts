@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { radarrClient } from "../src/clients.js";
 import { db } from "../src/db.js";
-import { stepJob } from "../src/jobs.js";
+import { stepJob, updateJobStatus } from "../src/jobs.js";
 import { getRunnerIntervalSeconds, runJobRunnerTick } from "../src/jobRunner.js";
 import { fakeApi, resetDb } from "./helpers.js";
 
@@ -39,6 +39,40 @@ const row = (id: number) =>
     status: string;
     done: number;
   };
+
+describe("updateJobStatus", () => {
+  it("pauses, resumes and cancels jobs whose state allows it", () => {
+    const id = job("PENDING", [1]);
+    assert.equal(updateJobStatus(id, "RESUME").ok, true, "RESUME starts a pending job");
+    assert.equal(row(id).status, "RUNNING");
+    assert.equal(updateJobStatus(id, "PAUSE").ok, true);
+    assert.equal(row(id).status, "PAUSED");
+    assert.equal(updateJobStatus(id, "RESUME").ok, true);
+    assert.equal(updateJobStatus(id, "CANCEL").ok, true);
+    assert.equal(row(id).status, "CANCELLED");
+  });
+
+  it("never revives a finished job", () => {
+    for (const status of ["COMPLETED", "CANCELLED"]) {
+      const id = job(status, [1]);
+      for (const action of ["PAUSE", "RESUME", "CANCEL"] as const) {
+        const result = updateJobStatus(id, action);
+        assert.equal(result.ok, false, `${action} on ${status}`);
+        assert.match(result.message, new RegExp(`is ${status}; ${action} only applies`));
+      }
+      assert.equal(row(id).status, status);
+    }
+  });
+
+  it("refuses a no-op change and reports an unknown job", () => {
+    assert.equal(updateJobStatus(job("RUNNING", [1]), "RESUME").ok, false);
+    assert.equal(updateJobStatus(job("PAUSED", [1]), "PAUSE").ok, false);
+    assert.deepEqual(updateJobStatus(999_999, "CANCEL"), {
+      ok: false,
+      message: "Job #999999 could not be found to modify.",
+    });
+  });
+});
 
 describe("stepJob", () => {
   it("searches exactly one movie per step and completes after the last", async () => {

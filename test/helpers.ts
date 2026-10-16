@@ -17,6 +17,8 @@ export interface RecordedRequest {
   // Parsed JSON when the body is JSON, otherwise the raw string.
   body: unknown;
   headers: Record<string, string>;
+  // The request's limits, for code that must set them.
+  limits: { timeout?: number; maxContentLength?: number; maxRedirects?: number };
 }
 
 export type FakeReply = {
@@ -45,6 +47,13 @@ function record(config: InternalAxiosRequestConfig): RecordedRequest {
     params: (config.params ?? {}) as Record<string, unknown>,
     body,
     headers,
+    limits: {
+      ...(config.timeout !== undefined ? { timeout: config.timeout } : {}),
+      ...(config.maxContentLength !== undefined
+        ? { maxContentLength: config.maxContentLength }
+        : {}),
+      ...(config.maxRedirects !== undefined ? { maxRedirects: config.maxRedirects } : {}),
+    },
   };
 }
 

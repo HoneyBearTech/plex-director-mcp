@@ -58,6 +58,20 @@ export function rowPlays(item: TautulliStatRow): number {
   return item.total_plays ?? item.play_count ?? item.count ?? 0;
 }
 
+// Image types this app passes on, to a browser or an MCP client. A missing
+// Content-Type is taken as JPEG (what Plex and TMDb serve); any other type is
+// refused (null).
+const IMAGE_TYPES = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+
+export function imageType(header: unknown): string | null {
+  const type =
+    String(header ?? "")
+      .split(";")[0]
+      ?.trim()
+      .toLowerCase() || "image/jpeg";
+  return IMAGE_TYPES.has(type) ? type : null;
+}
+
 // Escapes text for use inside a Markdown table cell. Backslashes first, then
 // pipes: escaping only the pipe would let a trailing "\\" cancel the pipe's
 // escape and break the row (CodeQL js/incomplete-sanitization).

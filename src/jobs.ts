@@ -13,6 +13,42 @@ export interface StepResult {
   message: string;
 }
 
+export type JobAction = "PAUSE" | "RESUME" | "CANCEL";
+
+// The states each action may leave from. COMPLETED and CANCELLED are final.
+// RESUME also starts a PENDING job: the runner only steps RUNNING ones.
+const TRANSITIONS: Record<JobAction, { to: string; from: string[] }> = {
+  PAUSE: { to: "PAUSED", from: ["PENDING", "RUNNING"] },
+  RESUME: { to: "RUNNING", from: ["PENDING", "PAUSED"] },
+  CANCEL: { to: "CANCELLED", from: ["PENDING", "RUNNING", "PAUSED"] },
+};
+
+// Pauses, resumes or cancels a job, if its current state allows it. The check
+// and the change are one UPDATE, so a job finishing meanwhile can't be revived.
+export function updateJobStatus(
+  jobId: number,
+  action: JobAction,
+): { ok: boolean; message: string } {
+  const { to, from } = TRANSITIONS[action];
+  const result = db
+    .prepare(
+      `UPDATE system_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP
+       WHERE id = ? AND status IN (${from.map(() => "?").join(", ")})`,
+    )
+    .run(to, jobId, ...from);
+  if (result.changes > 0) {
+    return { ok: true, message: `Successfully updated Job #${jobId} status to ${to}.` };
+  }
+  const job = db.prepare("SELECT status FROM system_jobs WHERE id = ?").get(jobId) as
+    | Pick<SystemJobRow, "status">
+    | undefined;
+  if (!job) return { ok: false, message: `Job #${jobId} could not be found to modify.` };
+  return {
+    ok: false,
+    message: `Job #${jobId} is ${job.status}; ${action} only applies to a job that is ${from.join(" or ")}.`,
+  };
+}
+
 // Advances one job by exactly one item (one Radarr MoviesSearch), so a large
 // batch can't flood Radarr or the indexers.
 //

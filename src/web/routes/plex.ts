@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { plexClient } from "../../clients.js";
 import { getErrorMessage } from "../../util.js";
+import { sendImage } from "../images.js";
 
 export const plexRouter = Router();
 
@@ -16,13 +17,11 @@ plexRouter.get("/image", async (req, res) => {
   }
 
   try {
-    const response = await plexClient.get("/photo/:/transcode", {
+    const response = await plexClient.get<ArrayBuffer>("/photo/:/transcode", {
       params: { url: path, width: 150, height: 225, minSize: 1, upscale: 1 },
       responseType: "arraybuffer",
     });
-    res.setHeader("Content-Type", String(response.headers["content-type"] || "image/jpeg"));
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.send(Buffer.from(response.data));
+    sendImage(res, response);
   } catch (error) {
     res.status(502).json({ error: getErrorMessage(error) });
   }

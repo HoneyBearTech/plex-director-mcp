@@ -1,7 +1,7 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
-import { plexClient, prowlarrClient, qbitClient } from "../src/clients.js";
+import { plexClient, prowlarrClient, qbitClient, tautulliClient } from "../src/clients.js";
 import { db } from "../src/db.js";
 import { getSetting, setSetting } from "../src/settings.js";
 import { buildHistoryMessages } from "../src/web/chat.js";
@@ -215,12 +215,29 @@ describe("Plex image proxy", () => {
       );
       assert.equal(res.status, 200);
       assert.equal(res.headers.get("content-type"), "image/jpeg");
-      assert.match(res.headers.get("cache-control") ?? "", /max-age=86400/);
+      // Behind the login: this browser may cache it, a shared cache may not.
+      assert.equal(res.headers.get("cache-control"), "private, max-age=86400");
       assert.equal(Buffer.from(await res.arrayBuffer()).toString(), "jpegbytes");
       assert.equal(fake.calls[0]!.url, "/photo/:/transcode");
       assert.equal(fake.calls[0]!.params.url, "/library/metadata/91684/thumb/1789285096");
     } finally {
       fake.restore();
+    }
+  });
+
+  it("refuses to pass on anything that isn't an image", async () => {
+    for (const type of ["text/html", "image/svg+xml", "application/javascript"]) {
+      const fake = fakeApi(plexClient, () => ({
+        data: Buffer.from("<script>alert(1)</script>"),
+        headers: { "content-type": type },
+      }));
+      try {
+        const res = await get("/api/plex/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F1");
+        assert.equal(res.status, 502, `${type} is refused`);
+        assert.match(res.headers.get("content-type") ?? "", /application\/json/);
+      } finally {
+        fake.restore();
+      }
     }
   });
 
@@ -231,6 +248,38 @@ describe("Plex image proxy", () => {
         (await get("/api/plex/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F1")).status,
         502,
       );
+    } finally {
+      fake.restore();
+    }
+  });
+});
+
+describe("Tautulli image proxy", () => {
+  const path = "/api/status/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F2";
+
+  it("passes on an image, cacheable by this browser only", async () => {
+    const fake = fakeApi(tautulliClient, () => ({
+      data: Buffer.from("pngbytes"),
+      headers: { "content-type": "image/png" },
+    }));
+    try {
+      const res = await get(path);
+      assert.equal(res.status, 200);
+      assert.equal(res.headers.get("content-type"), "image/png");
+      assert.equal(res.headers.get("cache-control"), "private, max-age=86400");
+      assert.equal(fake.calls[0]!.params.cmd, "pms_image_proxy");
+    } finally {
+      fake.restore();
+    }
+  });
+
+  it("refuses a reply that isn't an image", async () => {
+    const fake = fakeApi(tautulliClient, () => ({
+      data: Buffer.from("<html>"),
+      headers: { "content-type": "text/html; charset=utf-8" },
+    }));
+    try {
+      assert.equal((await get(path)).status, 502);
     } finally {
       fake.restore();
     }

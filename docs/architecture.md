@@ -93,7 +93,7 @@ flowchart TB
 **A batch job**
 
 1. `plan_media_upgrade` lists Radarr movies with no file or below 1080p and stores up to `maxBatchSize`
-   (default 25) movie ids as a `PENDING` job. TV is refused by design.
+   (default 25, at most 100) movie ids as a `PENDING` job. TV is refused by design.
 2. Nothing runs until `update_job_status` with `RESUME` sets it to `RUNNING`.
 3. The job runner claims one item per tick, sends one Radarr `MoviesSearch`, and marks the job
    `COMPLETED` (with a Discord notification) after the last item, or `PAUSED` after three failures.

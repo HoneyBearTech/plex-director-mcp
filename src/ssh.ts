@@ -10,8 +10,25 @@ function splitHostPort(target: string): { host: string; port: number } {
   return host && port ? { host, port: Number(port) } : { host: target, port: 22 };
 }
 
+export interface RemoteCommandLimits {
+  // The whole call: connecting, logging in and running the command.
+  timeoutMs?: number;
+  // Telemetry output is a few hundred bytes; far more is not what was asked
+  // for, so the connection is dropped rather than buffered.
+  maxOutputBytes?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 30_000;
+const DEFAULT_MAX_OUTPUT_BYTES = 1024 * 1024;
+
 // Execute one read-only telemetry command on a configured remote host.
-export function runRemoteCommand(target: string, command: string): Promise<string> {
+export function runRemoteCommand(
+  target: string,
+  command: string,
+  limits: RemoteCommandLimits = {},
+): Promise<string> {
+  const timeoutMs = limits.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const maxOutputBytes = limits.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES;
   return new Promise((resolve, reject) => {
     const keyPath = process.env.SSH_KEY_PATH;
     if (!keyPath) {
@@ -22,29 +39,48 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
 
     const { host, port } = splitHostPort(target);
     const conn = new SSHClient();
-    let output = "";
+    const chunks: Buffer[] = [];
+    let received = 0;
     let hostKeyProblem: HostKeyMismatchError | undefined;
+
+    // Settle once, and always close the connection.
+    let settled = false;
+    const finish = (error: Error | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      conn.end();
+      if (error) reject(error);
+      else resolve(Buffer.concat(chunks).toString().trim());
+    };
+    const timer = setTimeout(
+      () => finish(new Error(`${target} did not finish within ${timeoutMs / 1000} seconds.`)),
+      timeoutMs,
+    );
 
     conn
       .on("ready", () => {
         conn.exec(command, (err, stream) => {
-          if (err) {
-            conn.end();
-            return reject(err);
-          }
+          if (err) return finish(err);
           stream.on("data", (data: Buffer) => {
-            output += data.toString();
+            received += data.length;
+            if (received > maxOutputBytes) {
+              finish(
+                new Error(
+                  `${target} sent more than ${maxOutputBytes} bytes of output; stopped reading.`,
+                ),
+              );
+              return;
+            }
+            chunks.push(data);
           });
-          stream.on("close", () => {
-            conn.end();
-            resolve(output.trim());
-          });
+          stream.on("close", () => finish(null));
         });
       })
       .on("error", (err) => {
         // A refused host key surfaces from ssh2 as a generic handshake error;
         // report the real reason instead.
-        reject(hostKeyProblem ?? err);
+        finish(hostKeyProblem ?? err);
       });
 
     try {
@@ -58,6 +94,7 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
         privateKey: fs.readFileSync(keyPath),
         // Only needed for a passphrase-protected key.
         ...(process.env.SSH_KEY_PASSPHRASE ? { passphrase: process.env.SSH_KEY_PASSPHRASE } : {}),
+        readyTimeout: timeoutMs,
         hostHash: "sha256",
         hostVerifier: (keyHash: string) => {
           const actual = fingerprintFromHex(keyHash);
@@ -70,7 +107,7 @@ export function runRemoteCommand(target: string, command: string): Promise<strin
         },
       });
     } catch (error) {
-      reject(error);
+      finish(error instanceof Error ? error : new Error(String(error)));
     }
   });
 }

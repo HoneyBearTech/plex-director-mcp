@@ -24,9 +24,10 @@ It has two actions:
 > list you pick. Run `AUDIT` first and read the list. Claude Desktop asks before it runs the tool; check that the
 > action it proposes is the one you want.
 
-The reply to `PURGE_STALLED` says the releases were "blocklisted", but Plex Director doesn't tell Radarr or
-Sonarr anything: it only deletes the torrents in qBittorrent. Whether Radarr or Sonarr then search for another
-release, or try the same one again, depends on their own settings.
+`PURGE_STALLED` only deletes the torrents, and their files, in qBittorrent. It doesn't tell Radarr or Sonarr
+anything, so nothing is blocklisted, and the reply says so: whether they then search for another release, or
+grab the same one again, depends on their own settings. To keep a bad release from coming back, remove it from
+Radarr's or Sonarr's queue with their blocklist option instead.
 
 ## Indexer health: `check_indexer_health`
 
