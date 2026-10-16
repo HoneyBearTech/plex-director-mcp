@@ -230,6 +230,7 @@ shown on the Settings page.
 | `WEB_PASSWORD` | *(none)* | Requires a sign-in for the dashboard. **Strongly recommended.** Changing it signs everyone out. |
 | `WEB_ALLOWED_HOSTS` | *(none)* | Only used without `WEB_PASSWORD`. Extra host names the dashboard answers to, comma-separated, for example the public name a reverse proxy serves it on. IP addresses, `localhost`, single-word names and `.local`, `.lan`, `.home.arpa` and `.internal` names always work; any other name gets a 403 explaining this, which stops DNS-rebinding pages from reaching an open dashboard. `*` turns the check off. |
 | `WEB_TRUST_PROXY` | *(none)* | Set it when a reverse proxy sits in front: the proxy's address or subnet, comma-separated, or `loopback` for one on the same host. Only requests from there may set `X-Forwarded-For` and `X-Forwarded-Proto` ([below](#keep-the-port-off-the-internet)). Unset, both are ignored. |
+| `SETTINGS_ENCRYPTION_KEY` | *(none)* | Encrypts the service credentials saved in the database (AES-256-GCM). 32 random bytes, base64 or hex: make one with `openssl rand -base64 32`. Credentials already saved are encrypted at the next start. Every container sharing the database needs the same key, and the database is useless without it, so keep a copy somewhere other than your backups. **Recommended**; see [Encrypt the saved credentials](#encrypt-the-saved-credentials). |
 | `WEB_PORT` | `3000` | The port the dashboard listens on inside the container. |
 | `ANTHROPIC_API_KEY` | *(none)* | Turns on the Query chat. A pay-per-use Anthropic API key. |
 | `SSH_KEY_PATH` | *(none)* | Path inside the container to the private key for host monitoring. |
@@ -325,8 +326,31 @@ earlier, see [upgrading](upgrading.md#upgrading-to-130-the-container-no-longer-r
 
 - Keep `WEB_PASSWORD`, `ANTHROPIC_API_KEY` and the webhook in an env file readable only by you (`chmod 600`),
   not in `compose.yaml`, which tends to get shared or committed.
-- Service API keys typed into the Settings page are stored in the database **as plain text**. Restrict the
-  data directory (`chmod 700 data`) and treat backups of it as secrets ([upgrading.md](upgrading.md#back-up)).
+- Service API keys typed into the Settings page are stored in the database, **as plain text unless you set
+  `SETTINGS_ENCRYPTION_KEY`** ([below](#encrypt-the-saved-credentials)). Restrict the data directory
+  (`chmod 700 data`) and treat backups of it as secrets ([upgrading.md](upgrading.md#back-up)).
+
+### Encrypt the saved credentials
+
+With `SETTINGS_ENCRYPTION_KEY` set, the API keys, tokens and passwords in the database are encrypted
+(AES-256-GCM, each tied to its setting), so a copy of the data folder, a stray backup included, doesn't give
+them away. URLs, usernames and the rest stay readable.
+
+```sh
+openssl rand -base64 32        # put the result in plex-director.env as SETTINGS_ENCRYPTION_KEY=...
+```
+
+- Credentials saved earlier are encrypted the next time Plex Director starts; the log says how many.
+- **Every container using the same data needs the same key**, the Claude Desktop one included. The examples
+  here pass the same env file to both (`env_file:` and `--env-file`), so putting the key in it covers both.
+- **Keep the key safe, and apart from your backups.** Without it the saved credentials can't be read: Plex
+  Director stops at start-up and says so, rather than running with every service blank. If the key is lost,
+  start once with `SETTINGS_ENCRYPTION_RESET=1` to delete the unreadable credentials, enter them again on the
+  Settings page, and remove `SETTINGS_ENCRYPTION_RESET`.
+- There is no way back to plain text, and no key rotation yet: to change the key, reset as above and enter the
+  credentials again.
+- Not encrypted: the session-signing secret (on its own it is only a salt; signing also needs
+  `WEB_PASSWORD`) and everything that isn't a credential.
 - Never build secrets into an image; pass them when the container starts.
 
 ### SSH host monitoring

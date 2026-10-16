@@ -120,6 +120,12 @@
           "description": "Password for the web dashboard the same container serves on port 3000 (strongly recommended)",
           "isRequired": false,
           "isSecret": true
+        },
+        {
+          "name": "SETTINGS_ENCRYPTION_KEY",
+          "description": "Encrypts the saved service credentials: 32 random bytes, base64 (openssl rand -base64 32). Every container sharing the data volume needs the same key (recommended)",
+          "isRequired": false,
+          "isSecret": true
         }
       ]
     }

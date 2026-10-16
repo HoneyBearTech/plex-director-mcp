@@ -11,19 +11,22 @@ updating just replaces it.
 
 | In the database | What it is |
 | :--- | :--- |
-| Settings | Every service URL and username, and **every API key, token and password** saved on the Settings page or seeded from the environment, stored as plain text. |
+| Settings | Every service URL and username, and **every API key, token and password** saved on the Settings page or seeded from the environment, encrypted when `SETTINGS_ENCRYPTION_KEY` is set ([installing.md](installing.md#encrypt-the-saved-credentials)), plain text otherwise. |
 | Session secret | The random value that, with `WEB_PASSWORD`, signs login cookies. |
 | Jobs | Batch jobs, the movies in each, and their progress. |
 | SSH host keys | The fingerprint remembered for each monitored host. |
 | Add-movie choices | The last TMDb grid, so a "grab choice 2" can follow it. |
 
-Not in the database: `WEB_PASSWORD`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`, the SSH key and its
-passphrase. Those live in your env file (and the key file), so back those up too, just as carefully.
+Not in the database: `WEB_PASSWORD`, `SETTINGS_ENCRYPTION_KEY`, `ANTHROPIC_API_KEY`, `DISCORD_WEBHOOK_URL`,
+the SSH key and its passphrase. Those live in your env file (and the key file), so back those up too, just as
+carefully. **A database backup is only usable with the `SETTINGS_ENCRYPTION_KEY` it was saved with**: keep the
+key, but not in the same place as the backups.
 
 > [!IMPORTANT]
-> **A backup of `/app/data` is a copy of your credentials.** Anyone who has it can use your Radarr, Sonarr,
-> Prowlarr, SABnzbd, qBittorrent, Tautulli, Plex and TMDb accounts. Keep backups readable only by you,
-> encrypt them when they leave the machine, and delete old ones you no longer need.
+> **Without `SETTINGS_ENCRYPTION_KEY`, a backup of `/app/data` is a copy of your credentials.** Anyone who has
+> it can use your Radarr, Sonarr, Prowlarr, SABnzbd, qBittorrent, Tautulli, Plex and TMDb accounts. With the key
+> set, the credentials in it are encrypted, as long as the key isn't stored alongside. Either way, keep backups
+> readable only by you, encrypt them when they leave the machine, and delete old ones you no longer need.
 
 ## Back up
 

@@ -9,6 +9,11 @@ a security problem.
 
 ### Added
 
+- **Encrypted credentials at rest.** Set `SETTINGS_ENCRYPTION_KEY` (32 random bytes: `openssl rand -base64 32`)
+  and the API keys, tokens and passwords in the database are encrypted with AES-256-GCM; ones saved earlier
+  are encrypted at the next start. Every container sharing the database needs the same key, and start-up
+  stops with an explanation if it is missing or wrong. Without it nothing changes, apart from a warning.
+
 - **`trust_new_host_key` MCP tool**: forgets a monitored host's remembered SSH key after you rebuilt it, the
   Claude Desktop counterpart of the dashboard's **Trust new key** button. Not available to the Query chat.
 
