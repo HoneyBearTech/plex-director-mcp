@@ -18,7 +18,10 @@ function posterProxyUrl(imgPath: string | undefined | null): string | null {
 // a user's avatar for "who" categories, a poster for "what" categories
 // (including last_watched, which is media-centric despite also carrying
 // viewer fields), none for platforms/concurrent-streams rows.
-function rowImage(statId: string, item: any): { posterUrl: string | null; userThumb: string | null } {
+function rowImage(
+  statId: string,
+  item: any,
+): { posterUrl: string | null; userThumb: string | null } {
   if (statId === "top_users") {
     return { posterUrl: null, userThumb: item.user_thumb || null };
   }

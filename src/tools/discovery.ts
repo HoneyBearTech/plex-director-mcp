@@ -60,10 +60,14 @@ function toCredit(kind: MediaKind, raw: any): Credit {
 // also talk shows and news, where a big TV career is mostly "Self".
 function isStructuralCredit(kind: MediaKind, raw: any): boolean {
   const character = raw.character ? String(raw.character).toLowerCase() : "";
-  const isSelf = character.includes("self") || character.includes("historical footage") || character.includes("archive");
+  const isSelf =
+    character.includes("self") ||
+    character.includes("historical footage") ||
+    character.includes("archive");
   const isUncredited = character.includes("uncredited");
   const genres: number[] = raw.genre_ids ?? [];
-  const excludedGenres = kind === "show" ? [GENRE_DOCUMENTARY, GENRE_NEWS, GENRE_TALK] : [GENRE_DOCUMENTARY];
+  const excludedGenres =
+    kind === "show" ? [GENRE_DOCUMENTARY, GENRE_NEWS, GENRE_TALK] : [GENRE_DOCUMENTARY];
   return !isSelf && !isUncredited && !excludedGenres.some((g) => genres.includes(g));
 }
 
@@ -81,16 +85,29 @@ function mergeRoles(credits: Credit[]): Credit[] {
       if (role && !entry.roles.includes(role)) entry.roles.push(role);
     }
   }
-  return [...byTitle.values()].map(({ credit, roles }) => ({ ...credit, character: roles.join(" / ") }));
+  return [...byTitle.values()].map(({ credit, roles }) => ({
+    ...credit,
+    character: roles.join(" / "),
+  }));
 }
 
-const yearOf = (credit: Credit): number | null => (credit.date ? Number(String(credit.date).split("-")[0]) : null);
+const yearOf = (credit: Credit): number | null =>
+  credit.date ? Number(String(credit.date).split("-")[0]) : null;
 
 export async function resolveActorFilmography(actorName: string, options: FilmographyOptions = {}) {
-  const { mediaType = "any", limit = DEFAULT_FILMOGRAPHY_LIMIT, yearFrom, yearTo, show = "all", library } = options;
+  const {
+    mediaType = "any",
+    limit = DEFAULT_FILMOGRAPHY_LIMIT,
+    yearFrom,
+    yearTo,
+    show = "all",
+    library,
+  } = options;
   const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
   try {
-    const personSearch = await tmdbClient.get(`/search/person?query=${encodeURIComponent(actorName)}`);
+    const personSearch = await tmdbClient.get(
+      `/search/person?query=${encodeURIComponent(actorName)}`,
+    );
     const person = personSearch.data?.results?.[0];
 
     if (!person) {
@@ -99,13 +116,19 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 
     const creditLists = await Promise.all(
       kinds.map(async (kind) => {
-        const response = await tmdbClient.get(`/person/${person.id}/${kind === "movie" ? "movie_credits" : "tv_credits"}`);
-        return ((response.data?.cast || []) as any[]).filter((raw) => isStructuralCredit(kind, raw)).map((raw) => toCredit(kind, raw));
-      })
+        const response = await tmdbClient.get(
+          `/person/${person.id}/${kind === "movie" ? "movie_credits" : "tv_credits"}`,
+        );
+        return ((response.data?.cast || []) as any[])
+          .filter((raw) => isStructuralCredit(kind, raw))
+          .map((raw) => toCredit(kind, raw));
+      }),
     );
     const cleanFilmography = mergeRoles(creditLists.flat());
 
-    cleanFilmography.sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
+    cleanFilmography.sort(
+      (a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime(),
+    );
 
     let owned: Record<MediaKind, Map<string, string[]>> | null = null;
     let plexNote = "";
@@ -122,14 +145,23 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
           const wanted = library.trim().toLowerCase();
           const libraryNames = [...new Set(indexes.flatMap((index) => [...index.values()].flat()))];
           if (!libraryNames.some((name) => name.toLowerCase().includes(wanted))) {
-            const label = mediaType === "any" ? "Libraries" : `${mediaType[0]!.toUpperCase()}${mediaType.slice(1)} libraries`;
-            return textReply(`No Plex ${mediaType === "any" ? "" : `${mediaType} `}library matching "${library}". ${label} with titles: ${libraryNames.join(", ")}.`, true);
+            const label =
+              mediaType === "any"
+                ? "Libraries"
+                : `${mediaType[0]!.toUpperCase()}${mediaType.slice(1)} libraries`;
+            return textReply(
+              `No Plex ${mediaType === "any" ? "" : `${mediaType} `}library matching "${library}". ${label} with titles: ${libraryNames.join(", ")}.`,
+              true,
+            );
           }
           for (const kind of kinds) {
             owned[kind] = new Map(
               [...owned[kind]]
-                .map(([id, names]): [string, string[]] => [id, names.filter((name) => name.toLowerCase().includes(wanted))])
-                .filter(([, names]) => names.length > 0)
+                .map(([id, names]): [string, string[]] => [
+                  id,
+                  names.filter((name) => name.toLowerCase().includes(wanted)),
+                ])
+                .filter(([, names]) => names.length > 0),
             );
           }
         }
@@ -137,10 +169,15 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
         plexNote = `(Couldn't check Plex ownership: ${getErrorMessage(error)})\n`;
       }
     }
-    const librariesOf = (credit: Credit): string[] | undefined => owned?.[credit.kind].get(credit.id);
+    const librariesOf = (credit: Credit): string[] | undefined =>
+      owned?.[credit.kind].get(credit.id);
 
-    const targets = mediaType === "movie" ? "movie" : mediaType === "show" ? "TV show" : "movie and TV";
-    const removed = mediaType === "movie" ? "docs/uncredited/self" : "docs, talk shows, news, uncredited and self appearances";
+    const targets =
+      mediaType === "movie" ? "movie" : mediaType === "show" ? "TV show" : "movie and TV";
+    const removed =
+      mediaType === "movie"
+        ? "docs/uncredited/self"
+        : "docs, talk shows, news, uncredited and self appearances";
     let output = `🎬 Resolved: ${person.name} (TMDb ID: ${person.id})\n`;
     output += `Filtered filmography to ${cleanFilmography.length} structural ${targets} targets (removed ${removed}):\n`;
     if (owned) {
@@ -171,7 +208,9 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
     });
     if (matching.length !== cleanFilmography.length) {
       const filters = [
-        yearFrom !== undefined || yearTo !== undefined ? `released ${yearFrom ?? "any"}-${yearTo ?? "any"}` : null,
+        yearFrom !== undefined || yearTo !== undefined
+          ? `released ${yearFrom ?? "any"}-${yearTo ?? "any"}`
+          : null,
         owned && show !== "all" ? (show === "owned" ? "in Plex" : "not in Plex") : null,
       ].filter(Boolean);
       output += `Showing ${matching.length} titles (${filters.join(", ")}).\n`;
@@ -180,7 +219,11 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 
     matching.slice(0, limit).forEach((credit) => {
       const libraries = librariesOf(credit);
-      const status = owned ? (libraries ? ` - ✅ In Plex (${libraries.join(", ")})` : " - ❌ Not in Plex") : "";
+      const status = owned
+        ? libraries
+          ? ` - ✅ In Plex (${libraries.join(", ")})`
+          : " - ❌ Not in Plex"
+        : "";
       const kindNote = credit.kind === "show" ? " [TV show]" : "";
       output += `  ▪ ${credit.title} (${credit.date ? credit.date.split("-")[0] : "N/A"})${kindNote} - As: ${credit.character || "Unknown"}${status}\n`;
     });
@@ -213,32 +256,44 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
 function radarrErrorMessage(error: unknown): string {
   const data = (error as any)?.response?.data;
   if (Array.isArray(data) && data.length > 0) {
-    return data.map((d: any) => d.errorMessage || d.message).filter(Boolean).join("; ");
+    return data
+      .map((d: any) => d.errorMessage || d.message)
+      .filter(Boolean)
+      .join("; ");
   }
   return getErrorMessage(error);
 }
 
-type ProfileChoice = { profile: { id: number; name: string }; source: "requested" | "setting" | "first" } | { error: string };
+type ProfileChoice =
+  | { profile: { id: number; name: string }; source: "requested" | "setting" | "first" }
+  | { error: string };
 
 // Which Radarr quality profile new movies get: the one the caller names, else
 // the default saved on the Settings page (RADARR_DEFAULT_QUALITY_PROFILE), else
 // Radarr's own first profile - which is also what Radarr's UI preselects, so a
 // fresh install works without any setup.
-function chooseQualityProfile(profiles: Array<{ id: number; name: string }>, requested: string | undefined): ProfileChoice {
+function chooseQualityProfile(
+  profiles: Array<{ id: number; name: string }>,
+  requested: string | undefined,
+): ProfileChoice {
   const asked = requested?.trim() || "";
   const saved = getSetting("RADARR_DEFAULT_QUALITY_PROFILE").trim();
   const wanted = asked || saved;
 
   if (!wanted) {
     const first = profiles[0];
-    return first ? { profile: first, source: "first" } : { error: "❌ Radarr has no quality profiles configured." };
+    return first
+      ? { profile: first, source: "first" }
+      : { error: "❌ Radarr has no quality profiles configured." };
   }
 
   const match = profiles.find((p) => p.name.toLowerCase() === wanted.toLowerCase());
   if (match) return { profile: match, source: asked ? "requested" : "setting" };
 
   const origin = asked ? "" : " (that is the default set on the Settings page)";
-  return { error: `❌ No Radarr quality profile named "${wanted}"${origin}. Available: ${profiles.map((p) => p.name).join(", ")}.` };
+  return {
+    error: `❌ No Radarr quality profile named "${wanted}"${origin}. Available: ${profiles.map((p) => p.name).join(", ")}.`,
+  };
 }
 
 export interface ConfirmChoicesArgs {
@@ -249,7 +304,11 @@ export interface ConfirmChoicesArgs {
 
 // Adds the movies the user picked from the last search_and_select_movies grid
 // to Radarr and starts a download search for each.
-export async function confirmSelectedChoices({ chosenIndexes, qualityProfile, rootFolder }: ConfirmChoicesArgs) {
+export async function confirmSelectedChoices({
+  chosenIndexes,
+  qualityProfile,
+  rootFolder,
+}: ConfirmChoicesArgs) {
   try {
     const stmt = db.prepare("SELECT * FROM interaction_context WHERE selection_index = ?");
     const matchedSelections: any[] = [];
@@ -262,16 +321,18 @@ export async function confirmSelectedChoices({ chosenIndexes, qualityProfile, ro
     if (matchedSelections.length === 0) {
       return textReply(
         "❌ Selection processing failed. The specified choices do not exist in the current interface view context.",
-        true
+        true,
       );
     }
 
-    const profiles: Array<{ id: number; name: string }> = (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
+    const profiles: Array<{ id: number; name: string }> =
+      (await radarrClient.get("/api/v3/qualityprofile")).data ?? [];
     const choice = chooseQualityProfile(profiles, qualityProfile);
     if ("error" in choice) return textReply(choice.error, true);
     const { profile, source } = choice;
 
-    const rootFolders: Array<{ path: string }> = (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
+    const rootFolders: Array<{ path: string }> =
+      (await radarrClient.get("/api/v3/rootfolder")).data ?? [];
     const folder = rootFolder
       ? rootFolders.find((f) => f.path.replace(/\/+$/, "") === rootFolder.replace(/\/+$/, ""))
       : rootFolders[0];
@@ -280,25 +341,36 @@ export async function confirmSelectedChoices({ chosenIndexes, qualityProfile, ro
         rootFolder
           ? `❌ No Radarr root folder "${rootFolder}". Available: ${rootFolders.map((f) => f.path).join(", ")}.`
           : "❌ Radarr has no root folders configured.",
-        true
+        true,
       );
     }
 
-    const profileNote = source === "first" ? `${profile.name} - Radarr's first profile; set a default on the Settings page` : profile.name;
+    const profileNote =
+      source === "first"
+        ? `${profile.name} - Radarr's first profile; set a default on the Settings page`
+        : profile.name;
     let report = `🚀 **Adding selected movies to Radarr** (profile: ${profileNote}, folder: ${folder.path})\n`;
     for (const selection of matchedSelections) {
       const label = `**Choice ${selection.selection_index}**: ${selection.title} (${selection.year}) [TMDb: ${selection.tmdb_id}]`;
       try {
-        const existing = (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } })).data ?? [];
+        const existing =
+          (await radarrClient.get("/api/v3/movie", { params: { tmdbId: selection.tmdb_id } }))
+            .data ?? [];
         if (existing.length > 0) {
-          const state = existing[0].hasFile ? "already downloaded" : "monitored but not downloaded yet";
+          const state = existing[0].hasFile
+            ? "already downloaded"
+            : "monitored but not downloaded yet";
           report += `  ⏭️ ${label} - already in Radarr (${state}); not added again.\n`;
           continue;
         }
 
         // Radarr wants the full resolved movie record, not just an id, so start
         // from its own TMDb lookup and layer our choices on top.
-        const lookup = (await radarrClient.get("/api/v3/movie/lookup/tmdb", { params: { tmdbId: selection.tmdb_id } })).data;
+        const lookup = (
+          await radarrClient.get("/api/v3/movie/lookup/tmdb", {
+            params: { tmdbId: selection.tmdb_id },
+          })
+        ).data;
         await radarrClient.post("/api/v3/movie", {
           ...lookup,
           qualityProfileId: profile.id,
@@ -338,12 +410,15 @@ export function registerDiscoveryTools() {
           report += "⚠️ Prowlarr Indexer Health Warning:\n";
           report += `Detected ${problems.length} indexer operational anomalies across your tracker network:\n\n`;
           for (const indexer of problems) {
-            const failedAt = indexer.mostRecentFailure ? new Date(indexer.mostRecentFailure).toLocaleString() : "unknown";
+            const failedAt = indexer.mostRecentFailure
+              ? new Date(indexer.mostRecentFailure).toLocaleString()
+              : "unknown";
             report += `▪ Indexer: ${indexer.name} (${indexer.protocol})\n`;
             report += `  ↳ Most Recent Failure: ${failedAt}\n`;
-            report += indexer.state === "backing-off"
-              ? `  ↳ Backing off until: ${new Date(indexer.disabledTill as string).toLocaleString()} (escalation level ${indexer.escalationLevel})\n\n`
-              : `  ↳ Not currently backed off, but has recent failures (escalation level ${indexer.escalationLevel})\n\n`;
+            report +=
+              indexer.state === "backing-off"
+                ? `  ↳ Backing off until: ${new Date(indexer.disabledTill as string).toLocaleString()} (escalation level ${indexer.escalationLevel})\n\n`
+                : `  ↳ Not currently backed off, but has recent failures (escalation level ${indexer.escalationLevel})\n\n`;
           }
         }
 
@@ -358,7 +433,7 @@ export function registerDiscoveryTools() {
       } catch (error: unknown) {
         return textReply(`Prowlarr cluster health scan failed: ${getErrorMessage(error)}`, true);
       }
-    }
+    },
   );
 
   server.tool(
@@ -392,14 +467,17 @@ export function registerDiscoveryTools() {
         choices.forEach((movie: any, index: number) => {
           const choiceId = index + 1;
           const year = movie.release_date ? movie.release_date.split("-")[0] : "N/A";
-          const poster = movie.poster_path ? `![${movie.title}](https://image.tmdb.org/t/p/w500${movie.poster_path})` : "*No poster*";
+          const poster = movie.poster_path
+            ? `![${movie.title}](https://image.tmdb.org/t/p/w500${movie.poster_path})`
+            : "*No poster*";
 
           insertStmt.run(choiceId, movie.id, movie.title, year);
 
           const cleanOverview = movie.overview
             ? escapeTableCell(movie.overview)
             : "No overview available.";
-          const truncatedOverview = cleanOverview.length > 180 ? `${cleanOverview.slice(0, 180)}...` : cleanOverview;
+          const truncatedOverview =
+            cleanOverview.length > 180 ? `${cleanOverview.slice(0, 180)}...` : cleanOverview;
 
           markdownOutput += `| **[ Choice ${choiceId} ]** | ${poster} | **${movie.title} (${year})**  <br> *TMDb ID: ${movie.id}* <br><br> ${truncatedOverview} |\n`;
         });
@@ -408,17 +486,27 @@ export function registerDiscoveryTools() {
       } catch (error: unknown) {
         return textReply(`Failed generating selection matrix: ${getErrorMessage(error)}`, true);
       }
-    }
+    },
   );
 
   server.tool(
     "confirm_selected_choices",
     "Adds the user's numbered choices from the last search_and_select_movies grid to Radarr as monitored movies and starts a download search for each. Movies already in Radarr are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Settings page, otherwise Radarr's first quality profile; and Radarr's first root folder unless told otherwise.",
     {
-      chosenIndexes: z.array(z.number()).describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
-      qualityProfile: z.string().optional().describe("Radarr quality profile name to use instead of the default."),
-      rootFolder: z.string().optional().describe("Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids')."),
+      chosenIndexes: z
+        .array(z.number())
+        .describe("An array of chosen numbers selected by the user (e.g., [1, 3])."),
+      qualityProfile: z
+        .string()
+        .optional()
+        .describe("Radarr quality profile name to use instead of the default."),
+      rootFolder: z
+        .string()
+        .optional()
+        .describe(
+          "Radarr root folder path to add to instead of the first one (e.g. '/media/movieskids').",
+        ),
     },
-    async (args) => confirmSelectedChoices(args)
+    async (args) => confirmSelectedChoices(args),
   );
 }

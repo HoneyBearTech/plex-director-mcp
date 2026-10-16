@@ -27,7 +27,13 @@ const show = (id: number, title: string, extra: Record<string, unknown> = {}) =>
   ...extra,
 });
 let nextId = 1;
-const ep = (series: any, season: number, number: number, airDateUtc: string | null, extra: Record<string, unknown> = {}) => ({
+const ep = (
+  series: any,
+  season: number,
+  number: number,
+  airDateUtc: string | null,
+  extra: Record<string, unknown> = {},
+) => ({
   id: nextId++,
   seriesId: series.id,
   seasonNumber: season,
@@ -64,18 +70,35 @@ afterEach(() => sonarr?.restore());
 
 const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
 const rows = (r: any) => r.structuredContent.media as Array<Record<string, any>>;
-const lines = (r: any) => text(r).split("\n").filter((l) => l.startsWith("- "));
+const lines = (r: any) =>
+  text(r)
+    .split("\n")
+    .filter((l) => l.startsWith("- "));
 
 describe("episodeNotes", () => {
   it("flags finales and premieres from Sonarr's finale type and the episode number", () => {
-    assert.deepEqual(episodeNotes({ finaleType: "season", seasonNumber: 4, episodeNumber: 10 }), ["season finale"]);
-    assert.deepEqual(episodeNotes({ finaleType: "series", seasonNumber: 4, episodeNumber: 10 }), ["series finale"]);
-    assert.deepEqual(episodeNotes({ finaleType: "midseason", seasonNumber: 4, episodeNumber: 5 }), ["mid-season finale"]);
+    assert.deepEqual(episodeNotes({ finaleType: "season", seasonNumber: 4, episodeNumber: 10 }), [
+      "season finale",
+    ]);
+    assert.deepEqual(episodeNotes({ finaleType: "series", seasonNumber: 4, episodeNumber: 10 }), [
+      "series finale",
+    ]);
+    assert.deepEqual(episodeNotes({ finaleType: "midseason", seasonNumber: 4, episodeNumber: 5 }), [
+      "mid-season finale",
+    ]);
     assert.deepEqual(episodeNotes({ seasonNumber: 25, episodeNumber: 1 }), ["season premiere"]);
     assert.deepEqual(episodeNotes({ seasonNumber: 1, episodeNumber: 1 }), ["series premiere"]);
-    assert.deepEqual(episodeNotes({ seasonNumber: 1, episodeNumber: 1, finaleType: "series" }), ["series finale", "series premiere"], "a one-episode special is both");
+    assert.deepEqual(
+      episodeNotes({ seasonNumber: 1, episodeNumber: 1, finaleType: "series" }),
+      ["series finale", "series premiere"],
+      "a one-episode special is both",
+    );
     assert.deepEqual(episodeNotes({ seasonNumber: 3, episodeNumber: 4 }), []);
-    assert.deepEqual(episodeNotes({ seasonNumber: 0, episodeNumber: 1 }), [], "a special is not a premiere");
+    assert.deepEqual(
+      episodeNotes({ seasonNumber: 0, episodeNumber: 1 }),
+      [],
+      "a special is not a premiere",
+    );
   });
 });
 
@@ -104,7 +127,10 @@ describe("get_upcoming_episodes: the calendar", () => {
     await getUpcomingEpisodes({ days: 0 }, NOW);
     await getUpcomingEpisodes({ days: 999 }, NOW);
     await getUpcomingEpisodes({ days: -4 }, NOW);
-    assert.deepEqual(sonarr.calls.map((c) => c.params.end), ["2026-09-20T15:00:00.000Z", "2026-11-18T15:00:00.000Z", "2026-09-20T15:00:00.000Z"]);
+    assert.deepEqual(
+      sonarr.calls.map((c) => c.params.end),
+      ["2026-09-20T15:00:00.000Z", "2026-11-18T15:00:00.000Z", "2026-09-20T15:00:00.000Z"],
+    );
   });
 
   it("lists episodes by day in air order, with network, weekday and the episode name", async () => {
@@ -118,7 +144,10 @@ describe("get_upcoming_episodes: the calendar", () => {
     ];
     sonarrFake();
     const result = await getUpcomingEpisodes({}, NOW);
-    assert.match(text(result), /^## Airing in the next 7 days \(2026-09-19 to 2026-09-26\) - 3 episodes from shows Sonarr monitors\n/);
+    assert.match(
+      text(result),
+      /^## Airing in the next 7 days \(2026-09-19 to 2026-09-26\) - 3 episodes from shows Sonarr monitors\n/,
+    );
     assert.deepEqual(lines(result), [
       '- Lioness S3E08 "Title 3-8" (Paramount+)',
       '- Ted Lasso S4E08 "Title 4-8" (Apple TV)',
@@ -141,7 +170,10 @@ describe("get_upcoming_episodes: the calendar", () => {
     ];
     sonarrFake();
     const out = text(await getUpcomingEpisodes({}, NOW));
-    assert.match(out, /Monday 2026-09-21\n- Early Show[^\n]*\n- It's Always Sunny[^\n]*\n\nTuesday 2026-09-22\n- Late Show/);
+    assert.match(
+      out,
+      /Monday 2026-09-21\n- Early Show[^\n]*\n- It's Always Sunny[^\n]*\n\nTuesday 2026-09-22\n- Late Show/,
+    );
   });
 
   it("breaks a tie on the air time by show name", async () => {
@@ -149,7 +181,10 @@ describe("get_upcoming_episodes: the calendar", () => {
     const a = show(2, "Alpha");
     calendar = [ep(z, 1, 2, "2026-09-20T01:00:00Z"), ep(a, 1, 2, "2026-09-20T01:00:00Z")];
     sonarrFake();
-    assert.deepEqual(lines(await getUpcomingEpisodes({}, NOW)).map((l) => l.split(" S1E")[0]), ["- Alpha", "- Zed"]);
+    assert.deepEqual(
+      lines(await getUpcomingEpisodes({}, NOW)).map((l) => l.split(" S1E")[0]),
+      ["- Alpha", "- Zed"],
+    );
   });
 
   it("flags premieres, finales and episodes that are already downloaded", async () => {
@@ -172,19 +207,32 @@ describe("get_upcoming_episodes: the calendar", () => {
     const watched = show(1, "Watched");
     const ignored = show(2, "Ignored Show", { monitored: false });
     const half = show(3, "Half", { monitored: true });
-    calendar = [ep(watched, 1, 1, "2026-09-20T01:00:00Z"), ep(ignored, 1, 2, "2026-09-20T02:00:00Z", { monitored: true }), ep(half, 1, 3, "2026-09-20T03:00:00Z", { monitored: false })];
+    calendar = [
+      ep(watched, 1, 1, "2026-09-20T01:00:00Z"),
+      ep(ignored, 1, 2, "2026-09-20T02:00:00Z", { monitored: true }),
+      ep(half, 1, 3, "2026-09-20T03:00:00Z", { monitored: false }),
+    ];
     sonarrFake();
     const result = await getUpcomingEpisodes({}, NOW);
-    assert.deepEqual(lines(result).map((l) => l.split(" S1E")[0]), ["- Watched"]);
+    assert.deepEqual(
+      lines(result).map((l) => l.split(" S1E")[0]),
+      ["- Watched"],
+    );
     assert.match(text(result), /1 episode from shows Sonarr monitors/);
-    assert.match(text(result), /2 more episodes air from shows Sonarr does not monitor; set monitored to 'unmonitored' or 'any' to list them\./);
+    assert.match(
+      text(result),
+      /2 more episodes air from shows Sonarr does not monitor; set monitored to 'unmonitored' or 'any' to list them\./,
+    );
     assert.equal(rows(result).length, 1);
   });
 
   it("lists everything with monitored 'any', without the 'more' note", async () => {
     const watched = show(1, "Watched");
     const ignored = show(2, "Ignored Show", { monitored: false });
-    calendar = [ep(watched, 1, 1, "2026-09-20T01:00:00Z"), ep(ignored, 1, 2, "2026-09-20T02:00:00Z")];
+    calendar = [
+      ep(watched, 1, 1, "2026-09-20T01:00:00Z"),
+      ep(ignored, 1, 2, "2026-09-20T02:00:00Z"),
+    ];
     sonarrFake();
     const result = await getUpcomingEpisodes({ monitored: "any" }, NOW);
     assert.equal(lines(result).length, 2);
@@ -198,17 +246,30 @@ describe("get_upcoming_episodes: the calendar", () => {
     const watched = show(1, "Watched");
     const ignored = show(2, "Ignored Show", { monitored: false });
     const half = show(3, "Half Watched", { monitored: true });
-    calendar = [ep(watched, 1, 1, "2026-09-20T01:00:00Z"), ep(ignored, 1, 2, "2026-09-20T02:00:00Z"), ep(half, 1, 3, "2026-09-20T03:00:00Z", { monitored: false })];
+    calendar = [
+      ep(watched, 1, 1, "2026-09-20T01:00:00Z"),
+      ep(ignored, 1, 2, "2026-09-20T02:00:00Z"),
+      ep(half, 1, 3, "2026-09-20T03:00:00Z", { monitored: false }),
+    ];
     sonarrFake();
     const result = await getUpcomingEpisodes({ monitored: "unmonitored" }, NOW);
-    assert.deepEqual(lines(result).map((l) => l.split(" S1E")[0]), ["- Ignored Show", "- Half Watched"]);
-    assert.deepEqual(rows(result).map((r) => r.title), ["Ignored Show", "Half Watched"]);
+    assert.deepEqual(
+      lines(result).map((l) => l.split(" S1E")[0]),
+      ["- Ignored Show", "- Half Watched"],
+    );
+    assert.deepEqual(
+      rows(result).map((r) => r.title),
+      ["Ignored Show", "Half Watched"],
+    );
     assert.match(text(result), /2 episodes from shows Sonarr does not monitor\n/);
     assert.doesNotMatch(text(result), /more episodes? airs?/);
     sonarr.restore();
     calendar = [ep(watched, 1, 1, "2026-09-20T01:00:00Z")];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ monitored: "unmonitored" }, NOW)), /^Nothing is scheduled to air in the next 7 days from shows Sonarr does not monitor/);
+    assert.match(
+      text(await getUpcomingEpisodes({ monitored: "unmonitored" }, NOW)),
+      /^Nothing is scheduled to air in the next 7 days from shows Sonarr does not monitor/,
+    );
   });
 
   it("returns one table row per episode with the episode, date and notes in the details", async () => {
@@ -232,19 +293,30 @@ describe("get_upcoming_episodes: the calendar", () => {
 
   it("says so when nothing is scheduled, still mentioning unmonitored shows", async () => {
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({}, NOW)), /^Nothing is scheduled to air in the next 7 days from shows Sonarr monitors \(2026-09-19 to 2026-09-26\)\.$/);
+    assert.match(
+      text(await getUpcomingEpisodes({}, NOW)),
+      /^Nothing is scheduled to air in the next 7 days from shows Sonarr monitors \(2026-09-19 to 2026-09-26\)\.$/,
+    );
     sonarr.restore();
     calendar = [ep(show(2, "Ignored", { monitored: false }), 1, 1, "2026-09-20T02:00:00Z")];
     sonarrFake();
     const result = await getUpcomingEpisodes({ days: 1 }, NOW);
-    assert.match(text(result), /^Nothing is scheduled to air in the next 1 day from shows Sonarr monitors/);
-    assert.match(text(result), /1 more episode airs from shows Sonarr does not monitor; set monitored to 'unmonitored' or 'any' to list it\./);
+    assert.match(
+      text(result),
+      /^Nothing is scheduled to air in the next 1 day from shows Sonarr monitors/,
+    );
+    assert.match(
+      text(result),
+      /1 more episode airs from shows Sonarr does not monitor; set monitored to 'unmonitored' or 'any' to list it\./,
+    );
     assert.equal((result as any).structuredContent, undefined);
   });
 
   it("caps a long list and says how many were left out", async () => {
     const s = show(1, "Daily");
-    calendar = Array.from({ length: 130 }, (_, i) => ep(s, 1, i + 1, new Date(NOW + (i + 1) * 3_600_000).toISOString()));
+    calendar = Array.from({ length: 130 }, (_, i) =>
+      ep(s, 1, i + 1, new Date(NOW + (i + 1) * 3_600_000).toISOString()),
+    );
     sonarrFake();
     const result = await getUpcomingEpisodes({ days: 60 }, NOW);
     assert.equal(lines(result).length, 100);
@@ -254,7 +326,16 @@ describe("get_upcoming_episodes: the calendar", () => {
   });
 
   it("copes with an episode that has no series attached or no air date", async () => {
-    calendar = [{ id: 1, seasonNumber: 1, episodeNumber: 1, airDateUtc: "2026-09-20T01:00:00Z", monitored: true }, { id: 2, seasonNumber: 1, episodeNumber: 2, monitored: true, series: show(1, "X") }];
+    calendar = [
+      {
+        id: 1,
+        seasonNumber: 1,
+        episodeNumber: 1,
+        airDateUtc: "2026-09-20T01:00:00Z",
+        monitored: true,
+      },
+      { id: 2, seasonNumber: 1, episodeNumber: 2, monitored: true, series: show(1, "X") },
+    ];
     sonarrFake();
     const result = await getUpcomingEpisodes({ monitored: "any" }, NOW);
     assert.equal(lines(result).length, 2);
@@ -281,21 +362,40 @@ describe("get_upcoming_episodes: one show", () => {
     ];
     sonarrFake();
     const result = await getUpcomingEpisodes({ title: "strange new worlds" }, NOW);
-    assert.match(text(result), /^## Star Trek: Strange New Worlds \(2020\) - Sonarr: continuing, monitored\n/);
-    assert.match(text(result), /Next episode: S4E10 "Title 4-10" airs Thursday 2026-09-24 \(season finale\)\./);
+    assert.match(
+      text(result),
+      /^## Star Trek: Strange New Worlds \(2020\) - Sonarr: continuing, monitored\n/,
+    );
+    assert.match(
+      text(result),
+      /Next episode: S4E10 "Title 4-10" airs Thursday 2026-09-24 \(season finale\)\./,
+    );
     assert.match(text(result), /- S5E01 "Title 5-1" - Tuesday 2027-06-01 - season premiere/);
-    assert.deepEqual(rows(result).map((r) => r.detail), ['S4E10 "Title 4-10" - Thursday 2026-09-24 - season finale', 'S5E01 "Title 5-1" - Tuesday 2027-06-01 - season premiere']);
+    assert.deepEqual(
+      rows(result).map((r) => r.detail),
+      [
+        'S4E10 "Title 4-10" - Thursday 2026-09-24 - season finale',
+        'S5E01 "Title 5-1" - Tuesday 2027-06-01 - season premiere',
+      ],
+    );
     assert.doesNotMatch(text(result), /not monitoring/, "a monitored show gets no warning");
   });
 
   it("orders the upcoming episodes by air time whatever order Sonarr returns them in", async () => {
     const s = show(1, "Jumbled");
     allSeries = [s];
-    episodes = [ep(s, 2, 4, "2026-11-01T02:00:00Z"), ep(s, 2, 2, "2026-10-01T02:00:00Z"), ep(s, 2, 3, "2026-10-15T02:00:00Z")];
+    episodes = [
+      ep(s, 2, 4, "2026-11-01T02:00:00Z"),
+      ep(s, 2, 2, "2026-10-01T02:00:00Z"),
+      ep(s, 2, 3, "2026-10-15T02:00:00Z"),
+    ];
     sonarrFake();
     const result = await getUpcomingEpisodes({ title: "Jumbled" }, NOW);
     assert.match(text(result), /Next episode: S2E02/);
-    assert.deepEqual(rows(result).map((r) => r.detail.slice(0, 5)), ["S2E02", "S2E03", "S2E04"]);
+    assert.deepEqual(
+      rows(result).map((r) => r.detail.slice(0, 5)),
+      ["S2E02", "S2E03", "S2E04"],
+    );
   });
 
   it("says a new season starts when the next episode is a season's first", async () => {
@@ -303,7 +403,10 @@ describe("get_upcoming_episodes: one show", () => {
     allSeries = [s];
     episodes = [ep(s, 2, 10, "2025-03-21T07:00:00Z"), ep(s, 3, 1, "2027-01-10T02:00:00Z")];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Severance" }, NOW)), /Season 3 starts: S3E01 "Title 3-1" airs Sunday 2027-01-10 \(season premiere\)\./);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Severance" }, NOW)),
+      /Season 3 starts: S3E01 "Title 3-1" airs Sunday 2027-01-10 \(season premiere\)\./,
+    );
   });
 
   it("says nothing is scheduled for a continuing show with no date, with when it last aired (Severance)", async () => {
@@ -312,7 +415,10 @@ describe("get_upcoming_episodes: one show", () => {
     episodes = [ep(s, 2, 10, "2025-03-21T07:00:00Z")];
     sonarrFake();
     const result = await getUpcomingEpisodes({ title: "Severance" }, NOW);
-    assert.match(text(result), /No new episode is scheduled yet; the last one aired 2025-03-20\. Sonarr has no date for the next one\./);
+    assert.match(
+      text(result),
+      /No new episode is scheduled yet; the last one aired 2025-03-20\. Sonarr has no date for the next one\./,
+    );
     assert.equal((result as any).structuredContent, undefined);
   });
 
@@ -321,7 +427,10 @@ describe("get_upcoming_episodes: one show", () => {
     allSeries = [s];
     episodes = [ep(s, 5, 16, "2013-09-30T02:00:00Z")];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Breaking Bad" }, NOW)), /It has ended \(last aired 2013-09-29\); no more episodes are coming\./);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Breaking Bad" }, NOW)),
+      /It has ended \(last aired 2013-09-29\); no more episodes are coming\./,
+    );
   });
 
   it("handles a show that has not aired yet", async () => {
@@ -337,9 +446,18 @@ describe("get_upcoming_episodes: one show", () => {
   it("counts episodes with no air date, but not ones that are already downloaded", async () => {
     const s = show(1, "Some Show");
     allSeries = [s];
-    episodes = [ep(s, 1, 1, "2020-01-01T00:00:00Z"), ep(s, 1, 2, null), ep(s, 1, 3, null), ep(s, 1, 4, null, { hasFile: true }), ep(s, 0, 1, null)];
+    episodes = [
+      ep(s, 1, 1, "2020-01-01T00:00:00Z"),
+      ep(s, 1, 2, null),
+      ep(s, 1, 3, null),
+      ep(s, 1, 4, null, { hasFile: true }),
+      ep(s, 0, 1, null),
+    ];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Some Show" }, NOW)), /2 episodes have no air date yet\./);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Some Show" }, NOW)),
+      /2 episodes have no air date yet\./,
+    );
   });
 
   it("warns when Sonarr is not monitoring the show", async () => {
@@ -347,7 +465,10 @@ describe("get_upcoming_episodes: one show", () => {
     allSeries = [s];
     episodes = [ep(s, 2, 3, "2026-10-01T02:00:00Z")];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Unwatched" }, NOW)), /Sonarr is not monitoring it, so it would not download new episodes\./);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Unwatched" }, NOW)),
+      /Sonarr is not monitoring it, so it would not download new episodes\./,
+    );
   });
 
   it("does not count specials as upcoming episodes", async () => {
@@ -355,16 +476,25 @@ describe("get_upcoming_episodes: one show", () => {
     allSeries = [s];
     episodes = [ep(s, 1, 1, "2020-01-01T00:00:00Z"), ep(s, 0, 1, "2026-10-01T02:00:00Z")];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Specials Only Ahead" }, NOW)), /No new episode is scheduled yet/);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Specials Only Ahead" }, NOW)),
+      /No new episode is scheduled yet/,
+    );
   });
 
   it("caps the list of upcoming episodes for one show", async () => {
     const s = show(1, "Long Run");
     allSeries = [s];
-    episodes = Array.from({ length: 14 }, (_, i) => ep(s, 2, i + 2, new Date(NOW + (i + 1) * DAYS).toISOString()));
+    episodes = Array.from({ length: 14 }, (_, i) =>
+      ep(s, 2, i + 2, new Date(NOW + (i + 1) * DAYS).toISOString()),
+    );
     sonarrFake();
     const result = await getUpcomingEpisodes({ title: "Long Run" }, NOW);
-    assert.equal(lines(result).length, 9, "the next one is the headline, then nine more would be 10 in all");
+    assert.equal(
+      lines(result).length,
+      9,
+      "the next one is the headline, then nine more would be 10 in all",
+    );
     assert.match(text(result), /\.\.\.and 4 more scheduled through 2026-10-03\./);
     assert.equal(rows(result).length, 10);
   });
@@ -372,8 +502,14 @@ describe("get_upcoming_episodes: one show", () => {
   it("asks which show when the title is ambiguous, and says when Sonarr does not have it", async () => {
     allSeries = [show(1, "Fargo", { year: 2014 }), show(2, "Fargo", { year: 2023 })];
     sonarrFake();
-    assert.match(text(await getUpcomingEpisodes({ title: "Fargo" }, NOW)), /matches 2 series in Sonarr/);
-    assert.match(text(await getUpcomingEpisodes({ title: "Zzz" }, NOW)), /No series matching "Zzz" in Sonarr\./);
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Fargo" }, NOW)),
+      /matches 2 series in Sonarr/,
+    );
+    assert.match(
+      text(await getUpcomingEpisodes({ title: "Zzz" }, NOW)),
+      /No series matching "Zzz" in Sonarr\./,
+    );
     assert.equal(sonarr.calls.filter((c) => c.url === "/api/v3/episode").length, 0);
   });
 

@@ -33,8 +33,13 @@ export function isAuthEnabled(): boolean {
 // (rather than check-then-insert) keeps two processes starting together from
 // ending up with different secrets.
 function getSessionSecret(): string {
-  db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(SECRET_KEY, crypto.randomBytes(32).toString("hex"));
-  return (db.prepare("SELECT value FROM settings WHERE key = ?").get(SECRET_KEY) as { value: string }).value;
+  db.prepare("INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)").run(
+    SECRET_KEY,
+    crypto.randomBytes(32).toString("hex"),
+  );
+  return (
+    db.prepare("SELECT value FROM settings WHERE key = ?").get(SECRET_KEY) as { value: string }
+  ).value;
 }
 
 // scrypt is deliberately slow (~50 ms), so the derived key is computed once and
@@ -122,7 +127,10 @@ export const authRouter = Router();
 
 authRouter.get("/status", (req, res) => {
   const authRequired = isAuthEnabled();
-  res.json({ authRequired, authenticated: !authRequired || verifySessionToken(readSessionCookie(req)) });
+  res.json({
+    authRequired,
+    authenticated: !authRequired || verifySessionToken(readSessionCookie(req)),
+  });
 });
 
 authRouter.post("/login", loginLimiter, (req, res) => {

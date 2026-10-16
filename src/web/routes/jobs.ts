@@ -27,7 +27,7 @@ jobsRouter.get("/", (_req, res) => {
   try {
     const rows = db
       .prepare(
-        "SELECT id, task_name, status, total_items, processed_items, created_at, updated_at FROM system_jobs ORDER BY id DESC LIMIT 50"
+        "SELECT id, task_name, status, total_items, processed_items, created_at, updated_at FROM system_jobs ORDER BY id DESC LIMIT 50",
       )
       .all() as JobRecord[];
 

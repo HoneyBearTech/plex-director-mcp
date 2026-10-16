@@ -29,7 +29,12 @@ const CREDITS = [
   credit(8, "No Poster Or Date", "", { poster_path: null, release_date: null, vote_average: 0 }),
 ];
 
-const tvCredit = (id: number, name: string, date: string | null, extra: Record<string, unknown> = {}) => ({
+const tvCredit = (
+  id: number,
+  name: string,
+  date: string | null,
+  extra: Record<string, unknown> = {},
+) => ({
   id,
   name,
   first_air_date: date,
@@ -72,7 +77,9 @@ beforeEach(async () => {
   plexDown = false;
   tmdb = fakeApi(tmdbClient, (req) => {
     if (req.url.startsWith("/search/person")) {
-      return { data: { results: req.url.includes("Nobody") ? [] : [{ id: 42, name: "Some Actor" }] } };
+      return {
+        data: { results: req.url.includes("Nobody") ? [] : [{ id: 42, name: "Some Actor" }] },
+      };
     }
     if (req.url === "/person/42/movie_credits") return { data: { cast: CREDITS } };
     if (req.url === "/person/42/tv_credits") return { data: { cast: TV_CREDITS } };
@@ -97,7 +104,9 @@ beforeEach(async () => {
     }
     const all = req.url.match(/^\/library\/sections\/(\d)\/all$/);
     if (all) {
-      const ids = { "1": plexOwns, "2": plex4k, "3": plexShows, "4": plexShows4k }[all[1] as "1" | "2" | "3" | "4"];
+      const ids = { "1": plexOwns, "2": plex4k, "3": plexShows, "4": plexShows4k }[
+        all[1] as "1" | "2" | "3" | "4"
+      ];
       const items = ids.map((id) => ({ title: `T${id}`, Guid: [{ id: `tmdb://${id}` }] }));
       return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
     }
@@ -113,12 +122,16 @@ const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
 const rows = (r: any) => r.structuredContent.media as Array<Record<string, any>>;
 
 // The pre-TV behaviour: these tests are about movies, so they ask for movies only.
-const film = (actor: string, options: Parameters<typeof resolveActorFilmography>[1] = {}) => resolveActorFilmography(actor, { mediaType: "movie", ...options });
+const film = (actor: string, options: Parameters<typeof resolveActorFilmography>[1] = {}) =>
+  resolveActorFilmography(actor, { mediaType: "movie", ...options });
 
 describe("resolveActorFilmography", () => {
   it("drops self appearances, uncredited roles, documentaries and archive footage; newest first", async () => {
     const result = await film("Some Actor", { limit: 50 });
-    assert.deepEqual(rows(result).map((m) => m.title), ["Newest", "Middle", "Oldest", "No Poster Or Date"]);
+    assert.deepEqual(
+      rows(result).map((m) => m.title),
+      ["Newest", "Middle", "Oldest", "No Poster Or Date"],
+    );
     assert.match(text(result), /Filtered filmography to 4 structural movie targets/);
   });
 
@@ -135,16 +148,27 @@ describe("resolveActorFilmography", () => {
 
   it("filters by release year, keeping titles with no date out of a year range", async () => {
     const result = await film("Some Actor", { yearFrom: 1990, yearTo: 2000 });
-    assert.deepEqual(rows(result).map((m) => m.title), ["Middle"]);
+    assert.deepEqual(
+      rows(result).map((m) => m.title),
+      ["Middle"],
+    );
     assert.match(text(result), /Showing 1 titles \(released 1990-2000\)/);
   });
 
   it("show=missing / show=owned narrows to exactly those rows", async () => {
     const missing = await film("Some Actor", { show: "missing", limit: 50 });
     assert.ok(rows(missing).every((m) => m.libraries.length === 0));
-    assert.deepEqual(rows(missing).map((m) => m.title).sort(), ["Middle", "No Poster Or Date"]);
+    assert.deepEqual(
+      rows(missing)
+        .map((m) => m.title)
+        .sort(),
+      ["Middle", "No Poster Or Date"],
+    );
     const owned = await film("Some Actor", { show: "owned" });
-    assert.deepEqual(rows(owned).map((m) => m.title), ["Newest", "Oldest"]);
+    assert.deepEqual(
+      rows(owned).map((m) => m.title),
+      ["Newest", "Oldest"],
+    );
     assert.match(text(owned), /not in Plex|in Plex/);
   });
 
@@ -152,7 +176,10 @@ describe("resolveActorFilmography", () => {
     plexOwns = [1];
     plex4k = [];
     const result = await film("Some Actor", { yearFrom: 1980, yearTo: 1989, show: "missing" });
-    assert.deepEqual(rows(result).map((m) => m.title), ["Oldest"]);
+    assert.deepEqual(
+      rows(result).map((m) => m.title),
+      ["Oldest"],
+    );
   });
 
   it("limits the list and says how many were left out", async () => {
@@ -200,33 +227,51 @@ describe("resolveActorFilmography", () => {
       const result = await film("Some Actor", { library: "4k", limit: 50 });
       const byTitle = Object.fromEntries(rows(result).map((m) => [m.title, m]));
       assert.deepEqual(byTitle.Oldest.libraries, ["4k Movies"], "held in 4K");
-      assert.deepEqual(byTitle.Newest.libraries, [], "in Plex, but only in the non-4K library, so not owned in 4K");
+      assert.deepEqual(
+        byTitle.Newest.libraries,
+        [],
+        "in Plex, but only in the non-4K library, so not owned in 4K",
+      );
       assert.match(text(result), /In your Plex libraries matching "4k": 1 of 4\./);
     });
 
     it("with show=missing lists what isn't in 4K, including titles owned in HD", async () => {
       const result = await film("Some Actor", { library: "4k", show: "missing", limit: 50 });
-      assert.deepEqual(rows(result).map((m) => m.title).sort(), ["Middle", "Newest", "No Poster Or Date"]);
+      assert.deepEqual(
+        rows(result)
+          .map((m) => m.title)
+          .sort(),
+        ["Middle", "Newest", "No Poster Or Date"],
+      );
     });
 
     it("with show=owned lists only what is in a matching library", async () => {
       const result = await film("Some Actor", { library: "4K", show: "owned" });
-      assert.deepEqual(rows(result).map((m) => m.title), ["Oldest"]);
+      assert.deepEqual(
+        rows(result).map((m) => m.title),
+        ["Oldest"],
+      );
     });
 
     it("reports a library name that matches nothing, listing the real ones", async () => {
       const result = await film("Some Actor", { library: "anime" });
       assert.equal(result.isError, true);
-      assert.match(text(result), /No Plex movie library matching "anime"\. Movie libraries with titles: .*Movies/);
+      assert.match(
+        text(result),
+        /No Plex movie library matching "anime"\. Movie libraries with titles: .*Movies/,
+      );
     });
   });
 });
 
-
 describe("resolveActorFilmography: TV shows", () => {
   const titles = (r: any) => rows(r).map((m) => m.title);
   const tmdbUrls = () => tmdb.calls.map((c) => c.url).filter((u) => u.startsWith("/person/"));
-  const plexUrls = () => plex!.calls.map((c) => c.url).filter((u) => /\/all$/.test(u)).sort();
+  const plexUrls = () =>
+    plex!.calls
+      .map((c) => c.url)
+      .filter((u) => /\/all$/.test(u))
+      .sort();
 
   it("merges movies and shows newest first by default, tagging each with its kind", async () => {
     const result = await resolveActorFilmography("Some Actor", { limit: 50 });
@@ -241,15 +286,23 @@ describe("resolveActorFilmography: TV shows", () => {
         ["movie", "Oldest", 1980],
         ["movie", "No Poster Or Date", null],
         ["show", "No Date Show", null],
-      ]
+      ],
     );
     assert.match(text(result), /Filtered filmography to 8 structural movie and TV targets/);
   });
 
   it("drops talk shows, news, self appearances, uncredited parts and documentaries from TV credits", async () => {
     const result = await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 });
-    assert.deepEqual(titles(result), ["Guest Spot", "Long Show", "Same Number As A Movie", "No Date Show"]);
-    assert.match(text(result), /Filtered filmography to 4 structural TV show targets \(removed docs, talk shows, news, uncredited and self appearances\)/);
+    assert.deepEqual(titles(result), [
+      "Guest Spot",
+      "Long Show",
+      "Same Number As A Movie",
+      "No Date Show",
+    ]);
+    assert.match(
+      text(result),
+      /Filtered filmography to 4 structural TV show targets \(removed docs, talk shows, news, uncredited and self appearances\)/,
+    );
   });
 
   it("does not apply the talk/news genre filter to movies", async () => {
@@ -258,7 +311,11 @@ describe("resolveActorFilmography: TV shows", () => {
     CREDITS.push(credit(9, "Odd Genre Movie", "2020-01-01", { genre_ids: [10767] }));
     try {
       assert.ok(titles(await film("Some Actor", { limit: 50 })).includes("Odd Genre Movie"));
-      assert.ok(!titles(await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 })).includes("Odd Genre Movie"));
+      assert.ok(
+        !titles(
+          await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 }),
+        ).includes("Odd Genre Movie"),
+      );
     } finally {
       CREDITS.length = original;
     }
@@ -282,15 +339,29 @@ describe("resolveActorFilmography: TV shows", () => {
     assert.deepEqual(byTitle["Long Show"].libraries, ["TV Shows", "4k TV Shows"]);
     assert.deepEqual(byTitle["Guest Spot"].libraries, []);
     assert.match(text(result), /In your Plex library: 1 of 4\./);
-    assert.match(text(result), /Long Show \(2008\) \[TV show\] - As: Part in Long Show - ✅ In Plex \(TV Shows, 4k TV Shows\)/);
-    assert.match(text(result), /Guest Spot \(2015\) \[TV show\] - As: Part in Guest Spot - ❌ Not in Plex/);
+    assert.match(
+      text(result),
+      /Long Show \(2008\) \[TV show\] - As: Part in Long Show - ✅ In Plex \(TV Shows, 4k TV Shows\)/,
+    );
+    assert.match(
+      text(result),
+      /Guest Spot \(2015\) \[TV show\] - As: Part in Guest Spot - ❌ Not in Plex/,
+    );
   });
 
   it("keeps movie and TV ids apart: movie 1 owned in Plex does not make TV show 1 owned", async () => {
     const result = await resolveActorFilmography("Some Actor", { limit: 50 });
     const byKey = Object.fromEntries(rows(result).map((m) => [`${m.kind}:${m.title}`, m]));
-    assert.deepEqual(byKey["movie:Newest"]!.libraries, ["Movies"], "movie id 1 is in the Movies library");
-    assert.deepEqual(byKey["show:Same Number As A Movie"]!.libraries, [], "TV id 1 is a different thing");
+    assert.deepEqual(
+      byKey["movie:Newest"]!.libraries,
+      ["Movies"],
+      "movie id 1 is in the Movies library",
+    );
+    assert.deepEqual(
+      byKey["show:Same Number As A Movie"]!.libraries,
+      [],
+      "TV id 1 is a different thing",
+    );
   });
 
   it("summarises both kinds when asked for both", async () => {
@@ -302,25 +373,55 @@ describe("resolveActorFilmography: TV shows", () => {
     const owned = await resolveActorFilmography("Some Actor", { show: "owned", limit: 50 });
     assert.deepEqual(titles(owned), ["Newest", "Long Show", "Oldest"]);
     const missing = await resolveActorFilmography("Some Actor", { show: "missing", limit: 50 });
-    assert.deepEqual(titles(missing), ["Guest Spot", "Same Number As A Movie", "Middle", "No Poster Or Date", "No Date Show"]);
-    const decade = await resolveActorFilmography("Some Actor", { yearFrom: 2000, yearTo: 2009, limit: 50 });
-    assert.deepEqual(titles(decade), ["Long Show", "Same Number As A Movie"], "titles with no date stay out of a range");
+    assert.deepEqual(titles(missing), [
+      "Guest Spot",
+      "Same Number As A Movie",
+      "Middle",
+      "No Poster Or Date",
+      "No Date Show",
+    ]);
+    const decade = await resolveActorFilmography("Some Actor", {
+      yearFrom: 2000,
+      yearTo: 2009,
+      limit: 50,
+    });
+    assert.deepEqual(
+      titles(decade),
+      ["Long Show", "Same Number As A Movie"],
+      "titles with no date stay out of a range",
+    );
   });
 
   it("the library filter judges shows too: '4k' means held in a 4K movie OR 4K show library", async () => {
     plexShows = [101, 102];
     plexShows4k = [101];
-    const result = await resolveActorFilmography("Some Actor", { library: "4k", show: "owned", limit: 50 });
+    const result = await resolveActorFilmography("Some Actor", {
+      library: "4k",
+      show: "owned",
+      limit: 50,
+    });
     assert.deepEqual(titles(result), ["Long Show", "Oldest"]);
-    assert.deepEqual(Object.fromEntries(rows(result).map((m) => [m.title, m.libraries])), { "Long Show": ["4k TV Shows"], Oldest: ["4k Movies"] });
+    assert.deepEqual(Object.fromEntries(rows(result).map((m) => [m.title, m.libraries])), {
+      "Long Show": ["4k TV Shows"],
+      Oldest: ["4k Movies"],
+    });
   });
 
   it("names the libraries that exist when the filter matches none", async () => {
     const both = await resolveActorFilmography("Some Actor", { library: "anime" });
     assert.equal(both.isError, true);
-    assert.match(text(both), /No Plex library matching "anime"\. Libraries with titles: .*Movies.*TV Shows/);
-    const shows = await resolveActorFilmography("Some Actor", { library: "anime", mediaType: "show" });
-    assert.match(text(shows), /No Plex show library matching "anime"\. Show libraries with titles: TV Shows, 4k TV Shows\./);
+    assert.match(
+      text(both),
+      /No Plex library matching "anime"\. Libraries with titles: .*Movies.*TV Shows/,
+    );
+    const shows = await resolveActorFilmography("Some Actor", {
+      library: "anime",
+      mediaType: "show",
+    });
+    assert.match(
+      text(shows),
+      /No Plex show library matching "anime"\. Show libraries with titles: TV Shows, 4k TV Shows\./,
+    );
   });
 
   it("builds web rows for shows: TMDb poster, first-air year, role, rating, no Plex season data", async () => {
@@ -358,7 +459,8 @@ describe("resolveActorFilmography: TV shows", () => {
   it("fails as a whole if TMDb can't supply the TV credits, rather than silently dropping shows", async () => {
     tmdb.restore();
     tmdb = fakeApi(tmdbClient, (req) => {
-      if (req.url.startsWith("/search/person")) return { data: { results: [{ id: 42, name: "Some Actor" }] } };
+      if (req.url.startsWith("/search/person"))
+        return { data: { results: [{ id: 42, name: "Some Actor" }] } };
       if (req.url === "/person/42/movie_credits") return { data: { cast: CREDITS } };
       return { status: 500 };
     });
@@ -379,17 +481,35 @@ describe("resolveActorFilmography: TV shows", () => {
 
   // Found live: TMDb lists Family Guy six times for one actor (one entry per voiced role).
   it("shows a title once, with its roles joined, when TMDb lists it once per role", async () => {
-    CREDITS.push(credit(2, "Middle", "1999-01-01", { character: "Second Role" }), credit(2, "Middle", "1999-01-01", { character: "Role in Middle" }));
-    TV_CREDITS.push(tvCredit(101, "Long Show", "2008-01-20", { character: "Voice" }), tvCredit(101, "Long Show", "2008-01-20", { character: "" }));
+    CREDITS.push(
+      credit(2, "Middle", "1999-01-01", { character: "Second Role" }),
+      credit(2, "Middle", "1999-01-01", { character: "Role in Middle" }),
+    );
+    TV_CREDITS.push(
+      tvCredit(101, "Long Show", "2008-01-20", { character: "Voice" }),
+      tvCredit(101, "Long Show", "2008-01-20", { character: "" }),
+    );
     try {
       const result = await resolveActorFilmography("Some Actor", { limit: 50 });
       assert.equal(titles(result).filter((t) => t === "Middle").length, 1);
       assert.equal(titles(result).filter((t) => t === "Long Show").length, 1);
       assert.equal(rows(result).length, 8, "same rows as without the repeats");
       const byTitle = Object.fromEntries(rows(result).map((m) => [m.title, m]));
-      assert.equal(byTitle.Middle.detail, "As Role in Middle / Second Role", "the same role twice is kept once");
-      assert.equal(byTitle["Long Show"].detail, "As Part in Long Show / Voice", "an empty role adds nothing");
-      assert.match(text(result), /In your Plex library: 3 of 8 \(2 of 4 movies, 1 of 4 TV shows\)\./, "counts titles, not credits");
+      assert.equal(
+        byTitle.Middle.detail,
+        "As Role in Middle / Second Role",
+        "the same role twice is kept once",
+      );
+      assert.equal(
+        byTitle["Long Show"].detail,
+        "As Part in Long Show / Voice",
+        "an empty role adds nothing",
+      );
+      assert.match(
+        text(result),
+        /In your Plex library: 3 of 8 \(2 of 4 movies, 1 of 4 TV shows\)\./,
+        "counts titles, not credits",
+      );
     } finally {
       CREDITS.length -= 2;
       TV_CREDITS.length -= 2;
@@ -400,10 +520,12 @@ describe("resolveActorFilmography: TV shows", () => {
     TV_CREDITS.push(
       tvCredit(101, "Long Show", "2008-01-20", { character: "Bert (voice) / Judge (voice)" }),
       tvCredit(101, "Long Show", "2008-01-20", { character: "Bert (voice)" }),
-      tvCredit(101, "Long Show", "2008-01-20", { character: "Judge (voice) / Clerk" })
+      tvCredit(101, "Long Show", "2008-01-20", { character: "Judge (voice) / Clerk" }),
     );
     try {
-      const longShow = rows(await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 })).find((m) => m.title === "Long Show")!;
+      const longShow = rows(
+        await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 }),
+      ).find((m) => m.title === "Long Show")!;
       assert.equal(longShow.detail, "As Part in Long Show / Bert (voice) / Judge (voice) / Clerk");
     } finally {
       TV_CREDITS.length -= 3;
@@ -413,7 +535,9 @@ describe("resolveActorFilmography: TV shows", () => {
   it("keeps a real role when the same title is also listed as a 'Self' appearance", async () => {
     TV_CREDITS.push(tvCredit(102, "Guest Spot", "2015-03-01", { character: "Self" }));
     try {
-      const guest = rows(await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 })).filter((m) => m.title === "Guest Spot");
+      const guest = rows(
+        await resolveActorFilmography("Some Actor", { mediaType: "show", limit: 50 }),
+      ).filter((m) => m.title === "Guest Spot");
       assert.equal(guest.length, 1);
       assert.equal(guest[0]!.detail, "As Part in Guest Spot");
     } finally {

@@ -39,7 +39,7 @@ export function createWebApp() {
       limit: 300,
       standardHeaders: true,
       legacyHeaders: false,
-    })
+    }),
   );
 
   app.get("/healthz", (_req, res) => {
@@ -53,7 +53,7 @@ export function createWebApp() {
   if (!isAuthEnabled()) {
     console.error(
       "WARNING: WEB_PASSWORD is not set - the web dashboard is open to anyone who can reach this port, " +
-        "including viewing and changing settings. Set WEB_PASSWORD in .env to require a login."
+        "including viewing and changing settings. Set WEB_PASSWORD in .env to require a login.",
     );
   }
 

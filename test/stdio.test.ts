@@ -20,7 +20,8 @@ describe("stdout stays clean for MCP", () => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
         if (entry.isDirectory()) walk(full);
-        else if (entry.name.endsWith(".ts") && /console\.log\(/.test(fs.readFileSync(full, "utf8"))) offenders.push(path.relative(repo, full));
+        else if (entry.name.endsWith(".ts") && /console\.log\(/.test(fs.readFileSync(full, "utf8")))
+          offenders.push(path.relative(repo, full));
       }
     };
     walk(path.join(repo, "src"));
@@ -40,11 +41,20 @@ describe("stdout stays clean for MCP", () => {
       delete env.PLEX_DIRECTOR_SKIP_DOTENV; // this copy must really load its own .env
       const result = spawnSync(
         process.execPath,
-        ["--import", "tsx", "-e", "await import('./src/env.ts'); process.stdout.write('[' + process.env.PLEX_DIRECTOR_TEST_VALUE + ']')"],
-        { cwd: dir, env, encoding: "utf8" }
+        [
+          "--import",
+          "tsx",
+          "-e",
+          "await import('./src/env.ts'); process.stdout.write('[' + process.env.PLEX_DIRECTOR_TEST_VALUE + ']')",
+        ],
+        { cwd: dir, env, encoding: "utf8" },
       );
       assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.stdout, "[loaded]", "the .env was loaded, and nothing else was written to stdout");
+      assert.equal(
+        result.stdout,
+        "[loaded]",
+        "the .env was loaded, and nothing else was written to stdout",
+      );
     } finally {
       fs.rmSync(dir, { recursive: true, force: true });
     }
@@ -61,7 +71,11 @@ describe("stdout stays clean for MCP", () => {
     const child = spawn(process.execPath, ["--import", "tsx", "src/index.ts"], {
       cwd: repo,
       // The suite's isolation still applies: throwaway DB, no real .env, no credentials.
-      env: { ...process.env, PLEX_DIRECTOR_DB_PATH: path.join(dir, "test.db"), WEB_PORT: String(freePort) },
+      env: {
+        ...process.env,
+        PLEX_DIRECTOR_DB_PATH: path.join(dir, "test.db"),
+        WEB_PORT: String(freePort),
+      },
       stdio: ["pipe", "pipe", "pipe"],
     });
 
@@ -79,30 +93,69 @@ describe("stdout stays clean for MCP", () => {
       });
 
       const send = (message: unknown) => child.stdin.write(`${JSON.stringify(message)}\n`);
-      send({ jsonrpc: "2.0", id: 1, method: "initialize", params: { protocolVersion: "2024-11-05", capabilities: {}, clientInfo: { name: "test", version: "1" } } });
+      send({
+        jsonrpc: "2.0",
+        id: 1,
+        method: "initialize",
+        params: {
+          protocolVersion: "2024-11-05",
+          capabilities: {},
+          clientInfo: { name: "test", version: "1" },
+        },
+      });
       send({ jsonrpc: "2.0", method: "notifications/initialized" });
       send({ jsonrpc: "2.0", id: 2, method: "tools/list" });
 
       const deadline = Date.now() + 30_000;
-      while (Date.now() < deadline && !lines.some((l) => l.includes('"id":2'))) await new Promise((r) => setTimeout(r, 100));
+      while (Date.now() < deadline && !lines.some((l) => l.includes('"id":2')))
+        await new Promise((r) => setTimeout(r, 100));
 
       assert.ok(lines.length >= 2, "the server answered the handshake");
       for (const line of lines) {
-        assert.doesNotThrow(() => JSON.parse(line), `stdout line is not JSON: ${JSON.stringify(line)}`);
+        assert.doesNotThrow(
+          () => JSON.parse(line),
+          `stdout line is not JSON: ${JSON.stringify(line)}`,
+        );
       }
-      const tools = JSON.parse(lines.find((l) => l.includes('"id":2'))!).result.tools.map((t: { name: string }) => t.name);
-      assert.ok(tools.includes("search_plex_library") && tools.includes("check_indexer_health"), `tools: ${tools}`);
-      for (const name of ["check_series_completeness", "find_series_gaps", "check_series_status", "diagnose_missing_episodes", "get_upcoming_episodes", "get_on_deck", "search_episodes", "find_series_by_quality"]) {
+      const tools = JSON.parse(lines.find((l) => l.includes('"id":2'))!).result.tools.map(
+        (t: { name: string }) => t.name,
+      );
+      assert.ok(
+        tools.includes("search_plex_library") && tools.includes("check_indexer_health"),
+        `tools: ${tools}`,
+      );
+      for (const name of [
+        "check_series_completeness",
+        "find_series_gaps",
+        "check_series_status",
+        "diagnose_missing_episodes",
+        "get_upcoming_episodes",
+        "get_on_deck",
+        "search_episodes",
+        "find_series_by_quality",
+      ]) {
         assert.ok(tools.includes(name), `missing ${name}; tools: ${tools}`);
       }
       // The shared guidance (src/guidance.ts) reaches MCP clients and maps every tool.
       const init = JSON.parse(lines.find((l) => l.includes('"id":1'))!).result;
       assert.equal(init.instructions, SERVER_INSTRUCTIONS);
       const routed = new Set(ROUTES.flatMap((r) => r.tools));
-      assert.deepEqual([...routed].filter((t) => !tools.includes(t)), [], "guidance names a tool that doesn't exist");
-      assert.deepEqual(tools.filter((t: string) => !routed.has(t)), [], "a tool is missing from the guidance's ROUTES");
+      assert.deepEqual(
+        [...routed].filter((t) => !tools.includes(t)),
+        [],
+        "guidance names a tool that doesn't exist",
+      );
+      assert.deepEqual(
+        tools.filter((t: string) => !routed.has(t)),
+        [],
+        "a tool is missing from the guidance's ROUTES",
+      );
       // README.md states this number ("25 tools", "Twenty-five tools"); change them together.
-      assert.equal(tools.length, 25, `tool count changed - update the counts in README.md too. tools: ${tools}`);
+      assert.equal(
+        tools.length,
+        25,
+        `tool count changed - update the counts in README.md too. tools: ${tools}`,
+      );
     } finally {
       child.kill("SIGKILL");
       fs.rmSync(dir, { recursive: true, force: true });

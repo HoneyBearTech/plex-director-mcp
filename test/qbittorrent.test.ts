@@ -15,19 +15,29 @@ beforeEach(() => {
 
 describe("loginToQbittorrent", () => {
   it("posts form-encoded credentials and returns only the SID cookie pair", async () => {
-    fake = fakeApi(qbitClient, () => ({ data: "Ok.", headers: { "set-cookie": ["SID=abc123; HttpOnly; path=/", "other=1"] } }));
+    fake = fakeApi(qbitClient, () => ({
+      data: "Ok.",
+      headers: { "set-cookie": ["SID=abc123; HttpOnly; path=/", "other=1"] },
+    }));
     const session = await loginToQbittorrent();
     assert.deepEqual(session, { headers: { Cookie: "SID=abc123" } });
     const call = fake.calls[0]!;
     assert.equal(call.url, "/api/v2/auth/login");
-    assert.equal(call.body, "username=admin&password=p%26ss%20word%3D1", "credentials are URL-encoded");
+    assert.equal(
+      call.body,
+      "username=admin&password=p%26ss%20word%3D1",
+      "credentials are URL-encoded",
+    );
     assert.equal(call.headers["Content-Type"], "application/x-www-form-urlencoded");
   });
 
   // qBittorrent answers 200 either way; "Fails." means bad credentials.
   it("throws a clear error on bad credentials instead of carrying on with no session", async () => {
     fake = fakeApi(qbitClient, () => ({ data: "Fails." }));
-    await assert.rejects(loginToQbittorrent(), /qBittorrent login failed - check the qBittorrent username and password/);
+    await assert.rejects(
+      loginToQbittorrent(),
+      /qBittorrent login failed - check the qBittorrent username and password/,
+    );
   });
 
   it("propagates a network failure", async () => {

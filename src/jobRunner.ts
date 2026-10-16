@@ -19,13 +19,17 @@ const MAX_CONSECUTIVE_FAILURES = 3;
 
 const consecutiveFailures = new Map<number, number>();
 
-export function getRunnerIntervalSeconds(raw: string | undefined = process.env.JOB_RUNNER_INTERVAL_SECONDS): number {
+export function getRunnerIntervalSeconds(
+  raw: string | undefined = process.env.JOB_RUNNER_INTERVAL_SECONDS,
+): number {
   const trimmed = raw?.trim();
   if (!trimmed) return DEFAULT_INTERVAL_SECONDS;
 
   const seconds = Number(trimmed);
   if (!Number.isFinite(seconds) || seconds < 0) {
-    console.error(`Ignoring invalid JOB_RUNNER_INTERVAL_SECONDS "${trimmed}"; using ${DEFAULT_INTERVAL_SECONDS}s.`);
+    console.error(
+      `Ignoring invalid JOB_RUNNER_INTERVAL_SECONDS "${trimmed}"; using ${DEFAULT_INTERVAL_SECONDS}s.`,
+    );
     return DEFAULT_INTERVAL_SECONDS;
   }
   if (seconds === 0) return 0;
@@ -34,28 +38,34 @@ export function getRunnerIntervalSeconds(raw: string | undefined = process.env.J
 
 // One tick of the runner. Exported so it can be exercised without waiting on a timer.
 export async function runJobRunnerTick(): Promise<{ jobId: number; result: StepResult } | null> {
-  const job = db.prepare("SELECT id, task_name FROM system_jobs WHERE status = 'RUNNING' ORDER BY id LIMIT 1").get() as
-    | { id: number; task_name: string }
-    | undefined;
+  const job = db
+    .prepare("SELECT id, task_name FROM system_jobs WHERE status = 'RUNNING' ORDER BY id LIMIT 1")
+    .get() as { id: number; task_name: string } | undefined;
   if (!job) return null;
 
   const result = await stepJob(job.id);
 
   if (result.outcome === "failed") {
     const failures = (consecutiveFailures.get(job.id) ?? 0) + 1;
-    console.error(`Job runner: job #${job.id} step failed (${failures}/${MAX_CONSECUTIVE_FAILURES}): ${result.message}`);
+    console.error(
+      `Job runner: job #${job.id} step failed (${failures}/${MAX_CONSECUTIVE_FAILURES}): ${result.message}`,
+    );
 
     if (failures >= MAX_CONSECUTIVE_FAILURES) {
       consecutiveFailures.delete(job.id);
-      db.prepare("UPDATE system_jobs SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'RUNNING'").run(job.id);
-      console.error(`Job runner: paused job #${job.id} after ${MAX_CONSECUTIVE_FAILURES} consecutive failures.`);
+      db.prepare(
+        "UPDATE system_jobs SET status = 'PAUSED', updated_at = CURRENT_TIMESTAMP WHERE id = ? AND status = 'RUNNING'",
+      ).run(job.id);
+      console.error(
+        `Job runner: paused job #${job.id} after ${MAX_CONSECUTIVE_FAILURES} consecutive failures.`,
+      );
       await sendDiscordNotification(
         "⏸️ Plex Director Job Paused",
         `**Job #${job.id}:** ${job.task_name}\n` +
           `Paused automatically after ${MAX_CONSECUTIVE_FAILURES} consecutive failed steps.\n` +
           `**Last error:** ${result.message}\n` +
           "Resume it once the problem is fixed.",
-        15105570
+        15105570,
       );
     } else {
       consecutiveFailures.set(job.id, failures);

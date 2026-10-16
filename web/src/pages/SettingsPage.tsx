@@ -1,5 +1,16 @@
 import { useEffect, useState } from "react";
-import { Badge, Box, Button, Callout, Card, Flex, Select, Tabs, Text, TextField } from "@radix-ui/themes";
+import {
+  Badge,
+  Box,
+  Button,
+  Callout,
+  Card,
+  Flex,
+  Select,
+  Tabs,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
 import { api, type SecretField, type SettingsResponse, type SettingsService } from "../api";
 import { useAppearance, type Appearance } from "../theme";
 
@@ -25,7 +36,11 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     fields: [
       { name: "url", label: "URL", placeholder: "http://radarr:7878" },
       { name: "apiKey", label: "API Key", secret: true },
-      { name: "defaultQualityProfile", label: "Default quality profile for new movies", placeholder: "Leave blank to use Radarr's first profile" },
+      {
+        name: "defaultQualityProfile",
+        label: "Default quality profile for new movies",
+        placeholder: "Leave blank to use Radarr's first profile",
+      },
     ],
   },
   {
@@ -67,7 +82,11 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     fields: [
       { name: "url", label: "URL", placeholder: "http://plex:32400" },
       { name: "token", label: "Token", secret: true },
-      { name: "skipLibraries", label: "Libraries to leave out of searches", placeholder: "e.g. Sports (comma-separated; still searched when named)" },
+      {
+        name: "skipLibraries",
+        label: "Libraries to leave out of searches",
+        placeholder: "e.g. Sports (comma-separated; still searched when named)",
+      },
     ],
   },
   {
@@ -145,14 +164,19 @@ function ServiceSettingsForm({
         {fields.map((f) => {
           const current = initial[f.name];
           const configured =
-            f.secret && ((typeof current === "object" && current.configured) || savedSecrets.has(f.name));
+            f.secret &&
+            ((typeof current === "object" && current.configured) || savedSecrets.has(f.name));
           return (
             <Box key={f.name}>
               <Flex justify="between" align="center" mb="1">
                 <Text as="label" size="2" weight="medium">
                   {f.label}
                 </Text>
-                {f.secret && <Badge color={configured ? "green" : "gray"}>{configured ? "configured" : "not set"}</Badge>}
+                {f.secret && (
+                  <Badge color={configured ? "green" : "gray"}>
+                    {configured ? "configured" : "not set"}
+                  </Badge>
+                )}
               </Flex>
               <TextField.Root
                 type={f.secret ? "password" : "text"}
@@ -192,7 +216,10 @@ function UISettingsForm() {
         <Text as="label" size="2" weight="medium" mb="1" style={{ display: "block" }}>
           Appearance
         </Text>
-        <Select.Root value={appearance} onValueChange={(value) => setAppearance(value as Appearance)}>
+        <Select.Root
+          value={appearance}
+          onValueChange={(value) => setAppearance(value as Appearance)}
+        >
           <Select.Trigger />
           <Select.Content>
             <Select.Item value="inherit">System</Select.Item>
@@ -220,8 +247,8 @@ export function SettingsPage() {
     <Flex direction="column" gap="4">
       <Callout.Root color="gray">
         <Callout.Text>
-          API keys and passwords are never sent back to the browser once saved; only whether they're set. Changing a
-          service's URL needs its key or password entered again.
+          API keys and passwords are never sent back to the browser once saved; only whether they're
+          set. Changing a service's URL needs its key or password entered again.
         </Callout.Text>
       </Callout.Root>
 

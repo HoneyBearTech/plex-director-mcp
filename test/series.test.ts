@@ -2,7 +2,14 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { sonarrClient } from "../src/clients.js";
-import { analyzeEpisodes, checkSeriesCompleteness, episodeRanges, findSeries, findSeriesGaps, seasonRanges } from "../src/tools/series.js";
+import {
+  analyzeEpisodes,
+  checkSeriesCompleteness,
+  episodeRanges,
+  findSeries,
+  findSeriesGaps,
+  seasonRanges,
+} from "../src/tools/series.js";
 import { setSetting } from "../src/settings.js";
 import { fakeApi, resetDb } from "./helpers.js";
 
@@ -24,9 +31,19 @@ const episode = ({ season, number, have = false, monitored = true, airs = PAST }
   airDateUtc: airs,
 });
 // A season of `count` episodes where the numbers in `have` are downloaded.
-const season = (n: number, count: number, have: number[] | "all" | "none" = "all", extra: Partial<EpisodeSpec> = {}) =>
+const season = (
+  n: number,
+  count: number,
+  have: number[] | "all" | "none" = "all",
+  extra: Partial<EpisodeSpec> = {},
+) =>
   Array.from({ length: count }, (_, i) =>
-    episode({ season: n, number: i + 1, have: have === "all" ? true : have === "none" ? false : have.includes(i + 1), ...extra })
+    episode({
+      season: n,
+      number: i + 1,
+      have: have === "all" ? true : have === "none" ? false : have.includes(i + 1),
+      ...extra,
+    }),
   );
 
 const series = (id: number, title: string, extra: Record<string, unknown> = {}) => ({
@@ -75,7 +92,8 @@ afterEach(() => sonarr?.restore());
 
 const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
 const rows = (r: any) => r.structuredContent.media as Array<Record<string, any>>;
-const episodeCalls = () => sonarr.calls.filter((c) => c.url === "/api/v3/episode").map((c) => c.params.seriesId);
+const episodeCalls = () =>
+  sonarr.calls.filter((c) => c.url === "/api/v3/episode").map((c) => c.params.seriesId);
 
 describe("analyzeEpisodes", () => {
   it("counts aired episodes with and without a file, per season", () => {
@@ -83,42 +101,73 @@ describe("analyzeEpisodes", () => {
     assert.equal(result.released, 8);
     assert.equal(result.have, 6);
     assert.equal(result.missing, 2);
-    assert.deepEqual(result.seasons.map((s) => [s.season, s.released, s.have, s.missing]), [[1, 4, 4, []], [2, 4, 2, [2, 3]]]);
+    assert.deepEqual(
+      result.seasons.map((s) => [s.season, s.released, s.have, s.missing]),
+      [
+        [1, 4, 4, []],
+        [2, 4, 2, [2, 3]],
+      ],
+    );
   });
 
   it("does not count episodes that have not aired (future or undated) as missing", () => {
-    const result = analyzeEpisodes([...season(1, 2, "all"), episode({ season: 1, number: 3, airs: FUTURE }), episode({ season: 1, number: 4, airs: null })]);
+    const result = analyzeEpisodes([
+      ...season(1, 2, "all"),
+      episode({ season: 1, number: 3, airs: FUTURE }),
+      episode({ season: 1, number: 4, airs: null }),
+    ]);
     assert.equal(result.missing, 0);
     assert.equal(result.unaired, 2);
     assert.equal(result.released, 2);
   });
 
   it("counts an episode with a file as released even with no air date or a future one", () => {
-    const result = analyzeEpisodes([episode({ season: 1, number: 1, have: true, airs: null }), episode({ season: 1, number: 2, have: true, airs: FUTURE })]);
+    const result = analyzeEpisodes([
+      episode({ season: 1, number: 1, have: true, airs: null }),
+      episode({ season: 1, number: 2, have: true, airs: FUTURE }),
+    ]);
     assert.deepEqual([result.released, result.have, result.unaired], [2, 2, 0]);
   });
 
   it("uses the clock it is given for what has aired", () => {
     const eps = [episode({ season: 1, number: 1, airs: "2020-06-01T00:00:00Z" })];
     assert.equal(analyzeEpisodes(eps, Date.parse("2020-05-31T23:59:59Z")).missing, 0);
-    assert.equal(analyzeEpisodes(eps, Date.parse("2020-06-01T00:00:00Z")).missing, 1, "aired exactly now counts as aired");
+    assert.equal(
+      analyzeEpisodes(eps, Date.parse("2020-06-01T00:00:00Z")).missing,
+      1,
+      "aired exactly now counts as aired",
+    );
   });
 
   it("keeps season 0 specials out of the totals and reports them separately", () => {
     const result = analyzeEpisodes([...season(1, 2, "all"), ...season(0, 5, [1, 2])]);
     assert.deepEqual([result.released, result.missing], [2, 0]);
     assert.deepEqual(result.specials, { total: 5, have: 2 });
-    assert.deepEqual(result.seasons.map((s) => s.season), [1]);
+    assert.deepEqual(
+      result.seasons.map((s) => s.season),
+      [1],
+    );
   });
 
   it("counts how many missing episodes are monitored", () => {
-    const result = analyzeEpisodes([episode({ season: 1, number: 1, monitored: true }), episode({ season: 1, number: 2, monitored: false }), episode({ season: 1, number: 3, have: true })]);
+    const result = analyzeEpisodes([
+      episode({ season: 1, number: 1, monitored: true }),
+      episode({ season: 1, number: 2, monitored: false }),
+      episode({ season: 1, number: 3, have: true }),
+    ]);
     assert.deepEqual([result.missing, result.missingMonitored], [2, 1]);
   });
 
   it("sorts seasons and missing episodes numerically", () => {
-    const result = analyzeEpisodes([episode({ season: 10, number: 2 }), episode({ season: 2, number: 11 }), episode({ season: 2, number: 3 })]);
-    assert.deepEqual(result.seasons.map((s) => s.season), [2, 10]);
+    const result = analyzeEpisodes([
+      episode({ season: 10, number: 2 }),
+      episode({ season: 2, number: 11 }),
+      episode({ season: 2, number: 3 }),
+    ]);
+    assert.deepEqual(
+      result.seasons.map((s) => s.season),
+      [2, 10],
+    );
     assert.deepEqual(result.seasons[0]!.missing, [3, 11]);
   });
 });
@@ -158,12 +207,20 @@ describe("findSeries", () => {
 
   it("matches ignoring case, punctuation, accents, '&' and a trailing year", () => {
     assert.equal((findSeries(list, "the WIRE") as any).series.id, 3);
-    for (const typed of ["Marvel's Agents of S.H.I.E.L.D.", "marvels agents of shield", "Marvel\u2019s Agents of SHIELD"]) {
+    for (const typed of [
+      "Marvel's Agents of S.H.I.E.L.D.",
+      "marvels agents of shield",
+      "Marvel\u2019s Agents of SHIELD",
+    ]) {
       assert.equal((findSeries(list, typed) as any).series.id, 4, typed);
     }
     assert.equal((findSeries(list, "law and order") as any).series.id, 5);
     assert.equal((findSeries(list, "Law & Order") as any).series.id, 5);
-    assert.equal((findSeries(list, "doctor who") as any).series.id, 6, "the year in Sonarr's title does not stop an exact match beating 'Doctor Who Confidential'");
+    assert.equal(
+      (findSeries(list, "doctor who") as any).series.id,
+      6,
+      "the year in Sonarr's title does not stop an exact match beating 'Doctor Who Confidential'",
+    );
     assert.equal((findSeries(list, "Doctor Who (2005)") as any).series.id, 6);
     assert.equal((findSeries(list, "celine") as any).series.id, 7);
   });
@@ -173,7 +230,10 @@ describe("findSeries", () => {
   });
 
   it("returns every same-named show, or narrows by year", () => {
-    assert.deepEqual((findSeries(list, "Fargo") as any).candidates.map((s: any) => s.id), [1, 2]);
+    assert.deepEqual(
+      (findSeries(list, "Fargo") as any).candidates.map((s: any) => s.id),
+      [1, 2],
+    );
     assert.equal((findSeries(list, "Fargo", 2023) as any).series.id, 2);
   });
 
@@ -183,7 +243,10 @@ describe("findSeries", () => {
 
   it("falls back to a title containing the text: one match is used, several are offered", () => {
     assert.equal((findSeries(list, "voyager") as any).series.id, 9);
-    assert.deepEqual((findSeries(list, "trek") as any).candidates.map((s: any) => s.id), [8, 9]);
+    assert.deepEqual(
+      (findSeries(list, "trek") as any).candidates.map((s: any) => s.id),
+      [8, 9],
+    );
   });
 
   it("finds nothing for an unknown or blank title", () => {
@@ -218,19 +281,35 @@ describe("check_series_completeness", () => {
   // The whole reason this tool exists: Sonarr's own statistics call a show like
   // this "100%" because its missing episodes are unmonitored.
   it("finds the gaps Sonarr's own statistics hide in an unmonitored show", async () => {
-    allSeries = [series(1, "Curb Your Enthusiasm", { monitored: false, statistics: { totalEpisodeCount: 163, episodeFileCount: 20, episodeCount: 20 } })];
-    episodes[1] = [...season(1, 10), ...season(2, 10), ...season(3, 10, "none", { monitored: false })];
+    allSeries = [
+      series(1, "Curb Your Enthusiasm", {
+        monitored: false,
+        statistics: { totalEpisodeCount: 163, episodeFileCount: 20, episodeCount: 20 },
+      }),
+    ];
+    episodes[1] = [
+      ...season(1, 10),
+      ...season(2, 10),
+      ...season(3, 10, "none", { monitored: false }),
+    ];
     sonarrFake();
     const result = await checkSeriesCompleteness("Curb Your Enthusiasm");
     assert.match(text(result), /NOT complete: you have 20 of 30 aired episodes \(10 missing\)\./);
-    assert.match(text(result), /In Sonarr the show is not monitored \(Sonarr will not look for missing episodes\)\./);
+    assert.match(
+      text(result),
+      /In Sonarr the show is not monitored \(Sonarr will not look for missing episodes\)\./,
+    );
     assert.match(text(result), /- Complete: seasons 1-2\./);
     assert.match(text(result), /- Season 3: none of 10 episodes\./);
   });
 
   it("lists which episodes are missing in a partly downloaded season", async () => {
     allSeries = [series(1, "Some Show", { monitored: true })];
-    episodes[1] = [...season(1, 10, "all"), ...season(2, 12, [1, 2, 3, 10]), ...season(3, 6, [1, 6])];
+    episodes[1] = [
+      ...season(1, 10, "all"),
+      ...season(2, 12, [1, 2, 3, 10]),
+      ...season(3, 6, [1, 6]),
+    ];
     sonarrFake();
     const result = await checkSeriesCompleteness("Some Show");
     assert.match(text(result), /you have 16 of 28 aired episodes \(12 missing\)/);
@@ -239,17 +318,37 @@ describe("check_series_completeness", () => {
   });
 
   it("says whether Sonarr is looking for the missing episodes", async () => {
-    allSeries = [series(1, "Watched", { monitored: true }), series(2, "Ignored Episodes", { monitored: true })];
+    allSeries = [
+      series(1, "Watched", { monitored: true }),
+      series(2, "Ignored Episodes", { monitored: true }),
+    ];
     episodes[1] = season(1, 3, [1]);
     episodes[2] = season(1, 3, [1], { monitored: false });
     sonarrFake();
-    assert.match(text(await checkSeriesCompleteness("Watched")), /In Sonarr the show is monitored \(Sonarr is looking for 2 of them\)/);
-    assert.match(text(await checkSeriesCompleteness("Ignored Episodes")), /In Sonarr the show is monitored, but its missing episodes are unmonitored/);
+    assert.match(
+      text(await checkSeriesCompleteness("Watched")),
+      /In Sonarr the show is monitored \(Sonarr is looking for 2 of them\)/,
+    );
+    assert.match(
+      text(await checkSeriesCompleteness("Ignored Episodes")),
+      /In Sonarr the show is monitored, but its missing episodes are unmonitored/,
+    );
   });
 
   it("keeps not-yet-aired episodes out of the missing count and says they are coming", async () => {
-    allSeries = [series(1, "Ongoing", { status: "continuing", monitored: true, nextAiring: "2999-01-08T02:00:00Z" })];
-    episodes[1] = [...season(1, 8, "all"), ...season(2, 3, "all"), episode({ season: 2, number: 4, airs: FUTURE }), episode({ season: 2, number: 5, airs: FUTURE })];
+    allSeries = [
+      series(1, "Ongoing", {
+        status: "continuing",
+        monitored: true,
+        nextAiring: "2999-01-08T02:00:00Z",
+      }),
+    ];
+    episodes[1] = [
+      ...season(1, 8, "all"),
+      ...season(2, 3, "all"),
+      episode({ season: 2, number: 4, airs: FUTURE }),
+      episode({ season: 2, number: 5, airs: FUTURE }),
+    ];
     sonarrFake();
     const result = await checkSeriesCompleteness("Ongoing");
     assert.match(text(result), /Complete: you have all 11 aired episodes/);
@@ -259,17 +358,32 @@ describe("check_series_completeness", () => {
 
   it("handles a show that has not aired anything yet", async () => {
     allSeries = [series(1, "Upcoming", { status: "upcoming" })];
-    episodes[1] = [episode({ season: 1, number: 1, airs: FUTURE }), episode({ season: 1, number: 2, airs: FUTURE })];
+    episodes[1] = [
+      episode({ season: 1, number: 1, airs: FUTURE }),
+      episode({ season: 1, number: 2, airs: FUTURE }),
+    ];
     sonarrFake();
-    assert.match(text(await checkSeriesCompleteness("Upcoming")), /No episodes have aired yet \(2 upcoming\)\./);
+    assert.match(
+      text(await checkSeriesCompleteness("Upcoming")),
+      /No episodes have aired yet \(2 upcoming\)\./,
+    );
   });
 
   // Found live: Curb Your Enthusiasm printed ten identical "none of 10 episodes" lines.
   it("collapses a run of seasons with nothing downloaded into one line", async () => {
     allSeries = [series(1, "Curb")];
-    episodes[1] = [...season(1, 10, "none"), ...season(2, 10, "none"), ...season(3, 10, "none"), ...season(4, 8, [1]), ...season(5, 10, "none"), ...season(6, 4, "all")];
+    episodes[1] = [
+      ...season(1, 10, "none"),
+      ...season(2, 10, "none"),
+      ...season(3, 10, "none"),
+      ...season(4, 8, [1]),
+      ...season(5, 10, "none"),
+      ...season(6, 4, "all"),
+    ];
     sonarrFake();
-    const lines = text(await checkSeriesCompleteness("Curb")).split("\n").filter((l) => l.startsWith("- "));
+    const lines = text(await checkSeriesCompleteness("Curb"))
+      .split("\n")
+      .filter((l) => l.startsWith("- "));
     assert.deepEqual(lines, [
       "- Complete: season 6.",
       "- Seasons 1-3: nothing downloaded (30 episodes).",
@@ -282,8 +396,14 @@ describe("check_series_completeness", () => {
     allSeries = [series(1, "Gappy")];
     episodes[1] = [...season(1, 3, "none"), ...season(2, 3, "all"), ...season(3, 3, "none")];
     sonarrFake();
-    const lines = text(await checkSeriesCompleteness("Gappy")).split("\n").filter((l) => l.startsWith("- "));
-    assert.deepEqual(lines, ["- Complete: season 2.", "- Season 1: none of 3 episodes.", "- Season 3: none of 3 episodes."]);
+    const lines = text(await checkSeriesCompleteness("Gappy"))
+      .split("\n")
+      .filter((l) => l.startsWith("- "));
+    assert.deepEqual(lines, [
+      "- Complete: season 2.",
+      "- Season 1: none of 3 episodes.",
+      "- Season 3: none of 3 episodes.",
+    ]);
   });
 
   // Found live: Sonarr's title is already "Bluey (2018)", which printed "Bluey (2018) (2018)".
@@ -293,17 +413,28 @@ describe("check_series_completeness", () => {
     episodes[2] = season(1, 2, [1]);
     sonarrFake();
     assert.match(text(await checkSeriesCompleteness("Bluey")), /^## Bluey \(2018\) - Sonarr/);
-    const lines = text(await findSeriesGaps()).split("\n").filter((l) => l.startsWith("- "));
-    assert.ok(lines.some((l) => l.startsWith("- Bluey (2018) - 1 of 2")) && lines.some((l) => l.startsWith("- Plain (2001) - 1 of 2")), lines.join("\n"));
+    const lines = text(await findSeriesGaps())
+      .split("\n")
+      .filter((l) => l.startsWith("- "));
+    assert.ok(
+      lines.some((l) => l.startsWith("- Bluey (2018) - 1 of 2")) &&
+        lines.some((l) => l.startsWith("- Plain (2001) - 1 of 2")),
+      lines.join("\n"),
+    );
   });
 
   it("caps a huge list of incomplete seasons", async () => {
     allSeries = [series(1, "Sesame Street")];
     episodes[1] = Array.from({ length: 50 }, (_, i) => season(i + 1, 2, [1])).flat();
     sonarrFake();
-    const lines = text(await checkSeriesCompleteness("Sesame Street")).split("\n").filter((l) => l.startsWith("- Season"));
+    const lines = text(await checkSeriesCompleteness("Sesame Street"))
+      .split("\n")
+      .filter((l) => l.startsWith("- Season"));
     assert.equal(lines.length, 40);
-    assert.match(text(await checkSeriesCompleteness("Sesame Street")), /\.\.\.and 10 more seasons with missing episodes\./);
+    assert.match(
+      text(await checkSeriesCompleteness("Sesame Street")),
+      /\.\.\.and 10 more seasons with missing episodes\./,
+    );
   });
 
   it("returns a table row with downloaded counts, network and what Sonarr will do", async () => {
@@ -338,7 +469,10 @@ describe("check_series_completeness", () => {
     allSeries = [series(1, "Fargo", { year: 2014 }), series(2, "Fargo", { year: 2023 })];
     sonarrFake();
     const result = await checkSeriesCompleteness("Fargo");
-    assert.match(text(result), /"Fargo" matches 2 series in Sonarr: Fargo \(2014\); Fargo \(2023\)\. Ask again with the full title/);
+    assert.match(
+      text(result),
+      /"Fargo" matches 2 series in Sonarr: Fargo \(2014\); Fargo \(2023\)\. Ask again with the full title/,
+    );
     assert.equal(episodeCalls().length, 0);
     episodes[2] = season(1, 2);
     assert.match(text(await checkSeriesCompleteness("Fargo", 2023)), /^## Fargo \(2023\)/);
@@ -363,7 +497,10 @@ describe("check_series_completeness", () => {
     allSeries = [series(1, "Done")];
     episodes[1] = season(1, 3);
     sonarrFake();
-    assert.match(text(await checkSeriesCompleteness("Done")), /doesn't check that Plex has scanned the files/);
+    assert.match(
+      text(await checkSeriesCompleteness("Done")),
+      /doesn't check that Plex has scanned the files/,
+    );
   });
 });
 
@@ -373,7 +510,10 @@ describe("find_series_gaps", () => {
       series(1, "Big Sampler", { monitored: false }),
       series(2, "Nearly There", { monitored: true, status: "continuing" }),
       series(3, "Nothing Grabbed", { monitored: false }),
-      series(4, "Complete Show", { monitored: true, statistics: { totalEpisodeCount: 6, episodeFileCount: 6 } }),
+      series(4, "Complete Show", {
+        monitored: true,
+        statistics: { totalEpisodeCount: 6, episodeFileCount: 6 },
+      }),
       series(5, "Complete Unmonitored", { monitored: false }),
       series(6, "Monitored Quiet", { monitored: true }),
     ];
@@ -388,20 +528,31 @@ describe("find_series_gaps", () => {
   it("ranks shows by how many aired episodes are missing", async () => {
     sonarrFake();
     const result = await findSeriesGaps({ limit: 50 });
-    assert.deepEqual(rows(result).map((r) => r.title), ["Big Sampler", "Nothing Grabbed", "Monitored Quiet", "Nearly There"]);
-    assert.match(text(result), /4 of 6 series have aired episodes without a file, 81 episodes in all\./);
+    assert.deepEqual(
+      rows(result).map((r) => r.title),
+      ["Big Sampler", "Nothing Grabbed", "Monitored Quiet", "Nearly There"],
+    );
+    assert.match(
+      text(result),
+      /4 of 6 series have aired episodes without a file, 81 episodes in all\./,
+    );
   });
 
   it("summarises how many Sonarr is actively searching for and how many have nothing at all", async () => {
     sonarrFake();
     const result = await findSeriesGaps();
-    assert.match(text(result), /Sonarr is actively looking for episodes of 1 of them; 1 have nothing downloaded at all\./);
+    assert.match(
+      text(result),
+      /Sonarr is actively looking for episodes of 1 of them; 1 have nothing downloaded at all\./,
+    );
   });
 
   it("describes each show with counts and what Sonarr will do", async () => {
     sonarrFake();
     const result = await findSeriesGaps();
-    const lines = text(result).split("\n").filter((l) => l.startsWith("- "));
+    const lines = text(result)
+      .split("\n")
+      .filter((l) => l.startsWith("- "));
     assert.deepEqual(lines, [
       "- Big Sampler (2010) - 3 of 60 aired episodes, 57 missing - ended, not monitored (Sonarr will not look for missing episodes)",
       "- Nothing Grabbed (2010) - 0 of 20 aired episodes, 20 missing - ended, not monitored (Sonarr will not look for missing episodes)",
@@ -414,7 +565,13 @@ describe("find_series_gaps", () => {
     sonarrFake();
     const result = await findSeriesGaps();
     const nearly = rows(result).find((r) => r.title === "Nearly There")!;
-    assert.deepEqual(nearly.show, { seasons: 1, episodes: 10, watchedEpisodes: null, ownedEpisodes: 9, network: "AMC" });
+    assert.deepEqual(nearly.show, {
+      seasons: 1,
+      episodes: 10,
+      watchedEpisodes: null,
+      ownedEpisodes: 9,
+      network: "AMC",
+    });
     assert.equal(nearly.detail, "Missing 1 - Sonarr is searching");
     assert.equal(nearly.libraries, null);
   });
@@ -422,35 +579,64 @@ describe("find_series_gaps", () => {
   it("does not fetch episodes for shows whose every episode already has a file", async () => {
     sonarrFake();
     await findSeriesGaps();
-    assert.deepEqual([...episodeCalls()].sort(), [1, 2, 3, 5, 6], "show 4 has every episode downloaded per its statistics");
+    assert.deepEqual(
+      [...episodeCalls()].sort(),
+      [1, 2, 3, 5, 6],
+      "show 4 has every episode downloaded per its statistics",
+    );
   });
 
   it("filters by whether Sonarr monitors the show", async () => {
     sonarrFake();
-    assert.deepEqual(rows(await findSeriesGaps({ monitored: "monitored" })).map((r) => r.title), ["Monitored Quiet", "Nearly There"]);
-    assert.deepEqual(rows(await findSeriesGaps({ monitored: "unmonitored" })).map((r) => r.title), ["Big Sampler", "Nothing Grabbed"]);
+    assert.deepEqual(
+      rows(await findSeriesGaps({ monitored: "monitored" })).map((r) => r.title),
+      ["Monitored Quiet", "Nearly There"],
+    );
+    assert.deepEqual(
+      rows(await findSeriesGaps({ monitored: "unmonitored" })).map((r) => r.title),
+      ["Big Sampler", "Nothing Grabbed"],
+    );
     assert.equal(rows(await findSeriesGaps({ monitored: "any" })).length, 4);
   });
 
   it("'searching' means monitored AND with missing episodes Sonarr will look for (its wanted list)", async () => {
     sonarrFake();
     const result = await findSeriesGaps({ monitored: "searching" });
-    assert.deepEqual(rows(result).map((r) => r.title), ["Nearly There"], "'Monitored Quiet' is monitored but its missing episodes are not");
+    assert.deepEqual(
+      rows(result).map((r) => r.title),
+      ["Nearly There"],
+      "'Monitored Quiet' is monitored but its missing episodes are not",
+    );
     assert.match(text(result), /^## Series with missing episodes \(searching\)/);
-    assert.match(text(await findSeriesGaps({ monitored: "searching", minMissing: 50 })), /No Sonarr series have aired episodes missing \(searching, at least 50 missing\)/);
+    assert.match(
+      text(await findSeriesGaps({ monitored: "searching", minMissing: 50 })),
+      /No Sonarr series have aired episodes missing \(searching, at least 50 missing\)/,
+    );
   });
 
   it("filters by how many are missing, for 'nearly complete' shows", async () => {
     sonarrFake();
-    assert.deepEqual(rows(await findSeriesGaps({ maxMissing: 5 })).map((r) => r.title), ["Monitored Quiet", "Nearly There"]);
-    assert.deepEqual(rows(await findSeriesGaps({ minMissing: 20 })).map((r) => r.title), ["Big Sampler", "Nothing Grabbed"]);
-    assert.deepEqual(rows(await findSeriesGaps({ minMissing: 3, maxMissing: 20 })).map((r) => r.title), ["Nothing Grabbed", "Monitored Quiet"]);
+    assert.deepEqual(
+      rows(await findSeriesGaps({ maxMissing: 5 })).map((r) => r.title),
+      ["Monitored Quiet", "Nearly There"],
+    );
+    assert.deepEqual(
+      rows(await findSeriesGaps({ minMissing: 20 })).map((r) => r.title),
+      ["Big Sampler", "Nothing Grabbed"],
+    );
+    assert.deepEqual(
+      rows(await findSeriesGaps({ minMissing: 3, maxMissing: 20 })).map((r) => r.title),
+      ["Nothing Grabbed", "Monitored Quiet"],
+    );
   });
 
   it("can hide shows that have nothing downloaded at all", async () => {
     sonarrFake();
     const result = await findSeriesGaps({ hideEmpty: true });
-    assert.deepEqual(rows(result).map((r) => r.title), ["Big Sampler", "Monitored Quiet", "Nearly There"]);
+    assert.deepEqual(
+      rows(result).map((r) => r.title),
+      ["Big Sampler", "Monitored Quiet", "Nearly There"],
+    );
     assert.match(text(result), /\(with some episodes downloaded\)/);
   });
 
@@ -459,7 +645,11 @@ describe("find_series_gaps", () => {
     const result = await findSeriesGaps({ limit: 2 });
     assert.equal(rows(result).length, 2);
     assert.match(text(result), /Listed the 2 with the most missing; 2 more are not listed/);
-    assert.match(text(result), /4 of 6 series have aired episodes/, "the summary still covers all of them");
+    assert.match(
+      text(result),
+      /4 of 6 series have aired episodes/,
+      "the summary still covers all of them",
+    );
   });
 
   it("breaks ties alphabetically", async () => {
@@ -468,7 +658,10 @@ describe("find_series_gaps", () => {
     episodes[2] = season(1, 3, "none");
     episodes[3] = season(1, 3, "none");
     sonarrFake();
-    assert.deepEqual(rows(await findSeriesGaps()).map((r) => r.title), ["Alpha", "Mid", "Zed"]);
+    assert.deepEqual(
+      rows(await findSeriesGaps()).map((r) => r.title),
+      ["Alpha", "Mid", "Zed"],
+    );
   });
 
   it("ignores specials and not-yet-aired episodes when ranking", async () => {
@@ -484,7 +677,10 @@ describe("find_series_gaps", () => {
   it("says so, with the filters used, when nothing matches", async () => {
     sonarrFake();
     const result = await findSeriesGaps({ monitored: "monitored", minMissing: 50 });
-    assert.match(text(result), /No Sonarr series have aired episodes missing \(monitored, at least 50 missing\)\. 6 series checked\./);
+    assert.match(
+      text(result),
+      /No Sonarr series have aired episodes missing \(monitored, at least 50 missing\)\. 6 series checked\./,
+    );
   });
 
   it("fetches episodes with a small bounded concurrency", async () => {
@@ -493,11 +689,16 @@ describe("find_series_gaps", () => {
     sonarrFake();
     const result = await findSeriesGaps({ limit: 100 });
     assert.equal(rows(result).length, 40);
-    assert.ok(maxInFlight > 1 && maxInFlight <= 8, `at most 8 requests in flight, saw ${maxInFlight}`);
+    assert.ok(
+      maxInFlight > 1 && maxInFlight <= 8,
+      `at most 8 requests in flight, saw ${maxInFlight}`,
+    );
   });
 
   it("fails as a whole if any show's episodes can't be read, rather than ranking with holes", async () => {
-    sonarrFake((url, params) => (url === "/api/v3/episode" && params.seriesId === 3 ? { status: 500 } : undefined));
+    sonarrFake((url, params) =>
+      url === "/api/v3/episode" && params.seriesId === 3 ? { status: 500 } : undefined,
+    );
     const result = await findSeriesGaps();
     assert.equal(result.isError, true);
     assert.match(text(result), /Failed to check Sonarr/);

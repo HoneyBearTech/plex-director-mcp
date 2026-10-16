@@ -20,7 +20,12 @@ export interface PlexActivity {
 export interface LibraryAnalytics {
   categories: Array<{
     title: string;
-    rows: Array<{ label: string; plays: number; posterUrl: string | null; userThumb: string | null }>;
+    rows: Array<{
+      label: string;
+      plays: number;
+      posterUrl: string | null;
+      userThumb: string | null;
+    }>;
   }>;
 }
 
@@ -127,7 +132,11 @@ export function trimHistory(history: ChatHistoryTurn[]): ChatHistoryTurn[] {
     role,
     text,
     ...(media && media.length > 0
-      ? { media: media.slice(0, HISTORY_ROWS).map(({ kind, title, year, libraries }) => ({ kind, title, year, libraries })) }
+      ? {
+          media: media
+            .slice(0, HISTORY_ROWS)
+            .map(({ kind, title, year, libraries }) => ({ kind, title, year, libraries })),
+        }
       : {}),
   }));
 }

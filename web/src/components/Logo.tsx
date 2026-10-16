@@ -9,7 +9,15 @@ export function Logo({ size = 28 }: { size?: number }) {
   const topClip = useId();
 
   return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Plex Director logo">
+    <svg
+      width={size}
+      height={size}
+      viewBox="0 0 32 32"
+      fill="none"
+      xmlns="http://www.w3.org/2000/svg"
+      role="img"
+      aria-label="Plex Director logo"
+    >
       <rect width="32" height="32" rx="7" fill="#E5484D" />
       <rect x="6" y="15" width="20" height="11" rx="1.5" fill="white" />
       <rect x="6" y="10.8" width="20" height="4.6" rx="1" fill="white" />

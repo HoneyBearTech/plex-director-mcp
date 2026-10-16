@@ -17,7 +17,9 @@ export function QueuesPage() {
             <Callout.Text>{sabnzbd.error}</Callout.Text>
           </Callout.Root>
         )}
-        {sabnzbd.data && sabnzbd.data.items.length === 0 && <Text color="gray">Queue is empty.</Text>}
+        {sabnzbd.data && sabnzbd.data.items.length === 0 && (
+          <Text color="gray">Queue is empty.</Text>
+        )}
         {sabnzbd.data && sabnzbd.data.items.length > 0 && (
           <Table.Root>
             <Table.Header>
@@ -58,7 +60,9 @@ export function QueuesPage() {
             <Callout.Text>{qbittorrent.error}</Callout.Text>
           </Callout.Root>
         )}
-        {qbittorrent.data && qbittorrent.data.items.length === 0 && <Text color="gray">Queue is empty.</Text>}
+        {qbittorrent.data && qbittorrent.data.items.length === 0 && (
+          <Text color="gray">Queue is empty.</Text>
+        )}
         {qbittorrent.data && qbittorrent.data.items.length > 0 && (
           <Table.Root>
             <Table.Header>
@@ -82,7 +86,11 @@ export function QueuesPage() {
                   <Table.Cell>{item.state}</Table.Cell>
                   <Table.Cell>
                     <Flex align="center" gap="2">
-                      <Progress value={item.progress * 100} color={item.stalled ? "red" : "blue"} style={{ width: 100 }} />
+                      <Progress
+                        value={item.progress * 100}
+                        color={item.stalled ? "red" : "blue"}
+                        style={{ width: 100 }}
+                      />
                       <Text size="1" color="gray">
                         {(item.progress * 100).toFixed(1)}%
                       </Text>

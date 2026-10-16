@@ -35,7 +35,11 @@ export function usePolling<T>(fetcher: () => Promise<T>, intervalMs = 15_000): P
         }
       } catch (error) {
         if (!cancelled) {
-          setState((prev) => ({ data: prev.data, error: error instanceof Error ? error.message : "Unknown error", loading: false }));
+          setState((prev) => ({
+            data: prev.data,
+            error: error instanceof Error ? error.message : "Unknown error",
+            loading: false,
+          }));
         }
       }
     }

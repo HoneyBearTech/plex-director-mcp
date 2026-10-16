@@ -20,7 +20,12 @@ export function Sidebar() {
         background: "var(--gray-2)",
       }}
     >
-      <Flex align="center" gap="2" px="4" style={{ height: 56, borderBottom: "1px solid var(--gray-a4)" }}>
+      <Flex
+        align="center"
+        gap="2"
+        px="4"
+        style={{ height: 56, borderBottom: "1px solid var(--gray-a4)" }}
+      >
         <Logo size={26} />
         <Text weight="bold" size="3">
           Plex Director
@@ -42,7 +47,8 @@ export function Sidebar() {
                   background: isActive ? "var(--accent-a4)" : "transparent",
                   borderLeft: isActive ? "3px solid var(--accent-9)" : "3px solid transparent",
                   fontWeight: isActive ? 600 : 500,
-                  transition: "background-color 120ms ease, color 120ms ease, border-color 120ms ease",
+                  transition:
+                    "background-color 120ms ease, color 120ms ease, border-color 120ms ease",
                 }}
               >
                 {route.icon}
@@ -55,7 +61,12 @@ export function Sidebar() {
 
       {authRequired && (
         <Flex p="3" style={{ borderTop: "1px solid var(--gray-a4)" }}>
-          <Button variant="soft" color="gray" style={{ width: "100%" }} onClick={() => void logout()}>
+          <Button
+            variant="soft"
+            color="gray"
+            style={{ width: "100%" }}
+            onClick={() => void logout()}
+          >
             Sign out
           </Button>
         </Flex>

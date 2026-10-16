@@ -15,7 +15,14 @@ import { isAuthEnabled } from "./auth.js";
 // WEB_PASSWORD set the check is skipped: a rebinding page has no session
 // cookie and can't log in.
 
-const PRIVATE_SUFFIXES = [".local", ".lan", ".home.arpa", ".internal", ".localdomain", ".localhost"];
+const PRIVATE_SUFFIXES = [
+  ".local",
+  ".lan",
+  ".home.arpa",
+  ".internal",
+  ".localdomain",
+  ".localhost",
+];
 
 // The hostname part of a Host header, lower-cased, without port or brackets.
 export function hostnameOf(hostHeader: string): string {
@@ -58,6 +65,6 @@ export function requireAllowedHost(req: Request, res: Response, next: NextFuncti
     .type("text/plain")
     .send(
       `Plex Director refused this request: "${host}" is not an allowed host name for a dashboard without a password. ` +
-        `Set WEB_PASSWORD (recommended), or add the name to WEB_ALLOWED_HOSTS, then restart.`
+        `Set WEB_PASSWORD (recommended), or add the name to WEB_ALLOWED_HOSTS, then restart.`,
     );
 }

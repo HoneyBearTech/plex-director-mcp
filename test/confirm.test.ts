@@ -26,9 +26,19 @@ function radarr(extra?: (req: RecordedRequest) => FakeReply | undefined) {
     if (custom) return custom;
     if (req.url === "/api/v3/qualityprofile") return { data: profiles };
     if (req.url === "/api/v3/rootfolder") return { data: roots };
-    if (req.method === "get" && req.url === "/api/v3/movie") return { data: inLibrary[Number(req.params.tmdbId)] ?? [] };
-    if (req.url === "/api/v3/movie/lookup/tmdb") return { data: { title: `Movie ${req.params.tmdbId}`, tmdbId: Number(req.params.tmdbId), year: 1999, images: [] } };
-    if (req.method === "post" && req.url === "/api/v3/movie") return addError ?? { status: 201, data: {} };
+    if (req.method === "get" && req.url === "/api/v3/movie")
+      return { data: inLibrary[Number(req.params.tmdbId)] ?? [] };
+    if (req.url === "/api/v3/movie/lookup/tmdb")
+      return {
+        data: {
+          title: `Movie ${req.params.tmdbId}`,
+          tmdbId: Number(req.params.tmdbId),
+          year: 1999,
+          images: [],
+        },
+      };
+    if (req.method === "post" && req.url === "/api/v3/movie")
+      return addError ?? { status: 201, data: {} };
     return { status: 404 };
   });
 }
@@ -36,7 +46,9 @@ const posts = () => fake.calls.filter((c) => c.method === "post");
 const text = (r: { content: Array<{ text: string }> }) => r.content[0]!.text;
 
 function pick(index: number, tmdbId: number, title: string) {
-  db.prepare("INSERT INTO interaction_context (selection_index, tmdb_id, title, year) VALUES (?, ?, ?, ?)").run(index, tmdbId, title, "1999");
+  db.prepare(
+    "INSERT INTO interaction_context (selection_index, tmdb_id, title, year) VALUES (?, ?, ?, ?)",
+  ).run(index, tmdbId, title, "1999");
 }
 
 beforeEach(async () => {
@@ -55,7 +67,10 @@ describe("confirmSelectedChoices: which quality profile", () => {
     radarr();
     const result = await confirmSelectedChoices({ chosenIndexes: [1] });
     assert.equal((posts()[0]!.body as any).qualityProfileId, 5);
-    assert.match(text(result), /profile: Remux \+ WEB 1080p - Radarr's first profile; set a default on the Settings page/);
+    assert.match(
+      text(result),
+      /profile: Remux \+ WEB 1080p - Radarr's first profile; set a default on the Settings page/,
+    );
   });
 
   it("uses the default saved on the Settings page (case-insensitively)", async () => {
@@ -85,7 +100,10 @@ describe("confirmSelectedChoices: which quality profile", () => {
     radarr();
     const result = await confirmSelectedChoices({ chosenIndexes: [1], qualityProfile: "Nope" });
     assert.equal(result.isError, true);
-    assert.match(text(result), /No Radarr quality profile named "Nope"\. Available: Remux \+ WEB 1080p, HD Bluray \+ WEB, Kids SQP-1 \(1080p\)\./);
+    assert.match(
+      text(result),
+      /No Radarr quality profile named "Nope"\. Available: Remux \+ WEB 1080p, HD Bluray \+ WEB, Kids SQP-1 \(1080p\)\./,
+    );
     assert.equal(posts().length, 0);
   });
 
@@ -94,7 +112,10 @@ describe("confirmSelectedChoices: which quality profile", () => {
     radarr();
     const result = await confirmSelectedChoices({ chosenIndexes: [1] });
     assert.equal(result.isError, true);
-    assert.match(text(result), /"Deleted Profile" \(that is the default set on the Settings page\)/);
+    assert.match(
+      text(result),
+      /"Deleted Profile" \(that is the default set on the Settings page\)/,
+    );
     assert.equal(posts().length, 0);
   });
 
@@ -126,7 +147,10 @@ describe("confirmSelectedChoices: root folder", () => {
     radarr();
     const result = await confirmSelectedChoices({ chosenIndexes: [1], rootFolder: "/nope" });
     assert.equal(result.isError, true);
-    assert.match(text(result), /No Radarr root folder "\/nope"\. Available: \/media\/movies, \/media\/movieskids\//);
+    assert.match(
+      text(result),
+      /No Radarr root folder "\/nope"\. Available: \/media\/movies, \/media\/movieskids\//,
+    );
     assert.equal(posts().length, 0);
   });
 });
@@ -147,7 +171,10 @@ describe("confirmSelectedChoices: adding movies", () => {
       minimumAvailability: "released",
       addOptions: { searchForMovie: true },
     });
-    assert.match(text(result), /✅ \*\*Choice 1\*\*: The Matrix \(1999\) \[TMDb: 603\] - added and download search started/);
+    assert.match(
+      text(result),
+      /✅ \*\*Choice 1\*\*: The Matrix \(1999\) \[TMDb: 603\] - added and download search started/,
+    );
   });
 
   it("reports a movie already in Radarr instead of adding it again", async () => {
@@ -158,19 +185,32 @@ describe("confirmSelectedChoices: adding movies", () => {
     radarr();
     const result = await confirmSelectedChoices({ chosenIndexes: [1, 2] });
     assert.equal(posts().length, 0);
-    assert.match(text(result), /The Matrix \(1999\) \[TMDb: 603\] - already in Radarr \(already downloaded\); not added again/);
-    assert.match(text(result), /Reloaded.* - already in Radarr \(monitored but not downloaded yet\)/);
+    assert.match(
+      text(result),
+      /The Matrix \(1999\) \[TMDb: 603\] - already in Radarr \(already downloaded\); not added again/,
+    );
+    assert.match(
+      text(result),
+      /Reloaded.* - already in Radarr \(monitored but not downloaded yet\)/,
+    );
   });
 
   it("one failure doesn't stop the others, and Radarr's validation message is shown", async () => {
     pick(1, 603, "The Matrix");
     pick(2, 604, "The Matrix Reloaded");
     radarr((req) => {
-      if (req.method === "post" && (req.body as any).tmdbId === 603) return { status: 400, data: [{ errorMessage: "Path is already configured for an existing movie" }] };
+      if (req.method === "post" && (req.body as any).tmdbId === 603)
+        return {
+          status: 400,
+          data: [{ errorMessage: "Path is already configured for an existing movie" }],
+        };
       return undefined;
     });
     const result = await confirmSelectedChoices({ chosenIndexes: [1, 2] });
-    assert.match(text(result), /❌ \*\*Choice 1\*\*.* - failed: Path is already configured for an existing movie/);
+    assert.match(
+      text(result),
+      /❌ \*\*Choice 1\*\*.* - failed: Path is already configured for an existing movie/,
+    );
     assert.match(text(result), /✅ \*\*Choice 2\*\*.* - added/);
     assert.equal(posts().length, 2);
   });

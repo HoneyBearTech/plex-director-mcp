@@ -28,11 +28,16 @@ function app(client: typeof radarrClient, label: string, config: AppFake) {
     calls[label]!.push(req);
     if (req.method === "post" && req.url.endsWith("/command")) {
       if (config.triggerFails) return { status: 500 };
-      return { status: 201, data: { id: 42, name: "Backup", status: "queued", queued: iso(0), started: null } };
+      return {
+        status: 201,
+        data: { id: 42, name: "Backup", status: "queued", queued: iso(0), started: null },
+      };
     }
     if (req.method === "get" && req.url.endsWith("/command/42")) {
       const status = remaining.shift() ?? "completed";
-      return { data: { id: 42, status, queued: iso(0), started: iso(0), message: config.message ?? null } };
+      return {
+        data: { id: 42, status, queued: iso(0), started: iso(0), message: config.message ?? null },
+      };
     }
     if (req.url.endsWith("/system/backup")) return { data: config.backups };
     return { status: 404 };
@@ -45,7 +50,8 @@ const stale = (name: string) => ({ name, time: iso(-7 * 24 * 3_600_000), size: 2
 
 beforeEach(async () => {
   await resetDb();
-  for (const key of ["RADARR_URL", "SONARR_URL", "PROWLARR_URL"] as const) setSetting(key, "http://app");
+  for (const key of ["RADARR_URL", "SONARR_URL", "PROWLARR_URL"] as const)
+    setSetting(key, "http://app");
 });
 afterEach(() => {
   for (const f of fakes) f.restore();
@@ -54,7 +60,10 @@ afterEach(() => {
 
 describe("runServarrBackups", () => {
   it("triggers a backup on each configured app, waits, and reports the new file", async () => {
-    app(radarrClient, "radarr", { polls: ["started", "completed"], backups: [stale("radarr_old.zip"), fresh("radarr_new.zip")] });
+    app(radarrClient, "radarr", {
+      polls: ["started", "completed"],
+      backups: [stale("radarr_old.zip"), fresh("radarr_new.zip")],
+    });
     app(sonarrClient, "sonarr", { polls: [], backups: [fresh("sonarr_new.zip", 78_200_000)] });
     app(prowlarrClient, "prowlarr", { polls: [], backups: [fresh("prowlarr_new.zip", 3_000_000)] });
 
@@ -79,7 +88,10 @@ describe("runServarrBackups", () => {
   });
 
   it("keeps polling while the command is queued or started", async () => {
-    app(radarrClient, "radarr", { polls: ["queued", "started", "started", "completed"], backups: [fresh("r.zip")] });
+    app(radarrClient, "radarr", {
+      polls: ["queued", "started", "started", "completed"],
+      backups: [fresh("r.zip")],
+    });
     setSetting("SONARR_URL", "");
     setSetting("PROWLARR_URL", "");
     await runServarrBackups(FAST);
@@ -121,7 +133,10 @@ describe("runServarrBackups", () => {
     setSetting("SONARR_URL", "");
     setSetting("PROWLARR_URL", "");
     const { text } = await runServarrBackups(FAST);
-    assert.match(text, /⚠️ Radarr: the backup command finished, but no new file appeared - the newest backup is still radarr_last_week\.zip/);
+    assert.match(
+      text,
+      /⚠️ Radarr: the backup command finished, but no new file appeared - the newest backup is still radarr_last_week\.zip/,
+    );
     assert.doesNotMatch(text, /✅/);
   });
 
@@ -129,7 +144,10 @@ describe("runServarrBackups", () => {
     app(radarrClient, "radarr", { polls: [], backups: [] });
     setSetting("SONARR_URL", "");
     setSetting("PROWLARR_URL", "");
-    assert.match((await runServarrBackups(FAST)).text, /⚠️ Radarr: the backup finished, but Radarr lists no backup files/);
+    assert.match(
+      (await runServarrBackups(FAST)).text,
+      /⚠️ Radarr: the backup finished, but Radarr lists no backup files/,
+    );
   });
 
   it("gives up waiting after the timeout instead of hanging, and says it may still finish", async () => {
@@ -140,7 +158,10 @@ describe("runServarrBackups", () => {
     const { text, isError } = await runServarrBackups({ pollMs: 1, timeoutMs: 60 });
     assert.ok(Date.now() - started < 2_000, "returned promptly");
     assert.equal(isError, false, "a slow backup is a warning, not a failure");
-    assert.match(text, /⚠️ Radarr: the backup was started but hadn't finished after 0s\. Large databases can take over a minute/);
+    assert.match(
+      text,
+      /⚠️ Radarr: the backup was started but hadn't finished after 0s\. Large databases can take over a minute/,
+    );
   });
 
   it("one app failing doesn't stop or hide the others", async () => {
@@ -154,7 +175,14 @@ describe("runServarrBackups", () => {
   });
 
   it("picks the newest backup by time, not by list order", async () => {
-    app(radarrClient, "radarr", { polls: [], backups: [fresh("radarr_newest.zip"), stale("radarr_a.zip"), { name: "radarr_b.zip", time: iso(-1_000), size: 1 }] });
+    app(radarrClient, "radarr", {
+      polls: [],
+      backups: [
+        fresh("radarr_newest.zip"),
+        stale("radarr_a.zip"),
+        { name: "radarr_b.zip", time: iso(-1_000), size: 1 },
+      ],
+    });
     setSetting("SONARR_URL", "");
     setSetting("PROWLARR_URL", "");
     assert.match((await runServarrBackups(FAST)).text, /radarr_newest\.zip/);

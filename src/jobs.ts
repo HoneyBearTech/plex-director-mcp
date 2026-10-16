@@ -35,7 +35,10 @@ export async function stepJob(jobId: number): Promise<StepResult> {
   // A paused job stays paused until it is explicitly resumed; otherwise
   // "pause" wouldn't stop the automatic runner from picking it back up.
   if (job.status === "PAUSED") {
-    return { outcome: "skipped", message: `Job #${jobId} is PAUSED. Resume it before stepping it.` };
+    return {
+      outcome: "skipped",
+      message: `Job #${jobId} is PAUSED. Resume it before stepping it.`,
+    };
   }
 
   const payloadIds: number[] = safeJsonParse<number[]>(job.payload, []);
@@ -44,20 +47,28 @@ export async function stepJob(jobId: number): Promise<StepResult> {
   // A job can reach this branch when a previous invocation completed the
   // final item but the caller asks for another step.
   if (currentIndex >= payloadIds.length) {
-    db.prepare("UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(jobId);
-    return { outcome: "skipped", message: `✓ Job #${jobId} has successfully completed processing all structural items.` };
+    db.prepare(
+      "UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    ).run(jobId);
+    return {
+      outcome: "skipped",
+      message: `✓ Job #${jobId} has successfully completed processing all structural items.`,
+    };
   }
 
   const claim = db
     .prepare(
       `UPDATE system_jobs
        SET processed_items = processed_items + 1, status = 'RUNNING', updated_at = CURRENT_TIMESTAMP
-       WHERE id = ? AND processed_items = ? AND status IN ('PENDING', 'RUNNING')`
+       WHERE id = ? AND processed_items = ? AND status IN ('PENDING', 'RUNNING')`,
     )
     .run(jobId, currentIndex);
 
   if (claim.changes === 0) {
-    return { outcome: "skipped", message: `Job #${jobId} was just advanced or paused elsewhere; not stepping it again.` };
+    return {
+      outcome: "skipped",
+      message: `Job #${jobId} was just advanced or paused elsewhere; not stepping it again.`,
+    };
   }
 
   const targetMovieId = payloadIds[currentIndex];
@@ -70,14 +81,19 @@ export async function stepJob(jobId: number): Promise<StepResult> {
     });
   } catch (error: unknown) {
     db.prepare(
-      "UPDATE system_jobs SET processed_items = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND processed_items = ?"
+      "UPDATE system_jobs SET processed_items = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND processed_items = ?",
     ).run(currentIndex, jobId, nextIndex);
-    return { outcome: "failed", message: `Failed processing step element index [${currentIndex}]: ${getErrorMessage(error)}` };
+    return {
+      outcome: "failed",
+      message: `Failed processing step element index [${currentIndex}]: ${getErrorMessage(error)}`,
+    };
   }
 
   if (nextIndex >= payloadIds.length) {
     // Keep completion durable before notifying external systems.
-    db.prepare("UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?").run(jobId);
+    db.prepare(
+      "UPDATE system_jobs SET status = 'COMPLETED', updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+    ).run(jobId);
 
     // The helper absorbs webhook failures so a completed job remains a
     // successful operation even when Discord is temporarily offline.
@@ -86,7 +102,7 @@ export async function stepJob(jobId: number): Promise<StepResult> {
       `**Job Details:** ${job.task_name}\n` +
         `**Total Processed Items:** ${payloadIds.length}/${payloadIds.length}\n` +
         "**Target Nodes:** Managed Servarr Docker Cluster Architecture",
-      3066993
+      3066993,
     );
   }
 

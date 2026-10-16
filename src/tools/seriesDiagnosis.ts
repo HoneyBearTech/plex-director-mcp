@@ -2,7 +2,14 @@ import { sonarrClient } from "../clients.js";
 import { isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
 import type { MediaRow } from "./plex.js";
-import { analyzeEpisodes, fetchEpisodes, label, NOT_CONFIGURED, resolveSeries, type SeriesAnalysis } from "./series.js";
+import {
+  analyzeEpisodes,
+  fetchEpisodes,
+  label,
+  NOT_CONFIGURED,
+  resolveSeries,
+  type SeriesAnalysis,
+} from "./series.js";
 
 // The TV counterparts of check_movie_status and diagnose_missing_media: what
 // Sonarr knows about one show, and why an episode it should have is missing.
@@ -13,10 +20,18 @@ import { analyzeEpisodes, fetchEpisodes, label, NOT_CONFIGURED, resolveSeries, t
 
 const MAX_GROUPS = 6;
 const MAX_EXAMPLES = 4;
-const RELEVANT_EVENTS = new Set(["grabbed", "downloadFailed", "downloadIgnored", "downloadFolderImported", "episodeFileDeleted"]);
+const RELEVANT_EVENTS = new Set([
+  "grabbed",
+  "downloadFailed",
+  "downloadIgnored",
+  "downloadFolderImported",
+  "episodeFileDeleted",
+]);
 
-const truncate = (text: string, max: number) => (text.length > max ? `${text.slice(0, max - 1)}…` : text);
-const day = (iso: unknown) => (typeof iso === "string" && iso ? iso.slice(0, 10) : "an unknown date");
+const truncate = (text: string, max: number) =>
+  text.length > max ? `${text.slice(0, max - 1)}…` : text;
+const day = (iso: unknown) =>
+  typeof iso === "string" && iso ? iso.slice(0, 10) : "an unknown date";
 const code = (season: number, episode: number) => `S${season}E${String(episode).padStart(2, "0")}`;
 
 function formatSize(bytes: number): string {
@@ -31,8 +46,16 @@ export function describeQueueItem(item: any): string {
   const state = String(item.trackedDownloadState ?? "");
   const size = Number(item.size);
   const left = Number(item.sizeleft);
-  const percent = size > 0 && Number.isFinite(left) ? Math.max(0, Math.min(100, Math.round(((size - left) / size) * 100))) : null;
-  const message = String(item.errorMessage || item.statusMessages?.[0]?.messages?.[0] || item.statusMessages?.[0]?.title || "").trim();
+  const percent =
+    size > 0 && Number.isFinite(left)
+      ? Math.max(0, Math.min(100, Math.round(((size - left) / size) * 100)))
+      : null;
+  const message = String(
+    item.errorMessage ||
+      item.statusMessages?.[0]?.messages?.[0] ||
+      item.statusMessages?.[0]?.title ||
+      "",
+  ).trim();
 
   switch (state) {
     case "downloading":
@@ -64,7 +87,8 @@ export type Story =
   | { kind: "imported"; date: string }
   | { kind: "never" };
 
-const text = (value: unknown): string | null => (typeof value === "string" && value.trim() ? value.trim() : null);
+const text = (value: unknown): string | null =>
+  typeof value === "string" && value.trim() ? value.trim() : null;
 
 // The most recent thing that happened to one episode, from its history records
 // (newest first is not assumed) or, above all, its place in the download queue.
@@ -82,9 +106,19 @@ export function storyOf(records: any[], queueItem?: any): Story {
     case "episodeFileDeleted":
       return { kind: "deleted", date, reason: text(data.reason) };
     case "downloadFailed":
-      return { kind: "failed", date, message: text(data.message), release: text(latest.sourceTitle) };
+      return {
+        kind: "failed",
+        date,
+        message: text(data.message),
+        release: text(latest.sourceTitle),
+      };
     case "grabbed":
-      return { kind: "grabbed", date, release: text(latest.sourceTitle), indexer: text(data.indexer) };
+      return {
+        kind: "grabbed",
+        date,
+        release: text(latest.sourceTitle),
+        indexer: text(data.indexer),
+      };
     case "downloadIgnored":
       return { kind: "ignored", date, message: text(data.message) };
     default:
@@ -152,11 +186,17 @@ function consequence(series: any, group: Diagnosed[]): string {
   const first = group[0]!;
   if (first.story.kind === "queued") return "Sonarr is already handling it.";
   if (!first.searching) {
-    const why = !series.monitored ? "the show is not monitored" : "these episodes are not monitored";
+    const why = !series.monitored
+      ? "the show is not monitored"
+      : "these episodes are not monitored";
     return `Sonarr will not look for ${group.length === 1 ? "it" : "them"} because ${why}; turn monitoring on in Sonarr to have ${group.length === 1 ? "it" : "them"} searched.`;
   }
   if (first.story.kind === "never") {
-    const searched = group.map((d) => text(d.episode.lastSearchTime)).filter((t): t is string => t !== null).sort().pop();
+    const searched = group
+      .map((d) => text(d.episode.lastSearchTime))
+      .filter((t): t is string => t !== null)
+      .sort()
+      .pop();
     return searched
       ? `Sonarr is monitoring ${group.length === 1 ? "it" : "them"} and last searched on ${day(searched)} without finding a usable release; check the indexers and the quality profile.`
       : `Sonarr is monitoring ${group.length === 1 ? "it" : "them"} but has never searched for ${group.length === 1 ? "it" : "them"}; it only finds older episodes when a release turns up in an RSS sync, so running a search for missing episodes in Sonarr would look now.`;
@@ -176,7 +216,11 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
     if ("reply" in resolved) return resolved.reply;
     const { series } = resolved;
 
-    const [episodes, queue, history] = await Promise.all([fetchEpisodes(series.id), queueFor(series.id), historyFor(series.id, season)]);
+    const [episodes, queue, history] = await Promise.all([
+      fetchEpisodes(series.id),
+      queueFor(series.id),
+      historyFor(series.id, season),
+    ]);
     const analysis = analyzeEpisodes(episodes);
     const now = Date.now();
     const released = (e: any) => e.hasFile || (e.airDateUtc && Date.parse(e.airDateUtc) <= now);
@@ -188,18 +232,35 @@ export async function diagnoseMissingEpisodes(title: string, options: DiagnoseOp
       return textReply(`${heading}${label(series)} has no season ${season} in Sonarr.`);
     }
     if (episodeNumber !== undefined) {
-      const one = episodes.find((e) => e.seasonNumber === season && e.episodeNumber === episodeNumber);
-      if (!one) return textReply(`${heading}Sonarr has no ${code(season!, episodeNumber)} for ${label(series)}.`);
+      const one = episodes.find(
+        (e) => e.seasonNumber === season && e.episodeNumber === episodeNumber,
+      );
+      if (!one)
+        return textReply(
+          `${heading}Sonarr has no ${code(season!, episodeNumber)} for ${label(series)}.`,
+        );
       const name = `${code(season!, episodeNumber)}${one.title ? ` "${one.title}"` : ""}`;
-      if (one.hasFile) return textReply(`${heading}${name} is not missing: Sonarr has a file for it.`);
-      if (!released(one)) return textReply(`${heading}${name} has not aired yet${one.airDateUtc ? ` (it airs ${day(one.airDateUtc)})` : ""}, so it is not missing.`);
+      if (one.hasFile)
+        return textReply(`${heading}${name} is not missing: Sonarr has a file for it.`);
+      if (!released(one))
+        return textReply(
+          `${heading}${name} has not aired yet${one.airDateUtc ? ` (it airs ${day(one.airDateUtc)})` : ""}, so it is not missing.`,
+        );
       targets = [one];
     } else {
-      targets = episodes.filter((e) => e.seasonNumber > 0 && !e.hasFile && released(e) && (season === undefined || e.seasonNumber === season));
+      targets = episodes.filter(
+        (e) =>
+          e.seasonNumber > 0 &&
+          !e.hasFile &&
+          released(e) &&
+          (season === undefined || e.seasonNumber === season),
+      );
     }
 
     if (targets.length === 0) {
-      return textReply(`${heading}Nothing is missing${season !== undefined ? ` from season ${season}` : ""}: every aired episode has a file.`);
+      return textReply(
+        `${heading}Nothing is missing${season !== undefined ? ` from season ${season}` : ""}: every aired episode has a file.`,
+      );
     }
 
     // What happened to each one. History and queue were each fetched once.
@@ -284,12 +345,16 @@ export async function checkSeriesStatus(title: string, year?: number) {
 
     const [episodes, files, profiles, queue] = await Promise.all([
       fetchEpisodes(series.id),
-      sonarrClient.get("/api/v3/episodefile", { params: { seriesId: series.id } }).then((r) => (r.data ?? []) as any[]),
+      sonarrClient
+        .get("/api/v3/episodefile", { params: { seriesId: series.id } })
+        .then((r) => (r.data ?? []) as any[]),
       sonarrClient.get("/api/v3/qualityprofile").then((r) => (r.data ?? []) as any[]),
       queueFor(series.id),
     ]);
     const analysis: SeriesAnalysis = analyzeEpisodes(episodes);
-    const profile = profiles.find((p) => p.id === series.qualityProfileId)?.name ?? `profile #${series.qualityProfileId}`;
+    const profile =
+      profiles.find((p) => p.id === series.qualityProfileId)?.name ??
+      `profile #${series.qualityProfileId}`;
     const stats = series.statistics ?? {};
 
     let output = `## ${label(series)} - Sonarr: ${[series.status, series.monitored ? "monitored" : "not monitored"].filter(Boolean).join(", ")}\n`;
@@ -312,16 +377,22 @@ export async function checkSeriesStatus(title: string, year?: number) {
     }
     if (analysis.released > 0) {
       output += `, across ${analysis.seasons.filter((s) => s.released > 0).length} season${analysis.seasons.filter((s) => s.released > 0).length === 1 ? "" : "s"}`;
-      if (typeof stats.sizeOnDisk === "number" && stats.sizeOnDisk > 0) output += `, ${formatSize(stats.sizeOnDisk)} on disk`;
+      if (typeof stats.sizeOnDisk === "number" && stats.sizeOnDisk > 0)
+        output += `, ${formatSize(stats.sizeOnDisk)} on disk`;
       output += ".\n";
     }
     if (text(series.monitorNewItems)) {
       output += `New seasons: ${series.monitorNewItems === "all" ? "monitored automatically" : series.monitorNewItems === "none" ? "not monitored automatically" : series.monitorNewItems}.\n`;
     }
 
-    const aired = [text(series.firstAired) && `first aired ${day(series.firstAired)}`, text(series.lastAired) && `latest ${day(series.lastAired)}`].filter(Boolean);
+    const aired = [
+      text(series.firstAired) && `first aired ${day(series.firstAired)}`,
+      text(series.lastAired) && `latest ${day(series.lastAired)}`,
+    ].filter(Boolean);
     if (aired.length > 0) output += `Aired: ${aired.join(", ")}. `;
-    output += series.nextAiring ? `Next episode airs ${day(series.nextAiring)}.\n` : "No upcoming episode is scheduled.\n";
+    output += series.nextAiring
+      ? `Next episode airs ${day(series.nextAiring)}.\n`
+      : "No upcoming episode is scheduled.\n";
 
     const newest = [...files].sort((a, b) => Date.parse(b.dateAdded) - Date.parse(a.dateAdded))[0];
     if (newest) {
@@ -345,7 +416,10 @@ export async function checkSeriesStatus(title: string, year?: number) {
       posterUrl: posterOf(series),
       libraries: null,
       genres: Array.isArray(series.genres) ? series.genres.map(String) : [],
-      rating: typeof series.ratings?.value === "number" && series.ratings.value > 0 ? series.ratings.value : null,
+      rating:
+        typeof series.ratings?.value === "number" && series.ratings.value > 0
+          ? series.ratings.value
+          : null,
       detail: analysis.missing > 0 ? `${analysis.missing} episodes missing` : "Complete",
       show: {
         seasons: analysis.seasons.length,

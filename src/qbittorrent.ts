@@ -15,14 +15,16 @@ export async function loginToQbittorrent(): Promise<QbitSession> {
   const response = await qbitClient.post(
     "/api/v2/auth/login",
     `username=${encodeURIComponent(getSetting("QBITTORRENT_USER"))}&password=${encodeURIComponent(getSetting("QBITTORRENT_PASS"))}`,
-    { headers: FORM }
+    { headers: FORM },
   );
 
   // qBittorrent answers 200 either way: "Ok." on success, "Fails." on bad
   // credentials. Without this check a wrong password only surfaces later as an
   // unhelpful 403 from the next request.
   if (typeof response.data === "string" && response.data.trim() !== "Ok.") {
-    throw new Error("qBittorrent login failed - check the qBittorrent username and password in Settings.");
+    throw new Error(
+      "qBittorrent login failed - check the qBittorrent username and password in Settings.",
+    );
   }
 
   // "SID=abc; HttpOnly; path=/" -> just "SID=abc" for the Cookie header.
@@ -36,7 +38,11 @@ export async function getDownloadingTorrents(session: QbitSession): Promise<any[
   return response.data || [];
 }
 
-export async function deleteTorrent(session: QbitSession, hash: string, deleteFiles = true): Promise<void> {
+export async function deleteTorrent(
+  session: QbitSession,
+  hash: string,
+  deleteFiles = true,
+): Promise<void> {
   await qbitClient.post("/api/v2/torrents/delete", `hashes=${hash}&deleteFiles=${deleteFiles}`, {
     headers: { ...session.headers, ...FORM },
   });

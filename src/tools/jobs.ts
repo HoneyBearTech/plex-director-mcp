@@ -22,12 +22,12 @@ export function registerJobTools() {
       const output = jobs
         .map(
           (job) =>
-            `Job #${job.id} - [${job.status}] ${job.task_name}\nProgress: ${job.processed_items}/${job.total_items} items | Created: ${job.created_at}`
+            `Job #${job.id} - [${job.status}] ${job.task_name}\nProgress: ${job.processed_items}/${job.total_items} items | Created: ${job.created_at}`,
         )
         .join("\n\n");
 
       return textReply(output);
-    }
+    },
   );
 
   server.tool(
@@ -35,7 +35,9 @@ export function registerJobTools() {
     "Updates the operational state of an active or pending background batch job.",
     {
       jobId: z.number().describe("The unique ID of the target job"),
-      action: z.enum(["PAUSE", "RESUME", "CANCEL"]).describe("The action to execute on the queue runtime."),
+      action: z
+        .enum(["PAUSE", "RESUME", "CANCEL"])
+        .describe("The action to execute on the queue runtime."),
     },
     async ({ jobId, action }) => {
       let targetStatus = "PENDING";
@@ -43,7 +45,9 @@ export function registerJobTools() {
       if (action === "RESUME") targetStatus = "RUNNING";
       if (action === "CANCEL") targetStatus = "CANCELLED";
 
-      const stmt = db.prepare("UPDATE system_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?");
+      const stmt = db.prepare(
+        "UPDATE system_jobs SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+      );
       const result = stmt.run(targetStatus, jobId);
 
       if (result.changes === 0) {
@@ -51,16 +55,24 @@ export function registerJobTools() {
       }
 
       return textReply(`Successfully updated Job #${jobId} status to ${targetStatus}.`);
-    }
+    },
   );
 
   server.tool(
     "plan_media_upgrade",
     "Evaluates and safely schedules a controlled batch upgrade for specified media classes while enforcing storage policies.",
     {
-      mediaType: z.enum(["movie", "tv"]).describe("The structural classification targeting upgrades."),
-      targetResolution: z.enum(["1080p", "4k"]).describe("The target processing quality resolution threshold."),
-      maxBatchSize: z.number().optional().default(25).describe("Limits the maximum number of edits in a single batch."),
+      mediaType: z
+        .enum(["movie", "tv"])
+        .describe("The structural classification targeting upgrades."),
+      targetResolution: z
+        .enum(["1080p", "4k"])
+        .describe("The target processing quality resolution threshold."),
+      maxBatchSize: z
+        .number()
+        .optional()
+        .default(25)
+        .describe("Limits the maximum number of edits in a single batch."),
     },
     async ({ mediaType, targetResolution, maxBatchSize }) => {
       if (mediaType === "tv") {
@@ -68,7 +80,7 @@ export function registerJobTools() {
           "🚫 POLICY VIOLATION ERRONEOUS ACTION REJECTED:\n" +
             "Permanent structural policy dictation states TV shows are strictly storage-conscious. " +
             "Mass quality upgrades across TV classifications are permanently prohibited to prevent storage starvation.",
-          true
+          true,
         );
       }
 
@@ -83,11 +95,16 @@ export function registerJobTools() {
             currentResolution.includes("2160") ||
             currentResolution.includes("4K");
 
-          return (movie.monitored && !movie.hasFile) || (movie.monitored && movie.hasFile && !isAlreadyHighQuality);
+          return (
+            (movie.monitored && !movie.hasFile) ||
+            (movie.monitored && movie.hasFile && !isAlreadyHighQuality)
+          );
         });
 
         if (upgradeCandidates.length === 0) {
-          return textReply(`✓ Scan complete. Zero movies found requiring a forced upgrade to ${targetResolution}.`);
+          return textReply(
+            `✓ Scan complete. Zero movies found requiring a forced upgrade to ${targetResolution}.`,
+          );
         }
 
         const targetedBatch = upgradeCandidates.slice(0, maxBatchSize);
@@ -114,13 +131,17 @@ export function registerJobTools() {
           outputSummary += `  ...and ${targetedBatch.length - 5} more.\n\n`;
         }
 
-        outputSummary += " Run 'get_background_jobs' or instruct execution routines to advance processing limits safely.";
+        outputSummary +=
+          " Run 'get_background_jobs' or instruct execution routines to advance processing limits safely.";
 
         return textReply(outputSummary);
       } catch (error: unknown) {
-        return textReply(`Failed to formulate structural upgrade process: ${getErrorMessage(error)}`, true);
+        return textReply(
+          `Failed to formulate structural upgrade process: ${getErrorMessage(error)}`,
+          true,
+        );
       }
-    }
+    },
   );
 
   server.tool(
@@ -132,6 +153,6 @@ export function registerJobTools() {
     async ({ jobId }) => {
       const result = await stepJob(jobId);
       return textReply(result.message, result.outcome === "failed");
-    }
+    },
   );
 }

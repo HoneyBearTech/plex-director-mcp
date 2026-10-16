@@ -7,7 +7,12 @@ import path from "node:path";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { probeHost } from "../src/cluster.js";
 import { db } from "../src/db.js";
-import { checkHostKey, fingerprintFromHex, forgetHostKey, HostKeyMismatchError } from "../src/hostKeys.js";
+import {
+  checkHostKey,
+  fingerprintFromHex,
+  forgetHostKey,
+  HostKeyMismatchError,
+} from "../src/hostKeys.js";
 import { setSetting } from "../src/settings.js";
 import { runRemoteCommand } from "../src/ssh.js";
 import { resetDb, startApp } from "./helpers.js";
@@ -18,7 +23,12 @@ let client: KeyPair;
 let server: TestSshServer;
 let target: string; // "127.0.0.1:<port>", exactly as it would appear in UBUNTU_HOSTS
 
-const storedFingerprint = (host: string) => (db.prepare("SELECT fingerprint FROM ssh_host_keys WHERE host = ?").get(host) as { fingerprint: string } | undefined)?.fingerprint;
+const storedFingerprint = (host: string) =>
+  (
+    db.prepare("SELECT fingerprint FROM ssh_host_keys WHERE host = ?").get(host) as
+      | { fingerprint: string }
+      | undefined
+  )?.fingerprint;
 
 function useKey(pair: KeyPair, passphrase?: string) {
   const file = path.join(dir, `key-${Math.random().toString(36).slice(2)}`);
@@ -60,14 +70,24 @@ describe("test key generation", () => {
 describe("host key bookkeeping (trust on first use)", () => {
   it("formats a fingerprint the way OpenSSH does (SHA256: + unpadded base64)", () => {
     // sha256("abc")
-    assert.equal(fingerprintFromHex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"), "SHA256:ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0");
+    assert.equal(
+      fingerprintFromHex("ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"),
+      "SHA256:ungWv48Bz+pBQUDeXa4iI7ADYaOWF3qctBD/YfIAFa0",
+    );
   });
 
   it("remembers the first key, accepts it again, and refuses a different one", () => {
     assert.deepEqual(checkHostKey("h1", "SHA256:aaa"), { status: "new" });
     assert.deepEqual(checkHostKey("h1", "SHA256:aaa"), { status: "match" });
-    assert.deepEqual(checkHostKey("h1", "SHA256:bbb"), { status: "mismatch", expected: "SHA256:aaa" });
-    assert.deepEqual(checkHostKey("h2", "SHA256:bbb"), { status: "new" }, "hosts are tracked independently");
+    assert.deepEqual(checkHostKey("h1", "SHA256:bbb"), {
+      status: "mismatch",
+      expected: "SHA256:aaa",
+    });
+    assert.deepEqual(
+      checkHostKey("h2", "SHA256:bbb"),
+      { status: "new" },
+      "hosts are tracked independently",
+    );
   });
 
   it("forgetting a host lets the next key be trusted", () => {
@@ -94,7 +114,10 @@ describe("runRemoteCommand against a real SSH server", () => {
   it("refuses a host whose key changed, says why, and never runs the command", async () => {
     await runRemoteCommand(target, "first");
     const real = storedFingerprint(target)!;
-    db.prepare("UPDATE ssh_host_keys SET fingerprint = ? WHERE host = ?").run("SHA256:someOtherKeyThatWasRememberedEarlier", target); // as if the host's key had changed since
+    db.prepare("UPDATE ssh_host_keys SET fingerprint = ? WHERE host = ?").run(
+      "SHA256:someOtherKeyThatWasRememberedEarlier",
+      target,
+    ); // as if the host's key had changed since
 
     await assert.rejects(runRemoteCommand(target, "second"), (error: unknown) => {
       assert.ok(error instanceof HostKeyMismatchError);
@@ -125,7 +148,10 @@ describe("runRemoteCommand against a real SSH server", () => {
     const impostor = await startSshServer({ authorizedPublicKey: client.publicKey });
     const impostorTarget = `127.0.0.1:${impostor.port}`;
     try {
-      db.prepare("INSERT INTO ssh_host_keys (host, fingerprint) VALUES (?, ?)").run(impostorTarget, remembered);
+      db.prepare("INSERT INTO ssh_host_keys (host, fingerprint) VALUES (?, ?)").run(
+        impostorTarget,
+        remembered,
+      );
       await assert.rejects(runRemoteCommand(impostorTarget, "steal"), HostKeyMismatchError);
       assert.equal(impostor.commandsRun(), 0, "nothing was executed on the impostor");
     } finally {
@@ -174,7 +200,17 @@ describe("runRemoteCommand: keys and configuration", () => {
 });
 
 describe("probeHost and the dashboard's Trust new key", () => {
-  const PROBE_OUTPUT = ["atlas", "12.5", "40.00", "4000", "10000", "3", "ombi,", "115G 57G 52%", "90000"].join("\n@@@FIELD@@@\n");
+  const PROBE_OUTPUT = [
+    "atlas",
+    "12.5",
+    "40.00",
+    "4000",
+    "10000",
+    "3",
+    "ombi,",
+    "115G 57G 52%",
+    "90000",
+  ].join("\n@@@FIELD@@@\n");
 
   beforeEach(async () => {
     await server.close();
@@ -203,7 +239,11 @@ describe("probeHost and the dashboard's Trust new key", () => {
     const refused = await probeHost("127.0.0.1:1");
     assert.equal(refused.online, false);
     assert.match(!refused.online ? refused.error : "", /ECONNREFUSED/);
-    assert.equal(!refused.online && refused.hostKeyChanged, undefined, "an ordinary failure is not a key change");
+    assert.equal(
+      !refused.online && refused.hostKeyChanged,
+      undefined,
+      "an ordinary failure is not a key change",
+    );
   });
 
   it("POST /api/nodes/trust-new-key forgets the key so the host comes back online", async () => {
@@ -214,10 +254,18 @@ describe("probeHost and the dashboard's Trust new key", () => {
       assert.equal((await probeHost(target)).online, false);
 
       const post = (host: string) =>
-        fetch(`${app.base}/api/nodes/trust-new-key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host }) });
+        fetch(`${app.base}/api/nodes/trust-new-key`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ host }),
+        });
 
       assert.equal((await post("192.0.2.99")).status, 404, "only configured hosts can be named");
-      assert.equal(storedFingerprint(target), "SHA256:old", "an unknown host didn't touch anything");
+      assert.equal(
+        storedFingerprint(target),
+        "SHA256:old",
+        "an unknown host didn't touch anything",
+      );
 
       const ok = await post(target);
       assert.equal(ok.status, 200);
@@ -232,7 +280,11 @@ describe("probeHost and the dashboard's Trust new key", () => {
     process.env.WEB_PASSWORD = "pw";
     const app = await startApp();
     try {
-      const res = await fetch(`${app.base}/api/nodes/trust-new-key`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ host: target }) });
+      const res = await fetch(`${app.base}/api/nodes/trust-new-key`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ host: target }),
+      });
       assert.equal(res.status, 401);
     } finally {
       delete process.env.WEB_PASSWORD;

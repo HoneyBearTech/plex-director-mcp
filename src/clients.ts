@@ -33,7 +33,9 @@ export const qbitClient = axios.create({ withCredentials: true, timeout: REQUEST
 
 function tautulliApiUrl(rawUrl: string): string {
   if (!rawUrl) return "";
-  return /\/api\/v2\/?$/i.test(rawUrl) ? rawUrl.replace(/\/+$/, "") : `${rawUrl.replace(/\/+$/, "")}/api/v2`;
+  return /\/api\/v2\/?$/i.test(rawUrl)
+    ? rawUrl.replace(/\/+$/, "")
+    : `${rawUrl.replace(/\/+$/, "")}/api/v2`;
 }
 
 export function refreshClients(): void {

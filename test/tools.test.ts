@@ -37,6 +37,7 @@ describe("movieTools", () => {
   it("registers every tool with the MCP server", () => {
     registerMovieTools();
     const registered = Object.keys((server as any)._registeredTools);
-    for (const tool of movieTools) assert.ok(registered.includes(tool.name), `${tool.name} is registered`);
+    for (const tool of movieTools)
+      assert.ok(registered.includes(tool.name), `${tool.name} is registered`);
   });
 });

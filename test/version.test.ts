@@ -6,7 +6,9 @@ import { describe, it } from "node:test";
 import { server } from "../src/server.js";
 import { APP_VERSION } from "../src/version.js";
 
-const packageVersion = JSON.parse(fs.readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8")).version;
+const packageVersion = JSON.parse(
+  fs.readFileSync(path.join(import.meta.dirname, "..", "package.json"), "utf8"),
+).version;
 
 describe("MCP server version", () => {
   it("is the version in package.json", () => {
@@ -16,6 +18,9 @@ describe("MCP server version", () => {
 
   it("is what the MCP server announces to clients", () => {
     const info = (server as any).server._serverInfo;
-    assert.deepEqual({ name: info.name, version: info.version }, { name: "plex-director", version: packageVersion });
+    assert.deepEqual(
+      { name: info.name, version: info.version },
+      { name: "plex-director", version: packageVersion },
+    );
   });
 });

@@ -21,7 +21,17 @@ describe("formatUptime", () => {
 });
 
 describe("parseProbeOutput", () => {
-  const sample = ["atlas", "82.8", "16.43", "5272", "32094", "20", "ombi,", "115G 57G 52%", "1300000"].join(SEP);
+  const sample = [
+    "atlas",
+    "82.8",
+    "16.43",
+    "5272",
+    "32094",
+    "20",
+    "ombi,",
+    "115G 57G 52%",
+    "1300000",
+  ].join(SEP);
 
   it("parses the combined script's output", () => {
     const host = parseProbeOutput("192.168.40.68", sample);

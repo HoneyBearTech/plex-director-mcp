@@ -2,7 +2,12 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, describe, it } from "node:test";
 import { sonarrClient } from "../src/clients.js";
-import { checkSeriesStatus, describeQueueItem, diagnoseMissingEpisodes, storyOf } from "../src/tools/seriesDiagnosis.js";
+import {
+  checkSeriesStatus,
+  describeQueueItem,
+  diagnoseMissingEpisodes,
+  storyOf,
+} from "../src/tools/seriesDiagnosis.js";
 import { setSetting } from "../src/settings.js";
 import { fakeApi, resetDb } from "./helpers.js";
 
@@ -41,7 +46,13 @@ const series = (extra: Record<string, unknown> = {}) => ({
   firstAired: "2018-10-01T00:00:00Z",
   lastAired: "2024-04-21T00:00:00Z",
   alternateTitles: [],
-  images: [{ coverType: "poster", url: "/MediaCover/1/poster.jpg?lastWrite=1", remoteUrl: "https://artworks.example/poster.jpg" }],
+  images: [
+    {
+      coverType: "poster",
+      url: "/MediaCover/1/poster.jpg?lastWrite=1",
+      remoteUrl: "https://artworks.example/poster.jpg",
+    },
+  ],
   statistics: { totalEpisodeCount: 999, episodeFileCount: 0, sizeOnDisk: 10_890_252_785 },
   ...extra,
 });
@@ -58,7 +69,12 @@ const ep = (season: number, number: number, extra: Record<string, unknown> = {})
   episodeFileId: 0,
   ...extra,
 });
-const record = (episodeId: number, eventType: string, date: string, extra: Record<string, unknown> = {}) => ({
+const record = (
+  episodeId: number,
+  eventType: string,
+  date: string,
+  extra: Record<string, unknown> = {},
+) => ({
   episodeId,
   seriesId: 1,
   eventType,
@@ -75,7 +91,8 @@ function sonarrFake(overrides?: (url: string, params: Record<string, unknown>) =
     if (req.url === "/api/v3/series") return { data: allSeries };
     if (req.url === "/api/v3/episode") return { data: episodes };
     if (req.url === "/api/v3/history/series") return { data: history };
-    if (req.url === "/api/v3/queue") return { data: { totalRecords: queue.length, records: queue } };
+    if (req.url === "/api/v3/queue")
+      return { data: { totalRecords: queue.length, records: queue } };
     if (req.url === "/api/v3/episodefile") return { data: files };
     if (req.url === "/api/v3/qualityprofile") return { data: profiles };
     return { status: 404 };
@@ -91,7 +108,10 @@ beforeEach(async () => {
   history = [];
   queue = [];
   files = [];
-  profiles = [{ id: 5, name: "WEB-DL (1080p)" }, { id: 8, name: "WEB-DL (1080p) - Old Series/Kids" }];
+  profiles = [
+    { id: 5, name: "WEB-DL (1080p)" },
+    { id: 8, name: "WEB-DL (1080p) - Old Series/Kids" },
+  ];
 });
 afterEach(() => sonarr?.restore());
 
@@ -102,25 +122,64 @@ const everything = (r: any) => JSON.stringify(r);
 
 describe("describeQueueItem", () => {
   it("reports progress and time left while downloading", () => {
-    assert.equal(describeQueueItem({ trackedDownloadState: "downloading", size: 1000, sizeleft: 580, timeleft: "00:12:33" }), "downloading 42%, about 00:12:33 left");
-    assert.equal(describeQueueItem({ trackedDownloadState: "downloading", size: 0 }), "downloading");
+    assert.equal(
+      describeQueueItem({
+        trackedDownloadState: "downloading",
+        size: 1000,
+        sizeleft: 580,
+        timeleft: "00:12:33",
+      }),
+      "downloading 42%, about 00:12:33 left",
+    );
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "downloading", size: 0 }),
+      "downloading",
+    );
   });
   it("says when it is paused, waiting to import, blocked, failed or ignored, with the reason", () => {
-    assert.equal(describeQueueItem({ trackedDownloadState: "downloading", status: "paused", size: 100, sizeleft: 50 }), "paused at 50%");
-    assert.equal(describeQueueItem({ trackedDownloadState: "importPending" }), "downloaded, waiting to be imported");
-    assert.equal(describeQueueItem({ trackedDownloadState: "importing" }), "downloaded, waiting to be imported");
     assert.equal(
-      describeQueueItem({ trackedDownloadState: "importBlocked", statusMessages: [{ title: "Bluey S03E11", messages: ["No files found are eligible for import"] }] }),
-      "downloaded but the import is blocked: No files found are eligible for import"
+      describeQueueItem({
+        trackedDownloadState: "downloading",
+        status: "paused",
+        size: 100,
+        sizeleft: 50,
+      }),
+      "paused at 50%",
     );
-    assert.equal(describeQueueItem({ trackedDownloadState: "failed", errorMessage: "Repair failed" }), "the download failed: Repair failed");
-    assert.equal(describeQueueItem({ trackedDownloadState: "failedPending" }), "the download failed");
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "importPending" }),
+      "downloaded, waiting to be imported",
+    );
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "importing" }),
+      "downloaded, waiting to be imported",
+    );
+    assert.equal(
+      describeQueueItem({
+        trackedDownloadState: "importBlocked",
+        statusMessages: [
+          { title: "Bluey S03E11", messages: ["No files found are eligible for import"] },
+        ],
+      }),
+      "downloaded but the import is blocked: No files found are eligible for import",
+    );
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "failed", errorMessage: "Repair failed" }),
+      "the download failed: Repair failed",
+    );
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "failedPending" }),
+      "the download failed",
+    );
     assert.equal(describeQueueItem({ trackedDownloadState: "ignored" }), "ignored");
   });
   it("falls back to the raw status, and clamps a size left bigger than the size", () => {
     assert.equal(describeQueueItem({ status: "queued" }), "queued");
     assert.equal(describeQueueItem({}), "in the queue");
-    assert.equal(describeQueueItem({ trackedDownloadState: "downloading", size: 100, sizeleft: 400 }), "downloading 0%");
+    assert.equal(
+      describeQueueItem({ trackedDownloadState: "downloading", size: 100, sizeleft: 400 }),
+      "downloading 0%",
+    );
   });
 });
 
@@ -133,32 +192,87 @@ describe("storyOf", () => {
     const records = [
       record(1, "grabbed", "2024-01-01T00:00:00Z", { data: { indexer: "NZBgeek (Prowlarr)" } }),
       record(1, "downloadFailed", "2024-03-01T00:00:00Z", { data: { message: "Repair failed" } }),
-      record(1, "downloadIgnored", "2024-02-01T00:00:00Z", { data: { message: "Manually ignored" } }),
+      record(1, "downloadIgnored", "2024-02-01T00:00:00Z", {
+        data: { message: "Manually ignored" },
+      }),
     ];
-    assert.deepEqual(storyOf(records), { kind: "failed", date: "2024-03-01", message: "Repair failed", release: "Release.For.1" });
+    assert.deepEqual(storyOf(records), {
+      kind: "failed",
+      date: "2024-03-01",
+      message: "Repair failed",
+      release: "Release.For.1",
+    });
     assert.deepEqual(storyOf([...records].reverse()), storyOf(records));
   });
 
   it("reads a deleted file's reason, a grab's indexer, an ignore's message and an old import", () => {
-    assert.deepEqual(storyOf([record(1, "episodeFileDeleted", "2025-03-12T20:00:08Z", { data: { reason: "MissingFromDisk" } })]), { kind: "deleted", date: "2025-03-12", reason: "MissingFromDisk" });
-    assert.deepEqual(storyOf([record(1, "grabbed", "2024-01-01T00:00:00Z", { data: { indexer: "NZBgeek (Prowlarr)" } })]), { kind: "grabbed", date: "2024-01-01", release: "Release.For.1", indexer: "NZBgeek (Prowlarr)" });
-    assert.deepEqual(storyOf([record(1, "downloadIgnored", "2024-01-01T00:00:00Z", { data: { message: "Manually ignored" } })]), { kind: "ignored", date: "2024-01-01", message: "Manually ignored" });
-    assert.deepEqual(storyOf([record(1, "downloadFolderImported", "2024-01-01T00:00:00Z")]), { kind: "imported", date: "2024-01-01" });
+    assert.deepEqual(
+      storyOf([
+        record(1, "episodeFileDeleted", "2025-03-12T20:00:08Z", {
+          data: { reason: "MissingFromDisk" },
+        }),
+      ]),
+      { kind: "deleted", date: "2025-03-12", reason: "MissingFromDisk" },
+    );
+    assert.deepEqual(
+      storyOf([
+        record(1, "grabbed", "2024-01-01T00:00:00Z", { data: { indexer: "NZBgeek (Prowlarr)" } }),
+      ]),
+      {
+        kind: "grabbed",
+        date: "2024-01-01",
+        release: "Release.For.1",
+        indexer: "NZBgeek (Prowlarr)",
+      },
+    );
+    assert.deepEqual(
+      storyOf([
+        record(1, "downloadIgnored", "2024-01-01T00:00:00Z", {
+          data: { message: "Manually ignored" },
+        }),
+      ]),
+      { kind: "ignored", date: "2024-01-01", message: "Manually ignored" },
+    );
+    assert.deepEqual(storyOf([record(1, "downloadFolderImported", "2024-01-01T00:00:00Z")]), {
+      kind: "imported",
+      date: "2024-01-01",
+    });
   });
 
   it("ignores events that say nothing about whether it was obtained (renames, etc.)", () => {
-    const records = [record(1, "grabbed", "2024-01-01T00:00:00Z"), record(1, "episodeFileRenamed", "2025-01-01T00:00:00Z"), record(1, "seriesFolderImported", "2025-06-01T00:00:00Z")];
+    const records = [
+      record(1, "grabbed", "2024-01-01T00:00:00Z"),
+      record(1, "episodeFileRenamed", "2025-01-01T00:00:00Z"),
+      record(1, "seriesFolderImported", "2025-06-01T00:00:00Z"),
+    ];
     assert.equal(storyOf(records).kind, "grabbed");
-    assert.deepEqual(storyOf([record(1, "episodeFileRenamed", "2025-01-01T00:00:00Z")]), { kind: "never" });
+    assert.deepEqual(storyOf([record(1, "episodeFileRenamed", "2025-01-01T00:00:00Z")]), {
+      kind: "never",
+    });
   });
 
   it("puts the download queue above any history", () => {
-    assert.deepEqual(storyOf([record(1, "downloadFailed", "2024-03-01T00:00:00Z")], { trackedDownloadState: "importPending" }), { kind: "queued", note: "downloaded, waiting to be imported" });
+    assert.deepEqual(
+      storyOf([record(1, "downloadFailed", "2024-03-01T00:00:00Z")], {
+        trackedDownloadState: "importPending",
+      }),
+      { kind: "queued", note: "downloaded, waiting to be imported" },
+    );
   });
 
   it("copes with missing data", () => {
-    assert.deepEqual(storyOf([{ eventType: "downloadFailed", date: "2024-03-01T00:00:00Z" }]), { kind: "failed", date: "2024-03-01", message: null, release: null });
-    assert.deepEqual(storyOf([{ eventType: "episodeFileDeleted", date: "2024-03-01T00:00:00Z", data: { reason: "  " } }]), { kind: "deleted", date: "2024-03-01", reason: null });
+    assert.deepEqual(storyOf([{ eventType: "downloadFailed", date: "2024-03-01T00:00:00Z" }]), {
+      kind: "failed",
+      date: "2024-03-01",
+      message: null,
+      release: null,
+    });
+    assert.deepEqual(
+      storyOf([
+        { eventType: "episodeFileDeleted", date: "2024-03-01T00:00:00Z", data: { reason: "  " } },
+      ]),
+      { kind: "deleted", date: "2024-03-01", reason: null },
+    );
   });
 });
 
@@ -177,58 +291,102 @@ describe("diagnose_missing_episodes", () => {
     history = [
       record(missing.id, "downloadFolderImported", "2024-08-18T18:33:58Z"),
       record(missing.id, "episodeFileRenamed", "2025-02-08T17:53:48Z"),
-      record(missing.id, "episodeFileDeleted", "2025-03-12T20:00:08Z", { data: { reason: "MissingFromDisk", ...POISON } }),
+      record(missing.id, "episodeFileDeleted", "2025-03-12T20:00:08Z", {
+        data: { reason: "MissingFromDisk", ...POISON },
+      }),
     ];
     sonarrFake();
     const result = await diagnoseMissingEpisodes("bluey");
     assert.match(text(result), /^## Bluey \(2018\) - monitored in Sonarr/);
     assert.match(text(result), /1 aired episode has no file\./);
-    assert.match(text(result), /- 1 episode: the file was removed\. Sonarr will not look for it because these episodes are not monitored; turn monitoring on in Sonarr to have it searched\. S3E11 "Chest" \(removed 2025-03-12: MissingFromDisk\)\./);
+    assert.match(
+      text(result),
+      /- 1 episode: the file was removed\. Sonarr will not look for it because these episodes are not monitored; turn monitoring on in Sonarr to have it searched\. S3E11 "Chest" \(removed 2025-03-12: MissingFromDisk\)\./,
+    );
   });
 
   it("says the show is not monitored when that is the reason", async () => {
     allSeries = [series({ monitored: false })];
     episodes = [ep(1, 1), ep(1, 2)];
     sonarrFake();
-    assert.match(text(await diagnoseMissingEpisodes("Bluey")), /Sonarr will not look for them because the show is not monitored/);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Bluey")),
+      /Sonarr will not look for them because the show is not monitored/,
+    );
   });
 
   it("for an unsearched monitored episode says Sonarr has not searched yet; with a last search date, when", async () => {
     episodes = [ep(1, 1)];
     sonarrFake();
-    assert.match(text(await diagnoseMissingEpisodes("Bluey")), /never downloaded \(nothing has ever been grabbed\)\. Sonarr is monitoring it but has never searched for it; it only finds older episodes when a release turns up in an RSS sync, so running a search for missing episodes in Sonarr would look now\./);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Bluey")),
+      /never downloaded \(nothing has ever been grabbed\)\. Sonarr is monitoring it but has never searched for it; it only finds older episodes when a release turns up in an RSS sync, so running a search for missing episodes in Sonarr would look now\./,
+    );
     sonarr.restore();
-    episodes = [ep(1, 1, { lastSearchTime: "2024-11-03T03:56:37Z" }), ep(1, 2, { lastSearchTime: "2025-02-01T00:00:00Z" })];
+    episodes = [
+      ep(1, 1, { lastSearchTime: "2024-11-03T03:56:37Z" }),
+      ep(1, 2, { lastSearchTime: "2025-02-01T00:00:00Z" }),
+    ];
     sonarrFake();
-    assert.match(text(await diagnoseMissingEpisodes("Bluey")), /Sonarr is monitoring them and last searched on 2025-02-01 without finding a usable release; check the indexers and the quality profile\./);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Bluey")),
+      /Sonarr is monitoring them and last searched on 2025-02-01 without finding a usable release; check the indexers and the quality profile\./,
+    );
   });
 
   it("explains a failed download with Sonarr's own message", async () => {
     const missing = ep(1, 13, { title: "Wolves at the Door" });
     episodes = [missing];
-    history = [record(missing.id, "grabbed", "2026-09-14T22:00:00Z"), record(missing.id, "downloadFailed", "2026-09-14T23:25:40Z", { data: { message: "Repair failed, not enough repair blocks (1 short)" } })];
+    history = [
+      record(missing.id, "grabbed", "2026-09-14T22:00:00Z"),
+      record(missing.id, "downloadFailed", "2026-09-14T23:25:40Z", {
+        data: { message: "Repair failed, not enough repair blocks (1 short)" },
+      }),
+    ];
     sonarrFake();
     const out = text(await diagnoseMissingEpisodes("Bluey"));
-    assert.match(out, /the last download attempt failed\. Sonarr is monitoring it, so it will search again\./);
-    assert.match(out, /S1E13 "Wolves at the Door" \(failed 2026-09-14: Repair failed, not enough repair blocks \(1 short\)\)/);
+    assert.match(
+      out,
+      /the last download attempt failed\. Sonarr is monitoring it, so it will search again\./,
+    );
+    assert.match(
+      out,
+      /S1E13 "Wolves at the Door" \(failed 2026-09-14: Repair failed, not enough repair blocks \(1 short\)\)/,
+    );
   });
 
   it("explains a release that was grabbed but never imported", async () => {
     const missing = ep(2, 4);
     episodes = [missing];
-    history = [record(missing.id, "grabbed", "2026-09-10T08:00:00Z", { sourceTitle: "Bluey.S02E04.1080p.WEB-DL-NTb", data: { indexer: "NZBgeek (Prowlarr)", ...POISON } })];
+    history = [
+      record(missing.id, "grabbed", "2026-09-10T08:00:00Z", {
+        sourceTitle: "Bluey.S02E04.1080p.WEB-DL-NTb",
+        data: { indexer: "NZBgeek (Prowlarr)", ...POISON },
+      }),
+    ];
     sonarrFake();
-    assert.match(text(await diagnoseMissingEpisodes("Bluey")), /a release was grabbed but never imported\..*S2E04 "Ep 2-4" \(grabbed 2026-09-10: Bluey\.S02E04\.1080p\.WEB-DL-NTb\)/);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Bluey")),
+      /a release was grabbed but never imported\..*S2E04 "Ep 2-4" \(grabbed 2026-09-10: Bluey\.S02E04\.1080p\.WEB-DL-NTb\)/,
+    );
   });
 
   it("explains ignored releases and files that were imported once but are gone", async () => {
     const a = ep(1, 1);
     const b = ep(1, 2);
     episodes = [a, b];
-    history = [record(a.id, "downloadIgnored", "2026-01-01T00:00:00Z", { data: { message: "Manually ignored" } }), record(b.id, "downloadFolderImported", "2025-01-01T00:00:00Z")];
+    history = [
+      record(a.id, "downloadIgnored", "2026-01-01T00:00:00Z", {
+        data: { message: "Manually ignored" },
+      }),
+      record(b.id, "downloadFolderImported", "2025-01-01T00:00:00Z"),
+    ];
     sonarrFake();
     const out = text(await diagnoseMissingEpisodes("Bluey"));
-    assert.match(out, /the release that was found was ignored\..*ignored 2026-01-01: Manually ignored/);
+    assert.match(
+      out,
+      /the release that was found was ignored\..*ignored 2026-01-01: Manually ignored/,
+    );
     assert.match(out, /it was imported once, but the file is gone\..*imported 2025-01-01/);
   });
 
@@ -236,12 +394,20 @@ describe("diagnose_missing_episodes", () => {
     const queued = ep(3, 1);
     episodes = [queued];
     queue = [
-      { seriesId: 1, episodeId: queued.id, trackedDownloadState: "importBlocked", statusMessages: [{ title: "x", messages: ["No files found are eligible for import"] }] },
+      {
+        seriesId: 1,
+        episodeId: queued.id,
+        trackedDownloadState: "importBlocked",
+        statusMessages: [{ title: "x", messages: ["No files found are eligible for import"] }],
+      },
       { seriesId: 999, episodeId: queued.id, trackedDownloadState: "downloading" },
     ];
     sonarrFake();
     const out = text(await diagnoseMissingEpisodes("Bluey"));
-    assert.match(out, /in the download queue\. Sonarr is already handling it\. .*downloaded but the import is blocked: No files found are eligible for import/);
+    assert.match(
+      out,
+      /in the download queue\. Sonarr is already handling it\. .*downloaded but the import is blocked: No files found are eligible for import/,
+    );
     assert.equal(calls("/api/v3/queue").length, 1);
   });
 
@@ -249,12 +415,17 @@ describe("diagnose_missing_episodes", () => {
     const failed = ep(1, 1);
     const never = Array.from({ length: 7 }, (_, i) => ep(2, i + 1, { monitored: false }));
     episodes = [failed, ...never];
-    history = [record(failed.id, "downloadFailed", "2026-01-01T00:00:00Z", { data: { message: "boom" } })];
+    history = [
+      record(failed.id, "downloadFailed", "2026-01-01T00:00:00Z", { data: { message: "boom" } }),
+    ];
     sonarrFake();
     const out = text(await diagnoseMissingEpisodes("Bluey"));
     const lines = out.split("\n").filter((l) => l.startsWith("- "));
     assert.equal(lines.length, 2);
-    assert.match(lines[0]!, /^- 7 episodes: never downloaded .* S2E01 "Ep 2-1"; S2E02 "Ep 2-2"; S2E03 "Ep 2-3"; S2E04 "Ep 2-4"; and 3 more\.$/);
+    assert.match(
+      lines[0]!,
+      /^- 7 episodes: never downloaded .* S2E01 "Ep 2-1"; S2E02 "Ep 2-2"; S2E03 "Ep 2-3"; S2E04 "Ep 2-4"; and 3 more\.$/,
+    );
     assert.match(lines[1]!, /^- 1 episode: the last download attempt failed\./);
     assert.match(out, /8 aired episodes have no file\./);
   });
@@ -262,9 +433,14 @@ describe("diagnose_missing_episodes", () => {
   it("separates the same situation by whether Sonarr would search", async () => {
     episodes = [ep(1, 1, { monitored: true }), ep(1, 2, { monitored: false })];
     sonarrFake();
-    const lines = text(await diagnoseMissingEpisodes("Bluey")).split("\n").filter((l) => l.startsWith("- "));
+    const lines = text(await diagnoseMissingEpisodes("Bluey"))
+      .split("\n")
+      .filter((l) => l.startsWith("- "));
     assert.equal(lines.length, 2);
-    assert.ok(lines.some((l) => /Sonarr is monitoring it/.test(l)) && lines.some((l) => /will not look for it because these episodes are not monitored/.test(l)));
+    assert.ok(
+      lines.some((l) => /Sonarr is monitoring it/.test(l)) &&
+        lines.some((l) => /will not look for it because these episodes are not monitored/.test(l)),
+    );
   });
 
   it("caps the number of situations listed", async () => {
@@ -283,7 +459,10 @@ describe("diagnose_missing_episodes", () => {
     ];
     sonarrFake();
     const out = text(await diagnoseMissingEpisodes("Bluey"));
-    assert.equal(out.split("\n").filter((l) => l.startsWith("- ") && !l.includes("other situations")).length, 6);
+    assert.equal(
+      out.split("\n").filter((l) => l.startsWith("- ") && !l.includes("other situations")).length,
+      6,
+    );
     assert.match(out, /- 2 more episodes across 2 other situations\./);
   });
 
@@ -296,13 +475,22 @@ describe("diagnose_missing_episodes", () => {
   it("says nothing is missing when nothing is", async () => {
     episodes = [ep(1, 1, { hasFile: true })];
     sonarrFake();
-    assert.match(text(await diagnoseMissingEpisodes("Bluey")), /Nothing is missing: every aired episode has a file\./);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Bluey")),
+      /Nothing is missing: every aired episode has a file\./,
+    );
     assert.equal(((await diagnoseMissingEpisodes("Bluey")) as any).structuredContent, undefined);
   });
 
   describe("season and episode", () => {
     beforeEach(() => {
-      episodes = [ep(1, 1, { hasFile: true }), ep(1, 2), ep(2, 1), ep(2, 2, { hasFile: true }), ep(2, 3, { airDateUtc: FUTURE, title: "Coming" })];
+      episodes = [
+        ep(1, 1, { hasFile: true }),
+        ep(1, 2),
+        ep(2, 1),
+        ep(2, 2, { hasFile: true }),
+        ep(2, 3, { airDateUtc: FUTURE, title: "Coming" }),
+      ];
     });
 
     it("looks at one season only, and asks Sonarr's history for that season only", async () => {
@@ -323,14 +511,26 @@ describe("diagnose_missing_episodes", () => {
 
     it("says so when the episode is not missing: it has a file, or has not aired", async () => {
       sonarrFake();
-      assert.match(text(await diagnoseMissingEpisodes("Bluey", { season: 1, episode: 1 })), /S1E01 "Ep 1-1" is not missing: Sonarr has a file for it\./);
-      assert.match(text(await diagnoseMissingEpisodes("Bluey", { season: 2, episode: 3 })), /S2E03 "Coming" has not aired yet \(it airs 2999-01-01\), so it is not missing\./);
+      assert.match(
+        text(await diagnoseMissingEpisodes("Bluey", { season: 1, episode: 1 })),
+        /S1E01 "Ep 1-1" is not missing: Sonarr has a file for it\./,
+      );
+      assert.match(
+        text(await diagnoseMissingEpisodes("Bluey", { season: 2, episode: 3 })),
+        /S2E03 "Coming" has not aired yet \(it airs 2999-01-01\), so it is not missing\./,
+      );
     });
 
     it("says so for a season or episode Sonarr does not have, and needs a season with an episode", async () => {
       sonarrFake();
-      assert.match(text(await diagnoseMissingEpisodes("Bluey", { season: 9 })), /has no season 9 in Sonarr/);
-      assert.match(text(await diagnoseMissingEpisodes("Bluey", { season: 1, episode: 99 })), /Sonarr has no S1E99/);
+      assert.match(
+        text(await diagnoseMissingEpisodes("Bluey", { season: 9 })),
+        /has no season 9 in Sonarr/,
+      );
+      assert.match(
+        text(await diagnoseMissingEpisodes("Bluey", { season: 1, episode: 99 })),
+        /Sonarr has no S1E99/,
+      );
       const noSeason = await diagnoseMissingEpisodes("Bluey", { episode: 3 });
       assert.equal(noSeason.isError, true);
       assert.match(text(noSeason), /give its season number/);
@@ -339,7 +539,10 @@ describe("diagnose_missing_episodes", () => {
     it("says nothing is missing from a complete season", async () => {
       episodes = [ep(1, 1, { hasFile: true })];
       sonarrFake();
-      assert.match(text(await diagnoseMissingEpisodes("Bluey", { season: 1 })), /Nothing is missing from season 1/);
+      assert.match(
+        text(await diagnoseMissingEpisodes("Bluey", { season: 1 })),
+        /Nothing is missing from season 1/,
+      );
     });
   });
 
@@ -347,7 +550,14 @@ describe("diagnose_missing_episodes", () => {
     episodes = Array.from({ length: 30 }, (_, i) => ep(1, i + 1));
     sonarrFake();
     await diagnoseMissingEpisodes("Bluey");
-    assert.deepEqual([calls("/api/v3/history/series").length, calls("/api/v3/queue").length, calls("/api/v3/episode").length], [1, 1, 1]);
+    assert.deepEqual(
+      [
+        calls("/api/v3/history/series").length,
+        calls("/api/v3/queue").length,
+        calls("/api/v3/episode").length,
+      ],
+      [1, 1, 1],
+    );
   });
 
   // The release URLs in Sonarr's history hold the indexer API key.
@@ -355,10 +565,18 @@ describe("diagnose_missing_episodes", () => {
     const eps = [ep(1, 1), ep(1, 2), ep(1, 3), ep(1, 4)];
     episodes = eps;
     history = [
-      record(eps[0]!.id, "grabbed", "2026-01-01T00:00:00Z", { data: { indexer: "NZBgeek", ...POISON } }),
-      record(eps[1]!.id, "downloadFailed", "2026-01-01T00:00:00Z", { data: { message: "boom", ...POISON } }),
-      record(eps[2]!.id, "episodeFileDeleted", "2026-01-01T00:00:00Z", { data: { reason: "Manual", ...POISON } }),
-      record(eps[3]!.id, "downloadIgnored", "2026-01-01T00:00:00Z", { data: { message: "no", ...POISON } }),
+      record(eps[0]!.id, "grabbed", "2026-01-01T00:00:00Z", {
+        data: { indexer: "NZBgeek", ...POISON },
+      }),
+      record(eps[1]!.id, "downloadFailed", "2026-01-01T00:00:00Z", {
+        data: { message: "boom", ...POISON },
+      }),
+      record(eps[2]!.id, "episodeFileDeleted", "2026-01-01T00:00:00Z", {
+        data: { reason: "Manual", ...POISON },
+      }),
+      record(eps[3]!.id, "downloadIgnored", "2026-01-01T00:00:00Z", {
+        data: { message: "no", ...POISON },
+      }),
     ];
     sonarrFake();
     const result = await diagnoseMissingEpisodes("Bluey");
@@ -367,15 +585,25 @@ describe("diagnose_missing_episodes", () => {
   });
 
   it("asks which show when the title is ambiguous, and says when it is unknown", async () => {
-    allSeries = [series({ id: 1, title: "Fargo", year: 2014 }), series({ id: 2, title: "Fargo", year: 2023 })];
+    allSeries = [
+      series({ id: 1, title: "Fargo", year: 2014 }),
+      series({ id: 2, title: "Fargo", year: 2023 }),
+    ];
     sonarrFake();
     assert.match(text(await diagnoseMissingEpisodes("Fargo")), /matches 2 series in Sonarr/);
     assert.equal(calls("/api/v3/history/series").length, 0);
-    assert.match(text(await diagnoseMissingEpisodes("Nope")), /No series matching "Nope" in Sonarr\./);
+    assert.match(
+      text(await diagnoseMissingEpisodes("Nope")),
+      /No series matching "Nope" in Sonarr\./,
+    );
   });
 
   it("returns a table row for the show", async () => {
-    episodes = [ep(1, 1, { hasFile: true }), ep(1, 2, { monitored: false }), ep(1, 3, { monitored: false })];
+    episodes = [
+      ep(1, 1, { hasFile: true }),
+      ep(1, 2, { monitored: false }),
+      ep(1, 3, { monitored: false }),
+    ];
     sonarrFake();
     const result = await diagnoseMissingEpisodes("Bluey");
     assert.deepEqual(rows(result), [
@@ -388,7 +616,13 @@ describe("diagnose_missing_episodes", () => {
         genres: [],
         rating: null,
         detail: "2 missing: never downloaded (nothing has ever been grabbed), not monitored",
-        show: { seasons: 1, episodes: 3, watchedEpisodes: null, ownedEpisodes: 1, network: "ABC Kids" },
+        show: {
+          seasons: 1,
+          episodes: 3,
+          watchedEpisodes: null,
+          ownedEpisodes: 1,
+          network: "ABC Kids",
+        },
       },
     ]);
   });
@@ -406,7 +640,13 @@ describe("diagnose_missing_episodes", () => {
 });
 
 describe("check_series_status", () => {
-  const file = (id: number, dateAdded: string, extra: Record<string, unknown> = {}) => ({ id, dateAdded, quality: { quality: { name: "WEBDL-1080p" } }, releaseGroup: "NTb", ...extra });
+  const file = (id: number, dateAdded: string, extra: Record<string, unknown> = {}) => ({
+    id,
+    dateAdded,
+    quality: { quality: { name: "WEBDL-1080p" } },
+    releaseGroup: "NTb",
+    ...extra,
+  });
 
   it("says so when Sonarr isn't configured", async () => {
     setSetting("SONARR_URL", "");
@@ -422,16 +662,25 @@ describe("check_series_status", () => {
     const b = ep(1, 2, { hasFile: true, episodeFileId: 8 });
     const c = ep(1, 3);
     episodes = [a, b, c];
-    files = [file(7, "2026-01-01T00:00:00Z"), file(8, "2026-08-01T08:03:00Z", { releaseGroup: "playWEB" })];
+    files = [
+      file(7, "2026-01-01T00:00:00Z"),
+      file(8, "2026-08-01T08:03:00Z", { releaseGroup: "playWEB" }),
+    ];
     sonarrFake();
     const out = text(await checkSeriesStatus("bluey"));
     assert.match(out, /^## Bluey \(2018\) - Sonarr: continuing, monitored\n/);
     assert.match(out, /Network: ABC Kids \| Type: standard \| Rated: TV-G \| Runtime: 7 min/);
     assert.match(out, /Quality profile: WEB-DL \(1080p\) - Old Series\/Kids/);
     assert.match(out, /Location: \/media\/tvshowskids\/Bluey \(2018\)/);
-    assert.match(out, /Episodes: 2 of 3 aired episodes downloaded \(1 missing; use check_series_completeness for which\), across 1 season, 10\.9 GB on disk\./);
+    assert.match(
+      out,
+      /Episodes: 2 of 3 aired episodes downloaded \(1 missing; use check_series_completeness for which\), across 1 season, 10\.9 GB on disk\./,
+    );
     assert.match(out, /New seasons: monitored automatically\./);
-    assert.match(out, /Aired: first aired 2018-10-01, latest 2024-04-21\. Next episode airs 2999-01-08\./);
+    assert.match(
+      out,
+      /Aired: first aired 2018-10-01, latest 2024-04-21\. Next episode airs 2999-01-08\./,
+    );
     assert.match(out, /Last download: 2026-08-01, S1E02 \(WEBDL-1080p, playWEB\)\./);
   });
 
@@ -460,7 +709,14 @@ describe("check_series_status", () => {
   it("lists what is in the download queue for this show only", async () => {
     episodes = [ep(1, 1, { hasFile: true })];
     queue = [
-      { seriesId: 1, episodeId: 1, trackedDownloadState: "downloading", size: 100, sizeleft: 25, timeleft: "00:01:00" },
+      {
+        seriesId: 1,
+        episodeId: 1,
+        trackedDownloadState: "downloading",
+        size: 100,
+        sizeleft: 25,
+        timeleft: "00:01:00",
+      },
       { seriesId: 1, episodeId: 2, trackedDownloadState: "importPending" },
       { seriesId: 5, episodeId: 3, trackedDownloadState: "failed" },
     ];
@@ -478,19 +734,44 @@ describe("check_series_status", () => {
     sonarrFake();
     const [row] = rows(await checkSeriesStatus("Bluey"));
     assert.equal(row!.posterUrl, "https://artworks.example/poster.jpg");
-    assert.deepEqual([row!.genres, row!.rating, row!.detail], [["Animation", "Kids"], 9.1, "1 episodes missing"]);
-    assert.deepEqual(row!.show, { seasons: 1, episodes: 2, watchedEpisodes: null, ownedEpisodes: 1, network: "ABC Kids" });
+    assert.deepEqual(
+      [row!.genres, row!.rating, row!.detail],
+      [["Animation", "Kids"], 9.1, "1 episodes missing"],
+    );
+    assert.deepEqual(row!.show, {
+      seasons: 1,
+      episodes: 2,
+      watchedEpisodes: null,
+      ownedEpisodes: 1,
+      network: "ABC Kids",
+    });
 
     allSeries = [series({ images: [{ coverType: "poster", url: "/MediaCover/1/poster.jpg" }] })];
-    assert.equal(rows(await checkSeriesStatus("Bluey"))[0]!.posterUrl, null, "a local /MediaCover path needs Sonarr's API key");
-    for (const remoteUrl of ["/MediaCover/1/poster.jpg", "javascript:alert(1)", "//artworks.example/p.jpg", ""]) {
+    assert.equal(
+      rows(await checkSeriesStatus("Bluey"))[0]!.posterUrl,
+      null,
+      "a local /MediaCover path needs Sonarr's API key",
+    );
+    for (const remoteUrl of [
+      "/MediaCover/1/poster.jpg",
+      "javascript:alert(1)",
+      "//artworks.example/p.jpg",
+      "",
+    ]) {
       allSeries = [series({ images: [{ coverType: "poster", remoteUrl }] })];
-      assert.equal(rows(await checkSeriesStatus("Bluey"))[0]!.posterUrl, null, `not a public http(s) URL: ${remoteUrl}`);
+      assert.equal(
+        rows(await checkSeriesStatus("Bluey"))[0]!.posterUrl,
+        null,
+        `not a public http(s) URL: ${remoteUrl}`,
+      );
     }
   });
 
   it("asks which show when ambiguous, and says when Sonarr doesn't have it", async () => {
-    allSeries = [series({ id: 1, title: "Fargo", year: 2014 }), series({ id: 2, title: "Fargo", year: 2023 })];
+    allSeries = [
+      series({ id: 1, title: "Fargo", year: 2014 }),
+      series({ id: 2, title: "Fargo", year: 2023 }),
+    ];
     sonarrFake();
     assert.match(text(await checkSeriesStatus("Fargo")), /matches 2 series in Sonarr/);
     assert.match(text(await checkSeriesStatus("Zzz")), /No series matching "Zzz" in Sonarr\./);
@@ -508,7 +789,10 @@ describe("check_series_status", () => {
     files = [file(7, "2026-01-01T00:00:00Z")];
     history = [record(100, "grabbed", "2026-01-01T00:00:00Z")];
     sonarrFake();
-    assert.doesNotMatch(everything(await checkSeriesStatus("Bluey")), new RegExp(`${SECRET}|apikey`, "i"));
+    assert.doesNotMatch(
+      everything(await checkSeriesStatus("Bluey")),
+      new RegExp(`${SECRET}|apikey`, "i"),
+    );
     assert.equal(calls("/api/v3/history/series").length, 0, "status does not even read history");
   });
 });

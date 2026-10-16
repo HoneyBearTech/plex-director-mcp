@@ -1,5 +1,16 @@
 import { useState } from "react";
-import { Badge, Box, Button, Callout, Card, Flex, Progress, Table, Text, TextField } from "@radix-ui/themes";
+import {
+  Badge,
+  Box,
+  Button,
+  Callout,
+  Card,
+  Flex,
+  Progress,
+  Table,
+  Text,
+  TextField,
+} from "@radix-ui/themes";
 import { api, type ChatImage, type MediaRow } from "../api";
 import { ChatText } from "../components/ChatText";
 
@@ -12,7 +23,14 @@ interface ChatMessage {
 
 function PosterThumb({ src, title }: { src: string | null; title: string }) {
   if (!src) {
-    return <Flex width="40px" height="60px" flexShrink="0" style={{ borderRadius: 4, background: "var(--gray-a4)" }} />;
+    return (
+      <Flex
+        width="40px"
+        height="60px"
+        flexShrink="0"
+        style={{ borderRadius: 4, background: "var(--gray-a4)" }}
+      />
+    );
   }
   return (
     <img
@@ -42,13 +60,20 @@ function ShowProgress({ show }: { show: NonNullable<MediaRow["show"]> }) {
   // Sonarr rows report how much is downloaded; Plex rows report how much is watched.
   const downloads = ownedEpisodes !== undefined && ownedEpisodes !== null;
   const watchedEpisodes = downloads ? ownedEpisodes : show.watchedEpisodes;
-  const incomplete = downloads && episodes !== null && watchedEpisodes !== null && watchedEpisodes < episodes;
+  const incomplete =
+    downloads && episodes !== null && watchedEpisodes !== null && watchedEpisodes < episodes;
   // A bar must not read "full" while episodes are missing, so 99.7% shows as 99%.
-  const percent = episodes && watchedEpisodes !== null ? Math.min(incomplete ? 99 : 100, Math.round((watchedEpisodes / episodes) * 100)) : null;
+  const percent =
+    episodes && watchedEpisodes !== null
+      ? Math.min(incomplete ? 99 : 100, Math.round((watchedEpisodes / episodes) * 100))
+      : null;
   return (
     <Flex direction="column" align="start" gap="1">
       <Text size="1">
-        {[seasons !== null ? plural(seasons, "season") : null, episodes !== null ? plural(episodes, "episode") : null]
+        {[
+          seasons !== null ? plural(seasons, "season") : null,
+          episodes !== null ? plural(episodes, "episode") : null,
+        ]
           .filter(Boolean)
           .join(", ") || "-"}
       </Text>
@@ -83,83 +108,104 @@ function MediaTable({ media }: { media: MediaRow[] }) {
   const hasAdded = media.some((m) => (m.added ?? null) !== null);
   // Only Plex and Sonarr rows carry season/episode data (TMDb filmography and calendar rows do not).
   const hasShowDetail = media.some(
-    (m) => m.show && (m.show.seasons !== null || m.show.episodes !== null || m.show.watchedEpisodes !== null || (m.show.ownedEpisodes ?? null) !== null)
+    (m) =>
+      m.show &&
+      (m.show.seasons !== null ||
+        m.show.episodes !== null ||
+        m.show.watchedEpisodes !== null ||
+        (m.show.ownedEpisodes ?? null) !== null),
   );
   const noun = hasShows && hasMovies ? "title" : hasShows ? "show" : "movie";
 
   return (
     <>
-    <Text as="p" size="1" color="gray" mt="2">
-      {visible.length < media.length
-        ? `Showing ${visible.length} of ${media.length} ${noun}s`
-        : plural(media.length, noun)}
-    </Text>
-    <Table.Root size="1" variant="surface" style={{ marginTop: 4 }}>
-      <Table.Header>
-        <Table.Row>
-          <Table.ColumnHeaderCell width="56px" />
-          <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
-          {hasShows && hasMovies && <Table.ColumnHeaderCell>Kind</Table.ColumnHeaderCell>}
-          <Table.ColumnHeaderCell>Year</Table.ColumnHeaderCell>
-          {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
-          {hasShowDetail && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
-          {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
-          {hasLastWatched && <Table.ColumnHeaderCell>Last watched</Table.ColumnHeaderCell>}
-          {hasAdded && <Table.ColumnHeaderCell>Added</Table.ColumnHeaderCell>}
-          {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {visible.map((item, i) => (
-          <Table.Row key={i} align="center">
-            <Table.Cell>
-              <PosterThumb src={item.posterUrl} title={item.title} />
-            </Table.Cell>
-            <Table.RowHeaderCell>
-              {item.title}
-              {item.show?.network && (
-                <Text as="div" size="1" color="gray" weight="regular">
-                  {item.show.network}
-                </Text>
-              )}
-            </Table.RowHeaderCell>
-            {hasShows && hasMovies && (
-              <Table.Cell>
-                <Badge color={item.kind === "show" ? "violet" : "blue"}>{item.kind === "show" ? "Show" : "Movie"}</Badge>
-              </Table.Cell>
-            )}
-            <Table.Cell>{item.year ?? "-"}</Table.Cell>
-            {showOwnership && (
-              <Table.Cell>
-                {item.libraries === null ? (
-                  "-"
-                ) : item.libraries.length === 0 ? (
-                  <Badge color="gray">Not in Plex</Badge>
-                ) : (
-                  <Flex direction="column" align="start" gap="1">
-                    {item.libraries.map((library) => (
-                      <Badge key={library} color="green">
-                        {library}
-                      </Badge>
-                    ))}
-                  </Flex>
-                )}
-              </Table.Cell>
-            )}
-            {hasShowDetail && <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>}
-            {showDetail && <Table.Cell>{item.detail ?? item.genres.join(", ")}</Table.Cell>}
-            {hasLastWatched && <Table.Cell>{item.lastWatched === undefined ? "-" : (item.lastWatched ?? "Never")}</Table.Cell>}
-            {hasAdded && <Table.Cell>{item.added ?? "-"}</Table.Cell>}
-            {showRating && <Table.Cell>{item.rating !== null ? item.rating.toFixed(1) : "-"}</Table.Cell>}
+      <Text as="p" size="1" color="gray" mt="2">
+        {visible.length < media.length
+          ? `Showing ${visible.length} of ${media.length} ${noun}s`
+          : plural(media.length, noun)}
+      </Text>
+      <Table.Root size="1" variant="surface" style={{ marginTop: 4 }}>
+        <Table.Header>
+          <Table.Row>
+            <Table.ColumnHeaderCell width="56px" />
+            <Table.ColumnHeaderCell>Title</Table.ColumnHeaderCell>
+            {hasShows && hasMovies && <Table.ColumnHeaderCell>Kind</Table.ColumnHeaderCell>}
+            <Table.ColumnHeaderCell>Year</Table.ColumnHeaderCell>
+            {showOwnership && <Table.ColumnHeaderCell>In Plex</Table.ColumnHeaderCell>}
+            {hasShowDetail && <Table.ColumnHeaderCell>Seasons / episodes</Table.ColumnHeaderCell>}
+            {showDetail && <Table.ColumnHeaderCell>Details</Table.ColumnHeaderCell>}
+            {hasLastWatched && <Table.ColumnHeaderCell>Last watched</Table.ColumnHeaderCell>}
+            {hasAdded && <Table.ColumnHeaderCell>Added</Table.ColumnHeaderCell>}
+            {showRating && <Table.ColumnHeaderCell>Rating</Table.ColumnHeaderCell>}
           </Table.Row>
-        ))}
-      </Table.Body>
-    </Table.Root>
-    {collapsible && (
-      <Button variant="soft" color="gray" size="1" mt="2" onClick={() => setExpanded((open) => !open)}>
-        {expanded ? `Show first ${PREVIEW_ROWS}` : `Show all ${media.length} ${noun}s`}
-      </Button>
-    )}
+        </Table.Header>
+        <Table.Body>
+          {visible.map((item, i) => (
+            <Table.Row key={i} align="center">
+              <Table.Cell>
+                <PosterThumb src={item.posterUrl} title={item.title} />
+              </Table.Cell>
+              <Table.RowHeaderCell>
+                {item.title}
+                {item.show?.network && (
+                  <Text as="div" size="1" color="gray" weight="regular">
+                    {item.show.network}
+                  </Text>
+                )}
+              </Table.RowHeaderCell>
+              {hasShows && hasMovies && (
+                <Table.Cell>
+                  <Badge color={item.kind === "show" ? "violet" : "blue"}>
+                    {item.kind === "show" ? "Show" : "Movie"}
+                  </Badge>
+                </Table.Cell>
+              )}
+              <Table.Cell>{item.year ?? "-"}</Table.Cell>
+              {showOwnership && (
+                <Table.Cell>
+                  {item.libraries === null ? (
+                    "-"
+                  ) : item.libraries.length === 0 ? (
+                    <Badge color="gray">Not in Plex</Badge>
+                  ) : (
+                    <Flex direction="column" align="start" gap="1">
+                      {item.libraries.map((library) => (
+                        <Badge key={library} color="green">
+                          {library}
+                        </Badge>
+                      ))}
+                    </Flex>
+                  )}
+                </Table.Cell>
+              )}
+              {hasShowDetail && (
+                <Table.Cell>{item.show ? <ShowProgress show={item.show} /> : "-"}</Table.Cell>
+              )}
+              {showDetail && <Table.Cell>{item.detail ?? item.genres.join(", ")}</Table.Cell>}
+              {hasLastWatched && (
+                <Table.Cell>
+                  {item.lastWatched === undefined ? "-" : (item.lastWatched ?? "Never")}
+                </Table.Cell>
+              )}
+              {hasAdded && <Table.Cell>{item.added ?? "-"}</Table.Cell>}
+              {showRating && (
+                <Table.Cell>{item.rating !== null ? item.rating.toFixed(1) : "-"}</Table.Cell>
+              )}
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table.Root>
+      {collapsible && (
+        <Button
+          variant="soft"
+          color="gray"
+          size="1"
+          mt="2"
+          onClick={() => setExpanded((open) => !open)}
+        >
+          {expanded ? `Show first ${PREVIEW_ROWS}` : `Show all ${media.length} ${noun}s`}
+        </Button>
+      )}
     </>
   );
 }
@@ -201,14 +247,28 @@ export function QueryPage() {
       <Card>
         <Flex direction="column" gap="4" style={{ minHeight: 200 }}>
           {messages.length === 0 && (
-            <Text color="gray">Ask about your movie and TV library, e.g. &quot;Do I have the F1 movie?&quot; or &quot;Which shows do I own with Bryan Cranston?&quot; Follow-up questions keep the context of the conversation.</Text>
+            <Text color="gray">
+              Ask about your movie and TV library, e.g. &quot;Do I have the F1 movie?&quot; or
+              &quot;Which shows do I own with Bryan Cranston?&quot; Follow-up questions keep the
+              context of the conversation.
+            </Text>
           )}
           {messages.map((message, i) => (
-            <Flex key={i} direction="column" gap="1" align={message.role === "user" ? "end" : "start"}>
+            <Flex
+              key={i}
+              direction="column"
+              gap="1"
+              align={message.role === "user" ? "end" : "start"}
+            >
               <Badge color={message.role === "user" ? "blue" : "gray"}>
                 {message.role === "user" ? "You" : "Assistant"}
               </Badge>
-              <Box style={{ maxWidth: message.media?.length ? "100%" : "85%", width: message.media?.length ? "100%" : undefined }}>
+              <Box
+                style={{
+                  maxWidth: message.media?.length ? "100%" : "85%",
+                  width: message.media?.length ? "100%" : undefined,
+                }}
+              >
                 {message.role === "assistant" ? (
                   <ChatText text={message.text} />
                 ) : (

@@ -18,7 +18,8 @@ beforeEach(async () => {
   delete process.env.WEB_PASSWORD;
 });
 
-const get = (path: string, cookie?: string) => fetch(app.base + path, cookie ? { headers: { Cookie: cookie } } : {});
+const get = (path: string, cookie?: string) =>
+  fetch(app.base + path, cookie ? { headers: { Cookie: cookie } } : {});
 const send = (method: string, path: string, body?: unknown, cookie?: string) =>
   fetch(app.base + path, {
     method,
@@ -60,19 +61,33 @@ describe("settings API", () => {
     const body = (await (await get("/api/settings")).json()) as any;
     assert.equal(body.radarr.defaultQualityProfile, "Remux + WEB 1080p");
     await send("PUT", "/api/settings/radarr", { defaultQualityProfile: "" });
-    assert.equal(((await (await get("/api/settings")).json()) as any).radarr.defaultQualityProfile, "", "it can be cleared back to 'first profile'");
+    assert.equal(
+      ((await (await get("/api/settings")).json()) as any).radarr.defaultQualityProfile,
+      "",
+      "it can be cleared back to 'first profile'",
+    );
   });
 
   it("saves and returns the libraries to leave out of Plex searches as a plain (non-secret) field", async () => {
     await send("PUT", "/api/settings/plex", { skipLibraries: "  Sports, Kid's TV Shows " });
     assert.equal(getSetting("PLEX_SKIP_LIBRARIES"), "Sports, Kid's TV Shows");
-    assert.equal(((await (await get("/api/settings")).json()) as any).plex.skipLibraries, "Sports, Kid's TV Shows");
+    assert.equal(
+      ((await (await get("/api/settings")).json()) as any).plex.skipLibraries,
+      "Sports, Kid's TV Shows",
+    );
     await send("PUT", "/api/settings/plex", { skipLibraries: "" });
-    assert.equal(((await (await get("/api/settings")).json()) as any).plex.skipLibraries, "", "it can be cleared to search everything");
+    assert.equal(
+      ((await (await get("/api/settings")).json()) as any).plex.skipLibraries,
+      "",
+      "it can be cleared to search everything",
+    );
   });
 
   it("saves trimmed values", async () => {
-    const res = await send("PUT", "/api/settings/radarr", { url: "  http://radarr:7878  ", apiKey: "  k  " });
+    const res = await send("PUT", "/api/settings/radarr", {
+      url: "  http://radarr:7878  ",
+      apiKey: "  k  ",
+    });
     assert.equal(res.status, 200);
     assert.equal(getSetting("RADARR_URL"), "http://radarr:7878");
     assert.equal(getSetting("RADARR_API_KEY"), "k");
@@ -99,8 +114,14 @@ describe("settings API", () => {
   it("refuses a new URL that would reuse the saved secret, and saves nothing", async () => {
     setSetting("RADARR_URL", "http://radarr:7878");
     setSetting("RADARR_API_KEY", "real-key");
-    for (const body of [{ url: "http://attacker:7878" }, { url: "http://attacker:7878", apiKey: "  " }]) {
-      const res = await send("PUT", "/api/settings/radarr", { ...body, defaultQualityProfile: "HD" });
+    for (const body of [
+      { url: "http://attacker:7878" },
+      { url: "http://attacker:7878", apiKey: "  " },
+    ]) {
+      const res = await send("PUT", "/api/settings/radarr", {
+        ...body,
+        defaultQualityProfile: "HD",
+      });
       assert.equal(res.status, 400);
       assert.match((await res.json()).error, /the API key entered again/);
       assert.equal(getSetting("RADARR_URL"), "http://radarr:7878");
@@ -112,14 +133,20 @@ describe("settings API", () => {
   it("also refuses re-pointing a cleared URL while the old secret is still saved", async () => {
     setSetting("SONARR_URL", "");
     setSetting("SONARR_API_KEY", "abc");
-    assert.equal((await send("PUT", "/api/settings/sonarr", { url: "http://elsewhere" })).status, 400);
+    assert.equal(
+      (await send("PUT", "/api/settings/sonarr", { url: "http://elsewhere" })).status,
+      400,
+    );
     assert.equal(getSetting("SONARR_URL"), "");
   });
 
   it("names every secret a URL change needs (qBittorrent's password)", async () => {
     setSetting("QBITTORRENT_URL", "http://qbit");
     setSetting("QBITTORRENT_PASS", "pw");
-    const res = await send("PUT", "/api/settings/qbittorrent", { url: "http://other", username: "admin" });
+    const res = await send("PUT", "/api/settings/qbittorrent", {
+      url: "http://other",
+      username: "admin",
+    });
     assert.equal(res.status, 400);
     assert.match((await res.json()).error, /password entered again/);
     assert.equal(getSetting("QBITTORRENT_USER"), "");
@@ -128,12 +155,22 @@ describe("settings API", () => {
   it("allows a URL change with the secret re-entered, the same URL with a blank secret, or no saved secret", async () => {
     setSetting("RADARR_URL", "http://radarr:7878");
     setSetting("RADARR_API_KEY", "old");
-    assert.equal((await send("PUT", "/api/settings/radarr", { url: "http://radarr:7878 ", apiKey: "" })).status, 200);
+    assert.equal(
+      (await send("PUT", "/api/settings/radarr", { url: "http://radarr:7878 ", apiKey: "" }))
+        .status,
+      200,
+    );
     assert.equal(getSetting("RADARR_API_KEY"), "old");
-    assert.equal((await send("PUT", "/api/settings/radarr", { url: "http://new:7878", apiKey: "new" })).status, 200);
+    assert.equal(
+      (await send("PUT", "/api/settings/radarr", { url: "http://new:7878", apiKey: "new" })).status,
+      200,
+    );
     assert.equal(getSetting("RADARR_URL"), "http://new:7878");
     assert.equal(getSetting("RADARR_API_KEY"), "new");
-    assert.equal((await send("PUT", "/api/settings/prowlarr", { url: "http://prowlarr", apiKey: "" })).status, 200);
+    assert.equal(
+      (await send("PUT", "/api/settings/prowlarr", { url: "http://prowlarr", apiKey: "" })).status,
+      200,
+    );
     assert.equal(getSetting("PROWLARR_URL"), "http://prowlarr");
   });
 
@@ -149,7 +186,14 @@ describe("Plex image proxy", () => {
   it("rejects anything that isn't a Plex thumb path, before any request is made", async () => {
     const fake = fakeApi(plexClient, () => ({ data: Buffer.from("x") }));
     try {
-      for (const bad of ["/etc/passwd", "/library/metadata/1/thumb/1/../../x", "http://evil.example/x.jpg", "/library/metadata/abc/thumb/1", "/library/metadata/1/art/1", ""]) {
+      for (const bad of [
+        "/etc/passwd",
+        "/library/metadata/1/thumb/1/../../x",
+        "http://evil.example/x.jpg",
+        "/library/metadata/abc/thumb/1",
+        "/library/metadata/1/art/1",
+        "",
+      ]) {
         const res = await get(`/api/plex/image?path=${encodeURIComponent(bad)}`);
         assert.equal(res.status, 400, `rejects ${JSON.stringify(bad)}`);
       }
@@ -161,9 +205,14 @@ describe("Plex image proxy", () => {
   });
 
   it("fetches a resized thumbnail through Plex's transcoder and lets the browser cache it", async () => {
-    const fake = fakeApi(plexClient, () => ({ data: Buffer.from("jpegbytes"), headers: { "content-type": "image/jpeg" } }));
+    const fake = fakeApi(plexClient, () => ({
+      data: Buffer.from("jpegbytes"),
+      headers: { "content-type": "image/jpeg" },
+    }));
     try {
-      const res = await get("/api/plex/image?path=%2Flibrary%2Fmetadata%2F91684%2Fthumb%2F1789285096");
+      const res = await get(
+        "/api/plex/image?path=%2Flibrary%2Fmetadata%2F91684%2Fthumb%2F1789285096",
+      );
       assert.equal(res.status, 200);
       assert.equal(res.headers.get("content-type"), "image/jpeg");
       assert.match(res.headers.get("cache-control") ?? "", /max-age=86400/);
@@ -178,7 +227,10 @@ describe("Plex image proxy", () => {
   it("reports a Plex failure as a 502", async () => {
     const fake = fakeApi(plexClient, () => ({ status: 500 }));
     try {
-      assert.equal((await get("/api/plex/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F1")).status, 502);
+      assert.equal(
+        (await get("/api/plex/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F1")).status,
+        502,
+      );
     } finally {
       fake.restore();
     }
@@ -187,7 +239,11 @@ describe("Plex image proxy", () => {
 
 describe("jobs API", () => {
   const insert = (name: string, status: string, done: number, total: number) =>
-    db.prepare("INSERT INTO system_jobs (task_name, status, total_items, processed_items, payload) VALUES (?, ?, ?, ?, '[]')").run(name, status, total, done);
+    db
+      .prepare(
+        "INSERT INTO system_jobs (task_name, status, total_items, processed_items, payload) VALUES (?, ?, ?, ?, '[]')",
+      )
+      .run(name, status, total, done);
 
   it("returns an empty list when there are no jobs", async () => {
     assert.deepEqual(await (await get("/api/jobs")).json(), { jobs: [] });
@@ -197,8 +253,14 @@ describe("jobs API", () => {
     insert("older", "COMPLETED", 5, 5);
     insert("newer", "RUNNING", 3, 10);
     const { jobs } = (await (await get("/api/jobs")).json()) as { jobs: any[] };
-    assert.deepEqual(jobs.map((j) => j.taskName), ["newer", "older"]);
-    assert.deepEqual([jobs[0].status, jobs[0].processedItems, jobs[0].totalItems], ["RUNNING", 3, 10]);
+    assert.deepEqual(
+      jobs.map((j) => j.taskName),
+      ["newer", "older"],
+    );
+    assert.deepEqual(
+      [jobs[0].status, jobs[0].processedItems, jobs[0].totalItems],
+      ["RUNNING", 3, 10],
+    );
     assert.match(jobs[0].createdAt, /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/);
     assert.equal("payload" in jobs[0], false, "the movie id payload isn't exposed");
   });
@@ -217,7 +279,10 @@ describe("indexers API", () => {
 
   it("returns classified indexers and warnings", async () => {
     fake = fakeApi(prowlarrClient, (req) => {
-      if (req.url === "/api/v1/indexer") return { data: [{ id: 1, name: "NZBgeek", protocol: "usenet", priority: 3, enable: true }] };
+      if (req.url === "/api/v1/indexer")
+        return {
+          data: [{ id: 1, name: "NZBgeek", protocol: "usenet", priority: 3, enable: true }],
+        };
       if (req.url === "/api/v1/indexerstatus") return { data: [] };
       return { data: [{ type: "warning", source: "X", message: "careful" }] };
     });
@@ -240,10 +305,30 @@ describe("qBittorrent queue API", () => {
     fake = fakeApi(qbitClient, (req) =>
       req.url.includes("auth/login")
         ? { data: "Ok.", headers: { "set-cookie": ["SID=1; HttpOnly"] } }
-        : { data: [{ name: "A", state: "stalledDL", progress: 0.5, dlspeed: 2048, size: 1000, num_seeds: 3 }, { name: "B", state: "downloading", progress: 1, dlspeed: 0, size: 5, num_seeds: 0 }] }
+        : {
+            data: [
+              {
+                name: "A",
+                state: "stalledDL",
+                progress: 0.5,
+                dlspeed: 2048,
+                size: 1000,
+                num_seeds: 3,
+              },
+              { name: "B", state: "downloading", progress: 1, dlspeed: 0, size: 5, num_seeds: 0 },
+            ],
+          },
     );
     const { items } = (await (await get("/api/queues/qbittorrent")).json()) as { items: any[] };
-    assert.deepEqual(items[0], { name: "A", state: "stalledDL", progress: 0.5, dlspeedKbps: 2, sizeBytes: 1000, seeders: 3, stalled: true });
+    assert.deepEqual(items[0], {
+      name: "A",
+      state: "stalledDL",
+      progress: 0.5,
+      dlspeedKbps: 2,
+      sizeBytes: 1000,
+      seeders: 3,
+      stalled: true,
+    });
     assert.equal(items[1].stalled, false);
   });
 
@@ -261,14 +346,27 @@ describe("chat API", () => {
     assert.equal((await send("POST", "/api/chat/movies", {})).status, 400);
   });
   it("reports a missing Anthropic key clearly instead of crashing, even with junk history", async () => {
-    const res = await send("POST", "/api/chat/movies", { question: "hi", history: [null, 5, { role: "system" }, { role: "user", text: 3 }] });
+    const res = await send("POST", "/api/chat/movies", {
+      question: "hi",
+      history: [null, 5, { role: "system" }, { role: "user", text: 3 }],
+    });
     assert.equal(res.status, 502);
     assert.match(((await res.json()) as any).error, /ANTHROPIC_API_KEY is not configured/);
   });
 });
 
 describe("chat request size", () => {
-  const bigTable = (rows: number) => Array.from({ length: rows }, (_, i) => ({ kind: "movie", title: `Title ${i}`, year: 2000, libraries: ["Movies"], posterUrl: `/api/plex/image?path=${"x".repeat(200)}`, genres: ["Drama", "Thriller"], rating: 7.1, detail: null }));
+  const bigTable = (rows: number) =>
+    Array.from({ length: rows }, (_, i) => ({
+      kind: "movie",
+      title: `Title ${i}`,
+      year: 2000,
+      libraries: ["Movies"],
+      posterUrl: `/api/plex/image?path=${"x".repeat(200)}`,
+      genres: ["Drama", "Thriller"],
+      rating: 7.1,
+      detail: null,
+    }));
 
   // Found in the browser: two answers with 135 and 238 rows made the next question fail with 413.
   it("accepts a conversation whose earlier answers had hundreds of rows (past express's 100 KB default)", async () => {
@@ -285,7 +383,10 @@ describe("chat request size", () => {
   });
 
   it("still refuses an absurdly large request", async () => {
-    const res = await send("POST", "/api/chat/movies", { question: "x", history: [{ role: "assistant", text: "y".repeat(1_200_000) }] });
+    const res = await send("POST", "/api/chat/movies", {
+      question: "x",
+      history: [{ role: "assistant", text: "y".repeat(1_200_000) }],
+    });
     assert.equal(res.status, 413);
   });
 });
@@ -298,7 +399,14 @@ describe("chat history from the browser", () => {
         role: "assistant",
         text: "See the table below.",
         media: [
-          { kind: "show", title: "Breaking Bad", year: 2008, libraries: ["TV Shows", "4k TV Shows"], posterUrl: "javascript:alert(1)", genres: ["Drama"] },
+          {
+            kind: "show",
+            title: "Breaking Bad",
+            year: 2008,
+            libraries: ["TV Shows", "4k TV Shows"],
+            posterUrl: "javascript:alert(1)",
+            genres: ["Drama"],
+          },
           { kind: "movie", title: "Argo", year: 2012, libraries: ["Movies"] },
           { title: "Kind missing", year: "2020", libraries: "nope" },
           { kind: "bogus", title: "Kind wrong" },
@@ -308,23 +416,39 @@ describe("chat history from the browser", () => {
       },
     ]);
     const media = turns[1]!.media!;
-    assert.deepEqual(media.map((m) => [m.kind, m.title, m.year, m.libraries]), [
-      ["show", "Breaking Bad", 2008, ["TV Shows", "4k TV Shows"]],
-      ["movie", "Argo", 2012, ["Movies"]],
-      ["movie", "Kind missing", null, null],
-      ["movie", "Kind wrong", null, null],
-    ]);
-    assert.ok(media.every((m) => m.posterUrl === null && m.genres.length === 0), "only the fields the summary needs survive");
+    assert.deepEqual(
+      media.map((m) => [m.kind, m.title, m.year, m.libraries]),
+      [
+        ["show", "Breaking Bad", 2008, ["TV Shows", "4k TV Shows"]],
+        ["movie", "Argo", 2012, ["Movies"]],
+        ["movie", "Kind missing", null, null],
+        ["movie", "Kind wrong", null, null],
+      ],
+    );
+    assert.ok(
+      media.every((m) => m.posterUrl === null && m.genres.length === 0),
+      "only the fields the summary needs survive",
+    );
     const summary = String(buildHistoryMessages(turns)[1]!.content);
-    assert.match(summary, /Breaking Bad \(2008\) \[TV show\] - in Plex: TV Shows, 4k TV Shows; Argo \(2012\) - in Plex: Movies/);
+    assert.match(
+      summary,
+      /Breaking Bad \(2008\) \[TV show\] - in Plex: TV Shows, 4k TV Shows; Argo \(2012\) - in Plex: Movies/,
+    );
   });
 
   it("ignores the old 'movies' field from a browser tab opened before this version, without failing", () => {
     const turns = parseHistory([
       { role: "user", text: "q" },
-      { role: "assistant", text: "a", movies: [{ title: "Heat", year: 1995, libraries: ["Movies"] }] },
+      {
+        role: "assistant",
+        text: "a",
+        movies: [{ title: "Heat", year: 1995, libraries: ["Movies"] }],
+      },
     ]);
-    assert.deepEqual(turns, [{ role: "user", text: "q" }, { role: "assistant", text: "a" }]);
+    assert.deepEqual(turns, [
+      { role: "user", text: "q" },
+      { role: "assistant", text: "a" },
+    ]);
   });
 });
 
@@ -334,7 +458,10 @@ describe("dashboard authentication", () => {
   const cookieFrom = (res: Response) => (res.headers.getSetCookie()[0] ?? "").split(";")[0]!;
 
   it("is open, and says so, when no password is set", async () => {
-    assert.deepEqual(await (await get("/api/auth/status")).json(), { authRequired: false, authenticated: true });
+    assert.deepEqual(await (await get("/api/auth/status")).json(), {
+      authRequired: false,
+      authenticated: true,
+    });
     assert.equal((await get("/api/settings")).status, 200);
   });
 
@@ -344,7 +471,10 @@ describe("dashboard authentication", () => {
     assert.equal((await get("/api/jobs")).status, 401);
     assert.equal((await get("/api/does-not-exist")).status, 401, "unknown paths can't be probed");
     assert.equal((await get("/healthz")).status, 200);
-    assert.deepEqual(await (await get("/api/auth/status")).json(), { authRequired: true, authenticated: false });
+    assert.deepEqual(await (await get("/api/auth/status")).json(), {
+      authRequired: true,
+      authenticated: false,
+    });
   });
 
   it("rejects a wrong or missing password without setting a cookie", async () => {
@@ -369,7 +499,10 @@ describe("dashboard authentication", () => {
 
     const cookie = cookieFrom(res);
     assert.equal((await get("/api/settings", cookie)).status, 200);
-    assert.deepEqual(await (await get("/api/auth/status", cookie)).json(), { authRequired: true, authenticated: true });
+    assert.deepEqual(await (await get("/api/auth/status", cookie)).json(), {
+      authRequired: true,
+      authenticated: true,
+    });
   });
 
   it("marks the cookie Secure when the request arrived over HTTPS", async () => {
@@ -385,7 +518,10 @@ describe("dashboard authentication", () => {
   it("rejects a tampered cookie, and everyone is signed out when the password changes", async () => {
     process.env.WEB_PASSWORD = PASSWORD;
     const cookie = cookieFrom(await login(PASSWORD));
-    assert.equal((await get("/api/settings", cookie.slice(0, -1) + (cookie.endsWith("A") ? "B" : "A"))).status, 401);
+    assert.equal(
+      (await get("/api/settings", cookie.slice(0, -1) + (cookie.endsWith("A") ? "B" : "A"))).status,
+      401,
+    );
     process.env.WEB_PASSWORD = "a new password";
     assert.equal((await get("/api/settings", cookie)).status, 401);
   });
@@ -399,7 +535,10 @@ describe("dashboard authentication", () => {
 
   it("the Plex image proxy works for an <img> tag carrying the session cookie, and not without it", async () => {
     process.env.WEB_PASSWORD = PASSWORD;
-    const fake = fakeApi(plexClient, () => ({ data: Buffer.from("x"), headers: { "content-type": "image/jpeg" } }));
+    const fake = fakeApi(plexClient, () => ({
+      data: Buffer.from("x"),
+      headers: { "content-type": "image/jpeg" },
+    }));
     try {
       const path = "/api/plex/image?path=%2Flibrary%2Fmetadata%2F1%2Fthumb%2F1";
       assert.equal((await get(path)).status, 401);
@@ -417,6 +556,10 @@ describe("dashboard authentication", () => {
       if ((await login(`guess ${attempt}`)).status === 429) blockedAt = attempt;
     }
     assert.ok(blockedAt > 0 && blockedAt <= 11, `blocked by attempt ${blockedAt}`);
-    assert.equal((await login(PASSWORD)).status, 429, "even the right password is refused while blocked");
+    assert.equal(
+      (await login(PASSWORD)).status,
+      429,
+      "even the right password is refused while blocked",
+    );
   });
 });

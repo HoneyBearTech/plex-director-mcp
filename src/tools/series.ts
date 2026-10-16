@@ -85,7 +85,8 @@ export function analyzeEpisodes(episodes: any[], now: number = Date.now()): Seri
 
   const seasons = [...bySeason.values()].sort((a, b) => a.season - b.season);
   for (const season of seasons) season.missing.sort((a, b) => a - b);
-  const sum = (pick: (s: SeasonStatus) => number) => seasons.reduce((total, s) => total + pick(s), 0);
+  const sum = (pick: (s: SeasonStatus) => number) =>
+    seasons.reduce((total, s) => total + pick(s), 0);
   return {
     seasons,
     released: sum((s) => s.released),
@@ -139,19 +140,24 @@ export type SeriesLookup = { series: any } | { candidates: any[] } | null;
 export function findSeries(all: any[], title: string, year?: number): SeriesLookup {
   const wanted = normalizeTitle(title);
   if (!wanted) return null;
-  const withYear = (list: any[]) => (year === undefined ? list : list.filter((s) => s.year === year));
+  const withYear = (list: any[]) =>
+    year === undefined ? list : list.filter((s) => s.year === year);
 
   const exact = withYear(
     all.filter(
       (s) =>
         normalizeTitle(String(s.title ?? "")) === wanted ||
-        (s.alternateTitles ?? []).some((alt: any) => normalizeTitle(String(alt.title ?? "")) === wanted)
-    )
+        (s.alternateTitles ?? []).some(
+          (alt: any) => normalizeTitle(String(alt.title ?? "")) === wanted,
+        ),
+    ),
   );
   if (exact.length === 1) return { series: exact[0] };
   if (exact.length > 1) return { candidates: exact };
 
-  const partial = withYear(all.filter((s) => normalizeTitle(String(s.title ?? "")).includes(wanted)));
+  const partial = withYear(
+    all.filter((s) => normalizeTitle(String(s.title ?? "")).includes(wanted)),
+  );
   if (partial.length === 1) return { series: partial[0] };
   if (partial.length > 1) return { candidates: partial };
   return null;
@@ -160,12 +166,16 @@ export function findSeries(all: any[], title: string, year?: number): SeriesLook
 // What Sonarr will do about a series' missing episodes, in words.
 function monitoringNote(series: any, analysis: SeriesAnalysis): string {
   if (!series.monitored) return "not monitored (Sonarr will not look for missing episodes)";
-  if (analysis.missingMonitored > 0) return `monitored (Sonarr is looking for ${analysis.missingMonitored} of them)`;
+  if (analysis.missingMonitored > 0)
+    return `monitored (Sonarr is looking for ${analysis.missingMonitored} of them)`;
   return "monitored, but its missing episodes are unmonitored";
 }
 
 function toRow(series: any, analysis: SeriesAnalysis): MediaRow {
-  const missingNote = analysis.missing > 0 ? `Missing ${analysis.missing} - ${series.monitored ? (analysis.missingMonitored > 0 ? "Sonarr is searching" : "monitored, episodes unmonitored") : "not monitored"}` : "Complete";
+  const missingNote =
+    analysis.missing > 0
+      ? `Missing ${analysis.missing} - ${series.monitored ? (analysis.missingMonitored > 0 ? "Sonarr is searching" : "monitored, episodes unmonitored") : "not monitored"}`
+      : "Complete";
   return {
     kind: "show",
     title: String(series.title),
@@ -213,7 +223,9 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
   const lines: string[] = [];
   const complete = analysis.seasons.filter((s) => s.released > 0 && s.missing.length === 0);
   if (complete.length > 0) {
-    lines.push(`Complete: season${complete.length === 1 ? "" : "s"} ${seasonRanges(complete.map((s) => s.season))}.`);
+    lines.push(
+      `Complete: season${complete.length === 1 ? "" : "s"} ${seasonRanges(complete.map((s) => s.season))}.`,
+    );
   }
 
   const incomplete = analysis.seasons.filter((s) => s.missing.length > 0);
@@ -221,17 +233,27 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
   for (const season of incomplete) {
     const last = groups[groups.length - 1];
     const previous = last?.[last.length - 1];
-    if (season.have === 0 && previous && previous.have === 0 && previous.season + 1 === season.season) last!.push(season);
+    if (
+      season.have === 0 &&
+      previous &&
+      previous.have === 0 &&
+      previous.season + 1 === season.season
+    )
+      last!.push(season);
     else groups.push([season]);
   }
   for (const group of groups.slice(0, MAX_SEASON_LINES)) {
     const first = group[0]!;
     if (group.length > 1) {
-      lines.push(`Seasons ${seasonRanges(group.map((s) => s.season))}: nothing downloaded (${group.reduce((sum, s) => sum + s.released, 0)} episodes).`);
+      lines.push(
+        `Seasons ${seasonRanges(group.map((s) => s.season))}: nothing downloaded (${group.reduce((sum, s) => sum + s.released, 0)} episodes).`,
+      );
     } else if (first.have === 0) {
       lines.push(`Season ${first.season}: none of ${first.released} episodes.`);
     } else {
-      lines.push(`Season ${first.season}: ${first.have} of ${first.released} - missing ${episodeRanges(first.missing)}.`);
+      lines.push(
+        `Season ${first.season}: ${first.have} of ${first.released} - missing ${episodeRanges(first.missing)}.`,
+      );
     }
   }
   if (groups.length > MAX_SEASON_LINES) {
@@ -239,23 +261,30 @@ function describeSeasons(analysis: SeriesAnalysis): string[] {
   }
   const notAired = analysis.seasons.filter((s) => s.unaired > 0);
   if (notAired.length > 0) {
-    lines.push(`Not aired yet (not counted as missing): ${notAired.map((s) => `season ${s.season} has ${s.unaired}`).join(", ")}.`);
+    lines.push(
+      `Not aired yet (not counted as missing): ${notAired.map((s) => `season ${s.season} has ${s.unaired}`).join(", ")}.`,
+    );
   }
   return lines;
 }
 
 // Finds the one show a title means, or the reply explaining why not (unknown,
 // or several to choose from). Used by every single-show Sonarr tool.
-export async function resolveSeries(title: string, year?: number): Promise<{ series: any } | { reply: ReturnType<typeof textReply> }> {
+export async function resolveSeries(
+  title: string,
+  year?: number,
+): Promise<{ series: any } | { reply: ReturnType<typeof textReply> }> {
   const found = findSeries(await fetchAllSeries(), title, year);
   if (!found) {
-    return { reply: textReply(`No series matching "${title}" in Sonarr. It may not be tracked by Sonarr.`) };
+    return {
+      reply: textReply(`No series matching "${title}" in Sonarr. It may not be tracked by Sonarr.`),
+    };
   }
   if ("candidates" in found) {
     const names = found.candidates.slice(0, 10).map(label);
     return {
       reply: textReply(
-        `"${title}" matches ${found.candidates.length} series in Sonarr: ${names.join("; ")}${found.candidates.length > 10 ? "; ..." : ""}. Ask again with the full title (and year if needed).`
+        `"${title}" matches ${found.candidates.length} series in Sonarr: ${names.join("; ")}${found.candidates.length > 10 ? "; ..." : ""}. Ask again with the full title (and year if needed).`,
       ),
     };
   }
@@ -269,7 +298,9 @@ export async function checkSeriesCompleteness(title: string, year?: number) {
     if ("reply" in resolved) return resolved.reply;
     const { series } = resolved;
     const analysis = analyzeEpisodes(await fetchEpisodes(series.id));
-    const status = [series.status, series.monitored ? "monitored" : "not monitored"].filter(Boolean).join(", ");
+    const status = [series.status, series.monitored ? "monitored" : "not monitored"]
+      .filter(Boolean)
+      .join(", ");
 
     let output = `## ${label(series)} - Sonarr: ${status}\n`;
     if (analysis.released === 0) {
@@ -279,14 +310,22 @@ export async function checkSeriesCompleteness(title: string, year?: number) {
     } else {
       output += `NOT complete: you have ${analysis.have} of ${analysis.released} aired episodes (${analysis.missing} missing). In Sonarr the show is ${monitoringNote(series, analysis)}.\n`;
     }
-    if (analysis.released > 0) output += `${describeSeasons(analysis).map((line) => `- ${line}`).join("\n")}\n`;
+    if (analysis.released > 0)
+      output += `${describeSeasons(analysis)
+        .map((line) => `- ${line}`)
+        .join("\n")}\n`;
     if (analysis.specials.total > 0) {
       output += `Specials (season 0, not counted above): ${analysis.specials.have} of ${analysis.specials.total} downloaded.\n`;
     }
-    if (series.nextAiring) output += `Next episode airs ${String(series.nextAiring).slice(0, 10)}.\n`;
-    output += "This is what Sonarr has downloaded; it doesn't check that Plex has scanned the files.\n";
+    if (series.nextAiring)
+      output += `Next episode airs ${String(series.nextAiring).slice(0, 10)}.\n`;
+    output +=
+      "This is what Sonarr has downloaded; it doesn't check that Plex has scanned the files.\n";
 
-    return { ...textReply(output), structuredContent: { media: [toRow(series, analysis)], append: false } };
+    return {
+      ...textReply(output),
+      structuredContent: { media: [toRow(series, analysis)], append: false },
+    };
   } catch (error: unknown) {
     return textReply(`Failed to check Sonarr: ${getErrorMessage(error)}`, true);
   }
@@ -306,7 +345,11 @@ export interface SeriesGapOptions {
 
 // Runs `task` over `items` with at most `limit` in flight; the first failure
 // rejects the whole thing (a ranking with silent holes would mislead).
-export async function mapWithLimit<T, R>(items: T[], limit: number, task: (item: T) => Promise<R>): Promise<R[]> {
+export async function mapWithLimit<T, R>(
+  items: T[],
+  limit: number,
+  task: (item: T) => Promise<R>,
+): Promise<R[]> {
   const results: R[] = new Array(items.length);
   let next = 0;
   await Promise.all(
@@ -315,7 +358,7 @@ export async function mapWithLimit<T, R>(items: T[], limit: number, task: (item:
         const index = next++;
         results[index] = await task(items[index]!);
       }
-    })
+    }),
   );
   return results;
 }
@@ -344,12 +387,21 @@ export async function findSeriesGaps(options: SeriesGapOptions = {}) {
     const wanted = withGaps
       .filter(({ series, analysis }) => {
         if (monitored === "any") return true;
-        if (monitored === "searching") return Boolean(series.monitored) && analysis.missingMonitored > 0;
+        if (monitored === "searching")
+          return Boolean(series.monitored) && analysis.missingMonitored > 0;
         return (monitored === "monitored") === Boolean(series.monitored);
       })
-      .filter(({ analysis }) => analysis.missing >= minMissing && (maxMissing === undefined || analysis.missing <= maxMissing))
+      .filter(
+        ({ analysis }) =>
+          analysis.missing >= minMissing &&
+          (maxMissing === undefined || analysis.missing <= maxMissing),
+      )
       .filter(({ analysis }) => !hideEmpty || analysis.have > 0)
-      .sort((a, b) => b.analysis.missing - a.analysis.missing || String(a.series.title).localeCompare(String(b.series.title)));
+      .sort(
+        (a, b) =>
+          b.analysis.missing - a.analysis.missing ||
+          String(a.series.title).localeCompare(String(b.series.title)),
+      );
 
     const filters = [
       monitored !== "any" ? monitored : null,
@@ -360,11 +412,15 @@ export async function findSeriesGaps(options: SeriesGapOptions = {}) {
     const filterText = filters.length > 0 ? ` (${filters.join(", ")})` : "";
 
     if (wanted.length === 0) {
-      return textReply(`No Sonarr series have aired episodes missing${filterText}. ${all.length} series checked.`);
+      return textReply(
+        `No Sonarr series have aired episodes missing${filterText}. ${all.length} series checked.`,
+      );
     }
 
     const totalMissing = wanted.reduce((sum, { analysis }) => sum + analysis.missing, 0);
-    const searched = wanted.filter(({ series, analysis }) => series.monitored && analysis.missingMonitored > 0);
+    const searched = wanted.filter(
+      ({ series, analysis }) => series.monitored && analysis.missingMonitored > 0,
+    );
     const empty = wanted.filter(({ analysis }) => analysis.have === 0).length;
     const shown = wanted.slice(0, limit);
 
@@ -380,7 +436,13 @@ export async function findSeriesGaps(options: SeriesGapOptions = {}) {
       output += `- ${label(series)} - ${analysis.have} of ${analysis.released} aired episodes, ${analysis.missing} missing - ${series.status ?? "unknown status"}, ${monitoringNote(series, analysis)}\n`;
     }
 
-    return { ...textReply(output), structuredContent: { media: shown.map(({ series, analysis }) => toRow(series, analysis)), append: false } };
+    return {
+      ...textReply(output),
+      structuredContent: {
+        media: shown.map(({ series, analysis }) => toRow(series, analysis)),
+        append: false,
+      },
+    };
   } catch (error: unknown) {
     return textReply(`Failed to check Sonarr: ${getErrorMessage(error)}`, true);
   }

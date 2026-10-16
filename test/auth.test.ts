@@ -2,7 +2,13 @@ import "./setup.js";
 import assert from "node:assert/strict";
 import { beforeEach, describe, it } from "node:test";
 import type { Request, Response } from "express";
-import { createSessionToken, isAuthEnabled, passwordMatches, requireAuth, verifySessionToken } from "../src/web/auth.js";
+import {
+  createSessionToken,
+  isAuthEnabled,
+  passwordMatches,
+  requireAuth,
+  verifySessionToken,
+} from "../src/web/auth.js";
 
 const DAY = 24 * 60 * 60 * 1000;
 
@@ -40,9 +46,27 @@ describe("session tokens", () => {
   it("rejects a tampered signature, a forged expiry, and malformed values", () => {
     const token = createSessionToken();
     const [expiry, signature] = token.split(".") as [string, string];
-    assert.equal(verifySessionToken(`${expiry}.${signature.slice(0, -1)}${signature.endsWith("A") ? "B" : "A"}`), false);
-    assert.equal(verifySessionToken(`${Number(expiry) + 10 * DAY}.${signature}`), false, "extending the expiry invalidates the signature");
-    for (const bad of [undefined, "", "abc", ".", `${expiry}.`, `.${signature}`, `${token}.extra`, "1.2.3"]) {
+    assert.equal(
+      verifySessionToken(
+        `${expiry}.${signature.slice(0, -1)}${signature.endsWith("A") ? "B" : "A"}`,
+      ),
+      false,
+    );
+    assert.equal(
+      verifySessionToken(`${Number(expiry) + 10 * DAY}.${signature}`),
+      false,
+      "extending the expiry invalidates the signature",
+    );
+    for (const bad of [
+      undefined,
+      "",
+      "abc",
+      ".",
+      `${expiry}.`,
+      `.${signature}`,
+      `${token}.extra`,
+      "1.2.3",
+    ]) {
       assert.equal(verifySessionToken(bad), false, `rejects ${JSON.stringify(bad)}`);
     }
   });
@@ -51,7 +75,11 @@ describe("session tokens", () => {
     process.env.WEB_PASSWORD = "a different password";
     assert.equal(verifySessionToken(token), false);
     process.env.WEB_PASSWORD = "correct horse";
-    assert.equal(verifySessionToken(token), true, "and the original password's sessions work again");
+    assert.equal(
+      verifySessionToken(token),
+      true,
+      "and the original password's sessions work again",
+    );
   });
 });
 
