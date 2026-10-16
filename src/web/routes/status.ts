@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { tautulliClient } from "../../clients.js";
 import { getErrorMessage, rowLabel, rowPlays } from "../../util.js";
+import { sendImage } from "../images.js";
 import type {
   TautulliActivity,
   TautulliHomeStat,
@@ -95,13 +96,11 @@ statusRouter.get("/image", async (req, res) => {
   }
 
   try {
-    const response = await tautulliClient.get("", {
+    const response = await tautulliClient.get<ArrayBuffer>("", {
       params: { cmd: "pms_image_proxy", img: path, width: 150, height: 225 },
       responseType: "arraybuffer",
     });
-    res.setHeader("Content-Type", String(response.headers["content-type"] || "image/jpeg"));
-    res.setHeader("Cache-Control", "public, max-age=86400");
-    res.send(Buffer.from(response.data));
+    sendImage(res, response);
   } catch (error) {
     res.status(502).json({ error: getErrorMessage(error) });
   }

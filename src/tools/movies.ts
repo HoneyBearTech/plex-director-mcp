@@ -3,7 +3,7 @@ import { z } from "zod";
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { server } from "../server.js";
 import { radarrClient, tmdbClient, sabnzbdClient } from "../clients.js";
-import { textReply, getErrorMessage } from "../util.js";
+import { textReply, getErrorMessage, imageType } from "../util.js";
 import { getOnDeck, searchPlexLibrary, type OnDeckArgs, type PlexSearchArgs } from "./plex.js";
 import { resolveActorFilmography, type FilmographyOptions } from "./discovery.js";
 import { checkSeriesCompleteness, findSeriesGaps, type SeriesGapOptions } from "./series.js";
@@ -51,6 +51,36 @@ async function findRadarrMatch(
   return { lookupMatch, primaryMatch };
 }
 
+// Where check_movie_status may download a poster from. The URL comes from
+// Radarr's metadata, so without a list it could point anywhere, the LAN
+// included; the poster is only decoration, so any other URL is skipped.
+const POSTER_HOSTS = new Set(["image.tmdb.org", "placehold.co"]);
+const POSTER_MAX_BYTES = 5 * 1024 * 1024;
+const POSTER_TIMEOUT_MS = 10_000;
+
+export async function fetchPoster(url: string): Promise<{ data: string; mimeType: string } | null> {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "https:" || !POSTER_HOSTS.has(parsed.hostname)) return null;
+  try {
+    const response = await axios.get<ArrayBuffer>(parsed.href, {
+      responseType: "arraybuffer",
+      timeout: POSTER_TIMEOUT_MS,
+      maxContentLength: POSTER_MAX_BYTES,
+      // A redirect could leave the allowed hosts.
+      maxRedirects: 0,
+    });
+    const mimeType = imageType(response.headers["content-type"]);
+    return mimeType ? { data: Buffer.from(response.data).toString("base64"), mimeType } : null;
+  } catch {
+    return null;
+  }
+}
+
 async function checkMovieStatus(title: string): Promise<CallToolResult> {
   try {
     const match = await findRadarrMatch(title);
@@ -87,27 +117,14 @@ async function checkMovieStatus(title: string): Promise<CallToolResult> {
       richLayout += `**Storyline Synopsis:**\n> *${primaryMatch.overview}*\n`;
     }
 
-    try {
-      const posterResponse = await axios.get<ArrayBuffer>(posterUrl, {
-        responseType: "arraybuffer",
-      });
-      const mimeType =
-        String(posterResponse.headers["content-type"] || "image/jpeg").split(";")[0] ||
-        "image/jpeg";
-
-      return {
-        content: [
-          { type: "text" as const, text: richLayout },
-          {
-            type: "image" as const,
-            data: Buffer.from(posterResponse.data).toString("base64"),
-            mimeType,
-          },
-        ],
-      };
-    } catch {
-      return textReply(richLayout);
-    }
+    const poster = await fetchPoster(posterUrl);
+    if (!poster) return textReply(richLayout);
+    return {
+      content: [
+        { type: "text" as const, text: richLayout },
+        { type: "image" as const, ...poster },
+      ],
+    };
   } catch (error: unknown) {
     return textReply(`Failed to connect to Radarr container: ${getErrorMessage(error)}`, true);
   }
