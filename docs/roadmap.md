@@ -62,7 +62,10 @@ What works today:
   the registry's ownership label, and each version tag publishes the listing from CI.
 
 **Security and project health**
-- **Planned:** a linter and formatter in CI, with warnings failing the build.
+- **Done (October 2026):** [Biome](https://biomejs.dev/) lints and formats the backend, tests and
+  dashboard in CI; a lint error or unformatted file fails the build.
+- **Planned:** type the service payloads that are still `any` in `src/` (about 130 warnings today) so that
+  lint warnings can fail the build too.
 - **Done (October 2026):** a test coverage floor in CI (80% of lines; 93% today), secret scanning with
   gitleaks, dependency review and a DCO sign-off check on every pull request.
 - **Done (October 2026, first shipped in v1.2.0):** an SPDX SBOM and SLSA build provenance attached to every

@@ -7,6 +7,17 @@ a security problem.
 
 ## [Unreleased]
 
+### Added
+
+- **Linting and formatting in CI.** [Biome](https://biomejs.dev/) checks the backend, tests and dashboard on
+  every pull request (`npm run check` locally); lint errors and unformatted files fail the build. The
+  codebase was reformatted once to match.
+
+### Fixed
+
+- The dashboard's polling hook now always calls the latest fetch function instead of the one from the first
+  render.
+
 ## [1.2.0] - 2026-10-15
 
 ### Added

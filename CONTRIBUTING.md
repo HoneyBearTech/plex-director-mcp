@@ -72,9 +72,13 @@ local database out of the build context. Releases are built and signed by `.gith
 | Dashboard build | the static assets the backend serves | `cd web && npm run build` | inside the image build (required) |
 | Dependency audit | known vulnerabilities, high severity or worse, in both projects | `npm audit --audit-level=high` (and the same in `web/`) | every pull request and push to `main` (required) |
 | Image smoke test | the image builds and starts with dummy configuration | `docker build -t plex-director-mcp .` | every pull request and push to `main` (required) |
+| Lint and format | [Biome](https://biomejs.dev/) with its recommended rules (`biome.jsonc`) on `src/`, `test/`, `scripts/` and `web/`: lint errors and unformatted files fail | `npm run check` | every pull request and push to `main` (required) |
 | Static analysis | CodeQL security queries on the TypeScript | (CI only) | every pull request, push to `main`, and weekly |
 
-There is no linter or formatter yet; one is planned.
+`npm run format` rewrites files in the house style, and `npx biome check --write .` also applies safe lint
+fixes. Lint warnings (mostly `any` on service payloads in `src/`) don't fail the build yet; don't add new
+ones. The bulk reformat is listed in `.git-blame-ignore-revs`; run
+`git config blame.ignoreRevsFile .git-blame-ignore-revs` once so local `git blame` skips it too.
 
 **The tests can't touch your real setup.** They run against a throwaway database, never read your `.env`,
 have your service credentials removed from the environment, and fail every HTTP request unless a test
@@ -87,6 +91,7 @@ Run the same checks CI runs, and make sure they pass:
 
 ```sh
 npx tsc --noEmit
+npm run check
 npm test
 npm audit --audit-level=high
 cd web
@@ -109,6 +114,8 @@ count there and the counts in `README.md` ("25 tools", "Twenty-five tools") toge
   move the logic into a shared module and call it from both.
 - **Secrets stay on the server.** Never send a saved key or token back to the browser, and never write one to
   a log or to stdout. stdout belongs to the MCP protocol: anything that isn't JSON-RPC breaks stricter clients.
+- **Formatting and lint** are Biome's job (see [the checks](#the-checks-and-where-they-run)); if you need to
+  silence a rule, use a `biome-ignore` comment with the reason, not a config change.
 - Follow the style of the surrounding code rather than introducing a new one.
 
 ## Test policy
