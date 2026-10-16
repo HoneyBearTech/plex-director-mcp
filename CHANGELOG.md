@@ -7,6 +7,14 @@ a security problem.
 
 ## [Unreleased]
 
+### Security
+
+- **The image is rebuilt on current base images: 0 known vulnerabilities**, down from 3 critical and 27 high
+  in 1.4.0's base. The runtime moves from distroless `nodejs24-debian12`, which had stopped receiving
+  updates (Node 24.14.0, libssl3 3.0.18, libc6 2.36), to `nodejs24-debian13` (Node 24.22.0). The build
+  stage now uses the same Node line and Debian release (`node:24-trixie-slim`) instead of Node 26, so the
+  native add-ons are built for the Node they run on.
+
 ### Changed
 
 - **`manage_stalled_downloads` with `PURGE_STALLED` only deletes the torrents you name.** It takes the hashes
