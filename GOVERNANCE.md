@@ -14,7 +14,7 @@ Decisions happen in the open wherever possible:
   Anyone can open one or comment.
 - **Changes** land only through pull requests to `main`, which is protected: every pull request must pass
   the required CI checks. The pull request description records what changed and why.
-- **Releases** are SemVer version tags (`v1.2.0`), and what each one changed is in
+- **Releases** are SemVer version tags (`v1.3.0`), and what each one changed is in
   [CHANGELOG.md](CHANGELOG.md) and on the [Releases](https://github.com/HoneyBearTech/plex-director-mcp/releases) page.
 - **Larger design choices** are explained in the issues and pull requests that make them.
 - **Security reports** are handled privately, as described in [SECURITY.md](SECURITY.md), until a fix is
