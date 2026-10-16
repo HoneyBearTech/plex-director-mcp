@@ -88,9 +88,11 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   proxy in front if you reach it from elsewhere.
 - **Revoking a single session.** Sessions are stateless; signing out only clears your browser's copy. To
   end every session, change `WEB_PASSWORD`.
-- **Anyone who can read the data volume.** Service credentials and the session-signing secret are stored
-  **unencrypted** in the SQLite database at `/app/data`. Protect that directory and its backups like the
-  credentials themselves.
+- **Anyone who can read the data volume.** Without `SETTINGS_ENCRYPTION_KEY`, service credentials are stored
+  **unencrypted** in the SQLite database at `/app/data`; with it they are encrypted with AES-256-GCM
+  (`src/secretBox.ts`), so the volume alone doesn't reveal them. The session-signing secret is never
+  encrypted (it is a salt; signing also needs `WEB_PASSWORD`). Someone who can read the container's
+  environment has the key too. Protect the directory and its backups either way.
 - **What the MCP client or its model decides to do.** Through Claude Desktop (or another MCP client) a
   model can call every tool, including `confirm_selected_choices` (adds movies and starts downloads),
   `manage_stalled_downloads` with `PURGE_STALLED` (deletes torrents and their files, immediately),

@@ -93,7 +93,7 @@ Every variable is described in the README's
   `PLEX_SKIP_LIBRARIES`, `TMDB_API_KEY`, `UBUNTU_HOSTS`, `SSH_USER`): copied into the database on first
   start; from then on the value saved in the database (edited on the Settings page) wins.
 - **Container settings**, read from the environment every time and never stored or shown: `WEB_PASSWORD`,
-  `WEB_ALLOWED_HOSTS`, `WEB_TRUST_PROXY`, `WEB_PORT`, `ANTHROPIC_API_KEY`, `SSH_KEY_PATH`, `SSH_KEY_PASSPHRASE`, `DISCORD_WEBHOOK_URL`,
+  `WEB_ALLOWED_HOSTS`, `WEB_TRUST_PROXY`, `SETTINGS_ENCRYPTION_KEY`, `SETTINGS_ENCRYPTION_RESET`, `WEB_PORT`, `ANTHROPIC_API_KEY`, `SSH_KEY_PATH`, `SSH_KEY_PASSPHRASE`, `DISCORD_WEBHOOK_URL`,
   `JOB_RUNNER_INTERVAL_SECONDS`.
 
 Outside Docker, a `.env` file in the repository root is read at start-up (`src/env.ts`).

@@ -18,7 +18,7 @@ import axios from "axios";
 // round deletes the very switches that keep the suite away from the real
 // .env and database - which is exactly how this once went wrong.)
 const APP_ENV =
-  /^(RADARR|SONARR|PROWLARR|SABNZBD|QBITTORRENT|TAUTULLI|PLEX|TMDB|UBUNTU|SSH|DISCORD|WEB|ANTHROPIC|JOB_RUNNER|BACKUP|CLUSTER)_/;
+  /^(RADARR|SONARR|PROWLARR|SABNZBD|QBITTORRENT|TAUTULLI|PLEX|TMDB|UBUNTU|SSH|DISCORD|WEB|ANTHROPIC|JOB_RUNNER|BACKUP|CLUSTER|SETTINGS)_/;
 for (const key of Object.keys(process.env)) {
   if (APP_ENV.test(key)) delete process.env[key];
 }
