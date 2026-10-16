@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { server } from "../server.js";
 import { loginToQbittorrent, getDownloadingTorrents, deleteTorrent } from "../qbittorrent.js";
-import { getConfiguredHosts, probeAllHosts } from "../cluster.js";
+import { getConfiguredHosts, probeAllHosts, trustNewHostKey } from "../cluster.js";
 import { runServarrBackups } from "../backups.js";
 import { textReply, getErrorMessage } from "../util.js";
 
@@ -139,6 +139,35 @@ export function registerInfrastructureTools() {
       }
 
       return { content: [{ type: "text", text: systemsReport }] };
+    },
+  );
+
+  // The MCP counterpart of the dashboard's "Trust new key" button, which needs
+  // WEB_PASSWORD. It changes which machine is trusted as the host, so it is
+  // never one of the chat's tools.
+  server.tool(
+    "trust_new_host_key",
+    "Forgets the remembered SSH key of a monitored host so the next check trusts the key it presents now. Only for a host the user rebuilt or reinstalled: an unexpected key change can mean another machine is impersonating it. Confirm with the user first.",
+    {
+      host: z
+        .string()
+        .describe(
+          "The host exactly as configured in UBUNTU_HOSTS, e.g. 192.168.1.10 or host:2222.",
+        ),
+    },
+    async ({ host }) => {
+      const result = trustNewHostKey(host);
+      if (!result.ok) {
+        return textReply(
+          `${result.error} Configured: ${getConfiguredHosts().join(", ") || "none"}.`,
+          true,
+        );
+      }
+      return textReply(
+        result.hadRememberedKey
+          ? `Forgot the remembered SSH key for ${host}. The next check (or get_cluster_infrastructure_health) remembers the key it presents now.`
+          : `No key was remembered for ${host}; the next check remembers the one it presents.`,
+      );
     },
   );
 

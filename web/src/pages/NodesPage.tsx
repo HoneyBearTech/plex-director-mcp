@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Badge, Box, Button, Callout, Card, Flex, Progress, Table, Text } from "@radix-ui/themes";
 import { api } from "../api";
+import { useAuth } from "../components/AuthGate";
 import { usePolling } from "../usePolling";
 
 function loadColor(percent: number): "red" | "amber" | "blue" {
@@ -13,6 +14,9 @@ export function NodesPage() {
   const nodes = usePolling(api.nodeHealth, 15_000);
   const [trusting, setTrusting] = useState<string | null>(null);
   const [trustError, setTrustError] = useState<string | null>(null);
+  // Without WEB_PASSWORD anyone on the network could re-trust a host, so the
+  // server refuses and the button is not offered.
+  const { authRequired } = useAuth();
 
   // A host's SSH key changed. Only the person who knows whether it was rebuilt
   // can say, so this asks first, then forgets the old key so the next check
@@ -151,15 +155,22 @@ export function NodesPage() {
                           >
                             Now presents {node.hostKeyChanged.actual}
                           </Text>
-                          <Button
-                            size="1"
-                            variant="soft"
-                            color="red"
-                            loading={trusting === node.host}
-                            onClick={() => void trustNewKey(node.host)}
-                          >
-                            Trust new key
-                          </Button>
+                          {authRequired ? (
+                            <Button
+                              size="1"
+                              variant="soft"
+                              color="red"
+                              loading={trusting === node.host}
+                              onClick={() => void trustNewKey(node.host)}
+                            >
+                              Trust new key
+                            </Button>
+                          ) : (
+                            <Text size="1" color="gray" style={{ maxWidth: 220 }}>
+                              To trust it, set WEB_PASSWORD, or ask Claude Desktop to use
+                              trust_new_host_key.
+                            </Text>
+                          )}
                         </Flex>
                       )}
                       {!node.online && !node.hostKeyChanged && node.error && (

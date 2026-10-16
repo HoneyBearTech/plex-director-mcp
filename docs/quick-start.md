@@ -81,7 +81,7 @@ this to `claude_desktop_config.json`, with the real path to your folder:
 ```
 
 Mounting the same `data` folder means it uses the settings you just saved. Restart Claude Desktop, and
-`plex-director` appears with its 25 tools. Try "What should I watch next?" or "Do I have every episode of
+`plex-director` appears with its 26 tools. Try "What should I watch next?" or "Do I have every episode of
 Severance?". Claude asks before it uses a tool; some tools change things, so read what it proposes.
 
 If Claude Desktop says it can't find `docker`, put the full path in `command` (run `which docker` to see
