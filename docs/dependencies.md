@@ -104,7 +104,9 @@ upgraded from 1.30.0 to 1.32.1) and [GHSA-68fv-2mgg-jv7q](https://github.com/adv
 
 A version tag (`v*.*.*`) is only pushed when, at that commit:
 
-- `main` has no open dependency finding past its remediation threshold;
+- `main` has no open dependency finding past its remediation threshold, and no open critical or high finding
+  from `npm audit`, dependency review, CodeQL or the image scan unless it is recorded as not affecting Plex
+  Director ([security.md](security.md#dependency-and-code-scanning-policy));
 - the required CI checks, including both dependency audits and the image smoke test, passed;
 - the image is published to both registries and signed by the same workflow run.
 
