@@ -1,7 +1,7 @@
 # Security review, October 2026
 
 A review of Plex Director's security requirements and trust boundaries, carried out on 15 and 16 October 2026,
-and what came of it. It covers releases up to 1.4.0 and the changes released in 1.5.0.
+and what came of it. It covers releases up to 1.4.0 and the fixes made for 1.5.0.
 
 ## Scope and method
 

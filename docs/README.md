@@ -51,7 +51,8 @@ The main [README](../README.md) also lists every environment variable and every 
 
 - [Architecture](architecture.md), [external interfaces](interfaces.md) (with the
   [OpenAPI description](api/openapi.json) of the dashboard's HTTP API), [security requirements](security.md),
-  the [assurance case](assurance-case.md), the latest [security review](security-review-2026-10.md) and [accessibility](accessibility.md).
+  the [assurance case](assurance-case.md), the latest [security review](security-review-2026-10.md) and
+  [accessibility](accessibility.md).
 - [Dependencies and vulnerability management](dependencies.md): how dependencies are chosen and kept up to
   date, and how vulnerability reports and scan findings are handled.
 - [Roadmap](roadmap.md), [changelog](../CHANGELOG.md), [support](../SUPPORT.md),

@@ -149,24 +149,19 @@ server and the dashboard, GitHub's dependency review (which fails on a new depen
 worse advisory, a malware advisory, or a licence outside the allow-list in
 `.github/workflows/dependency-review.yml`), CodeQL's security queries and a secret scan. These are
 required checks on `main`, and the branch ruleset also blocks a pull request that introduces a CodeQL
-alert of high or critical severity, or an error. Each published image is scanned with Docker Scout; that scan reports but doesn't block, since a new base-image finding usually needs an upstream rebuild first.
+alert of high or critical severity, or an error. Each published image is scanned with Docker Scout; that
+scan reports but doesn't block, since a new base-image finding usually needs an upstream rebuild first.
 
-**How fast findings are fixed:**
-
-| Finding | Fixed within |
-| --- | --- |
-| Known vulnerability in an npm dependency, critical or high | 30 days of it being known; a pull request that adds one can't merge |
-| Known vulnerability in the base image, critical or high | 30 days of the scan reporting it, by moving to a fixed base image |
-| Either kind, moderate | 90 days |
-| Either kind, low | the next routine update |
-| A dependency with a disallowed licence | never merged; replaced if a licence changes later |
-| CodeQL security alert, high or critical | before merge (blocked) |
-| CodeQL security alert, medium | 30 days |
-| CodeQL security alert, low, or a note | reviewed before the next release |
+**How fast findings are fixed** is set out in [dependencies.md](dependencies.md): a known vulnerability in
+an npm dependency or the base image within
+[14 days if critical or high, 60 days if moderate](dependencies.md#policy-for-vulnerabilities-in-dependencies),
+and a CodeQL alert of high or critical severity before merging, any other
+[fixed or dismissed with a written reason](dependencies.md#policy-for-findings-from-static-analysis-sast). A
+dependency with a licence outside the allow-list isn't merged, and is replaced if its licence changes later.
 
 **Before a release** there must be no open critical or high finding of either kind, from `npm audit`,
 dependency review, CodeQL or the image scan, unless it is shown not to affect Plex Director and recorded
-as below.
+as below ([before a release](dependencies.md#before-a-release)).
 
 **Not affected.** A false positive is dismissed in GitHub code scanning with the reason written down. A
 known vulnerability in a component that Plex Director doesn't use in an affected way is recorded as an

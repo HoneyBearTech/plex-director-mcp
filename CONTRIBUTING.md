@@ -165,10 +165,13 @@ Signed commits (GPG or SSH, so GitHub shows them as "Verified") are welcome, but
 Every change reaches `main` through a pull request and is reviewed before it is merged. GitHub enforces the
 required checks; the review covers what tools can't.
 
-**How it is done.** The maintainer reviews each pull request on GitHub, Dependabot's included, reading the
-whole diff and the CI results, and leaves questions or change requests as review comments. The project has
-one maintainer (see [GOVERNANCE.md](GOVERNANCE.md)), so for now the maintainer's own changes are reviewed by
-the maintainer against the same list, with no second reviewer.
+**How it is done.** The maintainer reviews each pull request on GitHub, reading the whole diff and the CI
+results, and leaves questions or change requests as review comments. The project has one maintainer (see
+[GOVERNANCE.md](GOVERNANCE.md)), so for now the maintainer's own changes are reviewed by the maintainer
+against the same list, with no second reviewer. Dependabot's minor and patch updates to npm packages and the
+base image are the exception: they merge automatically once every required check passes
+([dependencies.md](docs/dependencies.md)). Its major and GitHub Actions updates are reviewed like any other
+change.
 
 **What is checked:**
 
@@ -183,8 +186,8 @@ the maintainer against the same list, with no second reviewer.
 
 **What is required to merge:** every required check passes (typecheck, Biome lint and format with no
 warnings, tests with the coverage floor, dependency audits and review, CodeQL with no high or critical
-alerts, secret scan, DCO sign-off, image build and smoke test); every review comment is resolved; and the
-maintainer approves.
+alerts, secret scan, DCO sign-off, image build and smoke test); every review comment is resolved; and,
+apart from Dependabot's automatic merges, the maintainer approves.
 
 ## License
 
