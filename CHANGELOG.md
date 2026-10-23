@@ -25,6 +25,10 @@ a security problem.
 
 ### Security
 
+- **`follow-redirects` 1.16.1**, which axios uses for every call to your services, fixes two advisories in how it
+  removes credential headers when a redirect leads to another host
+  ([GHSA-q3jh-wrc6-jgq8](https://github.com/advisories/GHSA-q3jh-wrc6-jgq8),
+  [GHSA-8r9p-f939-6h3c](https://github.com/advisories/GHSA-8r9p-f939-6h3c)).
 - **A strict Content-Security-Policy for the dashboard.** Scripts, styles, fonts and requests may only come
   from the dashboard itself, with nothing inline and no `eval`; images may also be `data:` or `https:`
   (posters). Markup that ever slipped into the page couldn't run code or send data elsewhere. Checked in
