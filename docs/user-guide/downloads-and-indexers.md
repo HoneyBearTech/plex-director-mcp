@@ -6,6 +6,11 @@ The dashboard's **Queues** page shows the SABnzbd and qBittorrent queues, refres
 ([The dashboard](dashboard.md#queues)). In Claude Desktop, `manage_stalled_downloads` with `AUDIT` lists the
 torrents that are stuck.
 
+Both work with qBittorrent 4.x and 5.x. If they report that the qBittorrent login failed, check the qBittorrent
+username and password in **Settings**. If they report that qBittorrent has banned this server's IP address,
+qBittorrent has locked Plex Director out after too many failed logins (its Web UI option *Ban client after
+consecutive failures*): wait for the ban to end, or restart qBittorrent, and then correct the password.
+
 ## Stalled torrents: `manage_stalled_downloads`
 
 Works on the torrents qBittorrent is downloading. A torrent counts as **stalled** when qBittorrent reports it as
