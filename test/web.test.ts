@@ -381,6 +381,18 @@ describe("qBittorrent queue API", () => {
     assert.equal(items[1].stalled, false);
   });
 
+  it("logs in to qBittorrent 5.x, which answers 204 with no body", async () => {
+    fake = fakeApi(qbitClient, (req) =>
+      req.url.includes("auth/login")
+        ? { status: 204, data: "", headers: { "set-cookie": ["QBT_SID_8080=1; HttpOnly"] } }
+        : { data: [{ name: "A", state: "downloading", progress: 0, dlspeed: 0, size: 1 }] },
+    );
+    const res = await get("/api/queues/qbittorrent");
+    assert.equal(res.status, 200);
+    assert.equal(((await res.json()) as { items: any[] }).items[0].name, "A");
+    assert.equal(fake.calls[1]!.headers.Cookie, "QBT_SID_8080=1");
+  });
+
   it("returns 502 with the reason when qBittorrent rejects the login", async () => {
     fake = fakeApi(qbitClient, () => ({ data: "Fails." }));
     const res = await get("/api/queues/qbittorrent");

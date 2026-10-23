@@ -14,8 +14,21 @@ a security problem.
   deletes nothing. Before, it deleted every torrent that counted as stalled at that moment. The reply lists
   what was deleted and what was left alone.
 
+### Fixed
+
+- **qBittorrent 5.2 and later work again.** Since 5.2, qBittorrent answers a successful login with an empty
+  204 reply instead of `Ok.`, so Plex Director reported "qBittorrent login failed" with correct credentials,
+  and `manage_stalled_downloads` and the dashboard's qBittorrent queue stopped working. Both kinds of reply
+  are now accepted, as is 5.2's new session cookie name (`QBT_SID_<port>`). A failed login says why: wrong
+  username or password (`Fails.`, or 401 from 5.2), or this server's IP banned by qBittorrent after too many
+  failed logins (403).
+
 ### Security
 
+- **`follow-redirects` 1.16.1**, which axios uses for every call to your services, fixes two advisories in how it
+  removes credential headers when a redirect leads to another host
+  ([GHSA-q3jh-wrc6-jgq8](https://github.com/advisories/GHSA-q3jh-wrc6-jgq8),
+  [GHSA-8r9p-f939-6h3c](https://github.com/advisories/GHSA-8r9p-f939-6h3c)).
 - **A strict Content-Security-Policy for the dashboard.** Scripts, styles, fonts and requests may only come
   from the dashboard itself, with nothing inline and no `eval`; images may also be `data:` or `https:`
   (posters). Markup that ever slipped into the page couldn't run code or send data elsewhere. Checked in
