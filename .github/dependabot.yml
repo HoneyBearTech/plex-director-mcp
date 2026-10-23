@@ -28,11 +28,12 @@ updates:
     schedule:
       interval: "weekly"
     ignore:
-      # The builder stage (node:*-slim) and runtime stage (a distroless
-      # image with its own independent Node version) have to move in
-      # lockstep, but Dependabot tracks each FROM line separately and can't
-      # know that - a major bump here needs to be coordinated by hand with
-      # whatever distroless nodejs variant is available.
+      # The builder stage (node:24-trixie-slim) and runtime stage
+      # (distroless nodejs24-debian13) must stay on the same Node line and
+      # Debian release, since native add-ons built in one are loaded in the
+      # other. Dependabot tracks each FROM line separately and can't know
+      # that, so a major bump is coordinated by hand with whatever distroless
+      # nodejs variant is available (a 24 -> 26 bump once slipped through).
       - dependency-name: "node"
         update-types: ["version-update:semver-major"]
 
