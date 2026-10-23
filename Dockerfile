@@ -3,7 +3,7 @@
 # The builder must be the same Node line and Debian release as the runtime
 # stage below: native add-ons (better-sqlite3, ssh2's cpu-features) are built
 # here and loaded there, and a different Node ABI or libc only works by luck.
-FROM node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS backend-builder
+FROM node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS backend-builder
 WORKDIR /app
 # better-sqlite3 and ssh2's optional cpu-features package compile native
 # bindings at install time and need a toolchain to do it.
@@ -21,7 +21,7 @@ RUN mkdir -p /out/data
 
 # Separate stage (no native compilation, no toolchain needed) so it builds
 # independently of - and in parallel with - the backend.
-FROM node:24-trixie-slim@sha256:7f486cabe892bff8fef04c0f7da8dba84a560be3e4e2740b7a86afc57ebec315 AS frontend-builder
+FROM node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS frontend-builder
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
@@ -32,7 +32,7 @@ RUN npm run build
 # Node runtime itself - it's not just npm that's absent but most of the
 # Debian packages (perl, util-linux, etc.) that showed up as CVEs on
 # node:24-slim despite this app never using them.
-FROM gcr.io/distroless/nodejs24-debian13@sha256:9ddd3f7de61d8c62337cdcbeaceb621de5e0c955ccdc70f4c3586db74a8c278f AS runtime
+FROM gcr.io/distroless/nodejs24-debian13@sha256:c23cc7262662efd642cd9c9d61783d10f600321f7bafdd37c8a82365ffaa2aa6 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # package.json must stay - Node needs its "type": "module" field to know
