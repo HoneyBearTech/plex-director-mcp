@@ -3,7 +3,7 @@
 # The builder must be the same Node line and Debian release as the runtime
 # stage below: native add-ons (better-sqlite3, ssh2's cpu-features) are built
 # here and loaded there, and a different Node ABI or libc only works by luck.
-FROM node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS backend-builder
+FROM node:24-trixie-slim@sha256:54f84b4cf8432b21aaffd5d3ce8d41e12cea0d10d33c09d2f3c9879d49d6b446 AS backend-builder
 WORKDIR /app
 # better-sqlite3 and ssh2's optional cpu-features package compile native
 # bindings at install time and need a toolchain to do it.
@@ -21,7 +21,7 @@ RUN mkdir -p /out/data
 
 # Separate stage (no native compilation, no toolchain needed) so it builds
 # independently of - and in parallel with - the backend.
-FROM node:24-trixie-slim@sha256:43b9ba1142b8dcf33fa8f922ca1be85714adc444e0586c7cf7726daaeabc1bea AS frontend-builder
+FROM node:24-trixie-slim@sha256:54f84b4cf8432b21aaffd5d3ce8d41e12cea0d10d33c09d2f3c9879d49d6b446 AS frontend-builder
 WORKDIR /app/web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci
