@@ -32,7 +32,7 @@ RUN npm run build
 # Node runtime itself - it's not just npm that's absent but most of the
 # Debian packages (perl, util-linux, etc.) that showed up as CVEs on
 # node:24-slim despite this app never using them.
-FROM gcr.io/distroless/nodejs24-debian13@sha256:c23cc7262662efd642cd9c9d61783d10f600321f7bafdd37c8a82365ffaa2aa6 AS runtime
+FROM gcr.io/distroless/nodejs24-debian13@sha256:b770c59f44ed459329508a73794e6d284f6c10143f83c8012a8f775cd514eca2 AS runtime
 WORKDIR /app
 ENV NODE_ENV=production
 # package.json must stay - Node needs its "type": "module" field to know
