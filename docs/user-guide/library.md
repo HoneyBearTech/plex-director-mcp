@@ -14,6 +14,7 @@ Searches the movies and TV shows in every Plex library at once. Ask things like:
 - "What's in the 4K library from Christopher Nolan?" / "Kids' shows rated TV-Y"
 - "Unwatched sci-fi" / "Shows I started but never finished" / "Movies I haven't watched in five years"
 - "What was added in the last two weeks?"
+- "Which of my shows are still running?" / "Ended shows I never finished" / "Movies directed by Kathryn Bigelow"
 
 What it can filter and sort by:
 
@@ -22,6 +23,8 @@ What it can filter and sort by:
 | Title (part of it) | "Dark" finds *Dark* and *The Dark Knight*. |
 | Movies, shows, or both | "only shows". |
 | Genre, actor (full name) | "Horror", "Harrison Ford". |
+| Director (full name), movies only | "Movies directed by Kathryn Bigelow". |
+| Show status, from Sonarr | Continuing, ended or upcoming: "shows that are still running". |
 | Year, or a range | 1995; 1990 to 1999 for "the 90s". |
 | Library | Any library whose name contains the text: `4k` for the 4K libraries, `kids`, `anime`. |
 | Watch state | Unwatched, in progress, watched. |
@@ -37,6 +40,17 @@ many episodes you have watched.
 
 **Left-out libraries.** Libraries named in `PLEX_SKIP_LIBRARIES` (the **Plex** tab of Settings), such as Sports,
 aren't searched, unless you name one in the question ("in Sports").
+
+**Show status comes from Sonarr.** Plex doesn't know whether a show is still running, so the status filter
+reads it from Sonarr and needs Sonarr set up (the **Sonarr** tab of Settings). It searches shows only. A Plex
+show is matched to Sonarr by its TVDB id, or by title and year when Plex holds no TVDB id for it. Shows that
+Sonarr doesn't have are left out, and the reply says how many there were. If Sonarr can't be reached, the
+reply says so rather than "no shows match".
+
+**Directors are for movies only.** Plex keeps a movie's directors on the movie, but a show's directors on each
+episode, so shows can't be searched by director. Asked for "everything by" a director, only the movie
+libraries are searched and the reply says that TV shows were not. The director and show status filters can't
+be combined.
 
 **Titles with no watch date.** Plex sometimes marks a title as watched but holds no date for it. For "not watched
 in N years" those are set aside and counted in the reply, rather than guessed at.

@@ -33,7 +33,7 @@ export const CHANGE_RULES: string[] = [
 export const ROUTES: Route[] = [
   {
     question:
-      "Do I have <title>? What do I own by genre, actor, year, library (e.g. 4K), network, rating, watch state or date added?",
+      "Do I have <title>? What do I own by genre, actor, director (movies), year, library (e.g. 4K), network, rating, watch state, date added or show status (continuing, ended)?",
     tools: ["search_plex_library"],
   },
   {
