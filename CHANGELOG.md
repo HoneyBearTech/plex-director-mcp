@@ -7,6 +7,16 @@ a security problem.
 
 ## [Unreleased]
 
+### Added
+
+- **`search_plex_library` filters shows by their status in Sonarr, and movies by director.** `showStatus`
+  (`continuing`, `ended` or `upcoming`) answers "which of my shows are still running?" or, with a watch
+  filter, "which ended shows have I not finished?". The status is read from Sonarr, so it needs Sonarr
+  set up; Plex shows are matched to Sonarr by TVDB id (by title and year when Plex has no TVDB id), and
+  shows Sonarr doesn't have are left out and counted in the reply. `director` finds the movies a person
+  directed. It covers movies only: Plex keeps a show's directors per episode, so the reply says that TV
+  shows were not searched.
+
 ### Security
 
 - **The image is rebuilt on current base images: 0 known vulnerabilities**, down from 3 critical and 27 high

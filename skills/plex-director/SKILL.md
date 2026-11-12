@@ -25,7 +25,7 @@ Plex Director connects to the user's own Plex, Radarr, Sonarr, Prowlarr, SABnzbd
 
 ## Which tool answers what
 
-- Do I have <title>? What do I own by genre, actor, year, library (e.g. 4K), network, rating, watch state or date added? → search_plex_library
+- Do I have <title>? What do I own by genre, actor, director (movies), year, library (e.g. 4K), network, rating, watch state, date added or show status (continuing, ended)? → search_plex_library
 - What should I watch next? Which episode is next in <show>? → get_on_deck
 - Which episode of <show> is the one where ...? Episodes that aired in a date range, premieres or finales → search_episodes
 - Which of <actor>'s movies or shows do I have, and which am I missing? → resolve_actor_filmography
