@@ -73,7 +73,7 @@ What works today:
 - **Done (October 2026):** browser hardening headers on the dashboard (framing forbidden,
   `X-Content-Type-Options: nosniff`, no `X-Powered-By`), a `Host` header check against DNS rebinding, and
   saved service secrets no longer follow a changed URL.
-- **Planned:** a full Content-Security-Policy for scripts and styles.
+- **Done (October 2026):** a Content-Security-Policy: scripts and styles only from the app itself, none inline.
 - **Planned:** make the image vulnerability scan block publishing on fixable critical and high findings
   (today it reports only).
 - **Planned:** an accessibility check of every dashboard page (automated and keyboard-only), see
