@@ -6,6 +6,10 @@ import { encryptionKeyFromEnv, isSealed, open, seal } from "./secretBox.js";
 export const SETTINGS_KEYS = [
   "SONARR_URL",
   "SONARR_API_KEY",
+  "SONARR_DEFAULT_QUALITY_PROFILE",
+  "SONARR_DEFAULT_ROOT_FOLDER",
+  "SONARR_DEFAULT_SERIES_TYPE",
+  "SONARR_DEFAULT_MONITOR",
   "RADARR_URL",
   "RADARR_API_KEY",
   "RADARR_DEFAULT_QUALITY_PROFILE",

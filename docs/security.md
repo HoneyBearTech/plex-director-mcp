@@ -44,7 +44,7 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 **Actions that change things**
 
 - The dashboard is read-only for anything that touches your services, apart from saving settings and
-  approving a changed SSH host key: it cannot add movies, delete downloads, or start, pause or cancel jobs.
+  approving a changed SSH host key: it cannot add movies or series, delete downloads, or start, pause or cancel jobs.
 - The Query chat can only use the 13 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
   tool that adds, deletes or starts anything.
 - Batch jobs are created `PENDING` and never start on their own; the job runner sends at most one Radarr
@@ -52,6 +52,13 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   `plan_media_upgrade` refuses TV outright.
 - Adding movies is a two-step pick-then-confirm flow (`search_and_select_movies`, then
   `confirm_selected_choices`), and a requested root folder must be one Radarr already has.
+- Adding TV series is search, preview, then confirm (`search_and_select_series`, then
+  `confirm_selected_series` twice). The preview only reads Sonarr and says exactly what would be added,
+  with which quality profile, root folder (one Sonarr already has), series type and monitor option. Adding
+  takes a second call with nothing but that preview's id, a random value that works once. It is refused
+  when the id is not the current preview, and when a setting, Sonarr's address or a show's state has
+  changed since the preview; then nothing is added and a new preview says what differs. Replies never
+  contain the Sonarr API key.
 
 **SSH host monitoring**
 
@@ -95,6 +102,7 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   environment has the key too. Protect the directory and its backups either way.
 - **What the MCP client or its model decides to do.** Through Claude Desktop (or another MCP client) a
   model can call every tool, including `confirm_selected_choices` (adds movies and starts downloads),
+  `confirm_selected_series` (adds TV series to Sonarr and, by default, starts a search for their episodes),
   `manage_stalled_downloads` with `PURGE_STALLED` (deletes the torrents named by hash from an earlier `AUDIT`, with their files),
   `update_job_status` and `run_cluster_backup`. The MCP client's approval prompt is the control; review
   what it proposes. Whoever can start the process (or `docker run` the image with your env file) has all

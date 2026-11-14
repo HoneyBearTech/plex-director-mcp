@@ -69,6 +69,39 @@ export interface SelectionRow {
   year: string | null;
 }
 
+// The last search_and_select_series grid. Kept apart from the movie grid above,
+// so a movie search never changes which shows the numbers mean, and the other
+// way round.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS series_selection_context (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    selection_index INTEGER NOT NULL,
+    tvdb_id INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    year TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+// A series_selection_context row: one choice from the last series grid.
+export interface SeriesSelectionRow {
+  selection_index: number;
+  tvdb_id: number;
+  title: string;
+  year: string | null;
+}
+
+// The current preview of confirm_selected_series: at most one row. payload is
+// JSON (what the preview showed and how it was resolved); a confirmation only
+// goes through with this row's id, and removes the row.
+db.exec(`
+  CREATE TABLE IF NOT EXISTS series_add_preview (
+    id TEXT PRIMARY KEY,
+    payload TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
 // Service configuration set via the web UI's Settings page. Overrides .env
 // once saved; .env only seeds a key's initial value on first boot.
 db.exec(`

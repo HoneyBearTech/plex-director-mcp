@@ -18,6 +18,10 @@ const SERVICES: Record<string, FieldDef[]> = {
   sonarr: [
     { field: "url", key: "SONARR_URL" },
     { field: "apiKey", key: "SONARR_API_KEY" },
+    { field: "defaultQualityProfile", key: "SONARR_DEFAULT_QUALITY_PROFILE" },
+    { field: "defaultRootFolder", key: "SONARR_DEFAULT_ROOT_FOLDER" },
+    { field: "defaultSeriesType", key: "SONARR_DEFAULT_SERIES_TYPE" },
+    { field: "defaultMonitor", key: "SONARR_DEFAULT_MONITOR" },
   ],
   radarr: [
     { field: "url", key: "RADARR_URL" },

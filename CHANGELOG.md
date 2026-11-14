@@ -24,6 +24,21 @@ a security problem.
   Plex account the app is connected with; with Tautulli set up, the plays in its history can take a show
   off the list or correct its date, but never put one on it, and the reply says what it knew and marks the
   shows judged from the Plex account alone. It reports only: nothing is deleted.
+- **Adding TV series to Sonarr: `search_and_select_series` and `confirm_selected_series`.** Two new tools for
+  MCP clients (29 tools; the Query chat keeps its 13 read-only ones and cannot add anything).
+  `search_and_select_series` shows up to five matches from Sonarr's lookup as a numbered grid, with shows
+  already in Sonarr marked. `confirm_selected_series` with the chosen numbers returns a **preview** and
+  changes nothing: which shows would be added, the quality profile, root folder, series type, which
+  episodes are monitored and whether a search starts. Called again with only that preview's id, it adds
+  the shows as monitored series and, unless turned off, starts a search for their episodes. A preview's id
+  works once and only while it is the newest; if a setting, Sonarr's address or a show's state changed
+  after the preview, nothing is added and a new preview says what differs. **This is a tool that changes
+  Sonarr.** Written for Sonarr v4.
+- **Four Sonarr settings for new series**, on the Sonarr tab of the Settings page and as environment
+  variables that seed them: `SONARR_DEFAULT_QUALITY_PROFILE`, `SONARR_DEFAULT_ROOT_FOLDER`,
+  `SONARR_DEFAULT_SERIES_TYPE` (`standard`, `daily` or `anime`) and `SONARR_DEFAULT_MONITOR` (`all`,
+  `future`, `missing`, `existing`, `firstSeason`, `lastSeason`, `pilot` or `none`). All optional: blank
+  means Sonarr's first profile and root folder, `standard` and `all`.
 
 ### Security
 

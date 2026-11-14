@@ -70,7 +70,14 @@ export interface QbittorrentItem {
 export type SecretField = { configured: boolean };
 
 export interface SettingsResponse {
-  sonarr: { url: string; apiKey: SecretField };
+  sonarr: {
+    url: string;
+    apiKey: SecretField;
+    defaultQualityProfile: string;
+    defaultRootFolder: string;
+    defaultSeriesType: string;
+    defaultMonitor: string;
+  };
   radarr: { url: string; apiKey: SecretField; defaultQualityProfile: string };
   prowlarr: { url: string; apiKey: SecretField };
   sabnzbd: { url: string; apiKey: SecretField };

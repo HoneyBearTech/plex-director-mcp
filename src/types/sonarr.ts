@@ -8,6 +8,15 @@ export interface SonarrImage {
   remoteUrl?: string;
 }
 
+export interface SonarrSeason {
+  // 0 is "Specials".
+  seasonNumber?: number;
+}
+
+export interface SonarrRootFolder {
+  path: string;
+}
+
 export interface SonarrSeries {
   id: number;
   // The show's id at TheTVDB, which Plex also records for a matched show.
@@ -30,6 +39,10 @@ export interface SonarrSeries {
   genres?: string[];
   ratings?: { value?: number };
   images?: SonarrImage[];
+  // The poster's address at the metadata source, on /series/lookup results.
+  remotePoster?: string;
+  overview?: string;
+  seasons?: SonarrSeason[];
   alternateTitles?: { title?: string }[];
   statistics?: {
     episodeFileCount: number;

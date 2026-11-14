@@ -150,10 +150,10 @@ describe("stdout stays clean for MCP", () => {
         [],
         "a tool is missing from the guidance's ROUTES",
       );
-      // README.md states this number ("27 tools", "Twenty-seven tools"); change them together.
+      // README.md states this number ("29 tools", "Twenty-nine tools"); change them together.
       assert.equal(
         tools.length,
-        27,
+        29,
         `tool count changed - update the counts in README.md too. tools: ${tools}`,
       );
 

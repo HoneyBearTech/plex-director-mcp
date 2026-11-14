@@ -21,7 +21,7 @@ continuously checked (4, 5). Where a claim has limits, they are stated here and 
 
 **Assets**, most valuable first: the service credentials (Radarr, Sonarr, Prowlarr, SABnzbd and Tautulli
 API keys, the qBittorrent password, the Plex token, the TMDb token), the Anthropic API key and the SSH
-private key; the ability to change the media stack (add movies, start searches, delete torrents and their
+private key; the ability to change the media stack (add movies and TV series, start searches, delete torrents and their
 files, run backups); the session-signing secret and `WEB_PASSWORD`; the media library's contents and watch
 history (personal data); the SSH host keys Plex Director trusts.
 
@@ -31,7 +31,7 @@ history (personal data); the SSH host keys Plex Director trusts.
 | --- | --- | --- |
 | Unauthenticated LAN client | Nothing | Guess the password, forge or replay a session cookie, read settings, use the image proxies to reach other URLs, cross-site requests from a page the user visits. |
 | Signed-in dashboard user | Everything the dashboard offers (single user) | Out of scope as an attacker: the owner. Their browser must not be able to read stored secrets. |
-| MCP client user | All 27 tools and every credential | Out of scope as an attacker: whoever can launch the process already holds the env file. |
+| MCP client user | All 29 tools and every credential | Out of scope as an attacker: whoever can launch the process already holds the env file. |
 | The LLM (chat or MCP client) | Choosing tool calls | Be steered by injected text into calling tools the user did not want, or into leaking data. |
 | Hostile content in a service | Nothing | Titles, summaries, torrent names, indexer messages or host output crafted to inject into the LLM, the dashboard (XSS), shell commands or service requests. |
 | A compromised LAN service or impostor host | Nothing | Return malicious responses; impersonate an SSH host to capture commands or feed false data. |
@@ -96,7 +96,8 @@ says so), and at each release.
   password, keys and tokens, not on secrecy of the design.
 - **Separation of privilege.** Changing the media stack needs the MCP surface (with the client's approval
   prompt); the dashboard and its chat can only read. Adding a movie needs a search and then a separate
-  confirmation. `WEB_PASSWORD` is env-only, so the dashboard cannot change its own protection.
+  confirmation; adding a series needs a search, a preview and then a confirmation of that preview.
+  `WEB_PASSWORD` is env-only, so the dashboard cannot change its own protection.
 - **Least privilege.** The chat's model gets read-only tools; the dashboard gets no job control; the SSH
   user only needs to run read-only commands and `docker ps`; the container runs as a non-root user (UID 65532)
   and can run with a read-only filesystem and no capabilities (documented in the README); CI jobs have `contents: read` by
@@ -110,7 +111,7 @@ says so), and at each release.
   inbound connections from services; the dashboard's write endpoints are limited to settings, sign-in and
   host key approval.
 - **Input validation with allowlists.** Settings fields are an allowlist per service; image paths match a
-  strict regex; MCP arguments use zod enums and ranges; Radarr root folders must match one Radarr reports;
+  strict regex; MCP arguments use zod enums and ranges; Radarr and Sonarr root folders must match one the service reports;
   only configured hosts can have their key reset.
 
 ## 4. Countering common implementation weaknesses
@@ -124,7 +125,7 @@ Mapped to the [OWASP Top 10 (2021)](https://owasp.org/Top10/), the
 | **Broken access control** (A01; CWE-862, CWE-352 CSRF) | `requireAuth` on all of `/api` (`src/web/app.ts`); `SameSite=Strict` session cookie; request bodies are parsed only as JSON, so a cross-site form cannot submit one and a cross-site `fetch` with JSON needs a CORS preflight the server never grants; job control is not exposed on the web at all (`src/web/routes/jobs.ts` is read-only). | Single shared password, no roles. With `WEB_PASSWORD` unset there is no access control. |
 | **Cryptographic failures** (A02; CWE-327, CWE-916, CWE-798, CWE-311) | scrypt key derivation for the password, HMAC-SHA-256 sessions, `crypto.timingSafeEqual` for both comparisons, a random 32-byte salt from `crypto.randomBytes` (`src/web/auth.ts`); service credentials encrypted at rest with AES-256-GCM, a random 96-bit IV per value and the setting's name as associated data, with a 256-bit key from `SETTINGS_ENCRYPTION_KEY` (`src/secretBox.ts`, `test/secrets.test.ts`); start-up refuses a malformed key, or a missing or wrong key while encrypted values exist; no hard-coded credentials; TMDb and Anthropic calls use HTTPS. | Encryption at rest is opt-in (unset, credentials stay plain text and start-up warns); no key rotation; LAN services are often plain HTTP. |
 | **Injection** (A03; CWE-78 OS command, CWE-89 SQL, CWE-79 XSS, CWE-74) | **SSH:** commands are string constants (`src/cluster.ts`); nothing from users, settings or services is interpolated, and the host and user are connection parameters, not command text (`src/ssh.ts`). **SQL:** every query is a `better-sqlite3` prepared statement with `?` parameters (`src/db.ts`, `src/settings.ts`, `src/jobs.ts`, `src/hostKeys.ts`). **XSS:** React escapes all text, `ChatText` renders only bold, italics, code and bullets (no HTML, links or `dangerouslySetInnerHTML`), chat images are `data:` URIs limited to four image types. **Service requests:** user text is `encodeURIComponent`-encoded or sent as axios `params`; Markdown table cells are escaped (`escapeTableCell`, a CodeQL finding fixed). | The artwork proxies pass the upstream `Content-Type` through. |
-| **Prompt injection** (LLM01, LLM06 excessive agency) | The chat offers only 13 read-only tools, so injected text cannot add, delete or start anything from the dashboard (`buildTools` in `src/web/chat.ts`); at most 4 tool rounds; the reply is rendered as text without links or remote images, which closes the usual "render an image URL to exfiltrate" channel; the system prompt tells the model to report tool results, not act on them. In MCP clients, write tools are separate, named for what they do, and need the client's approval; adding movies is a two-step choose-then-confirm. | A crafted title or summary can still mislead an answer. In an MCP client with approval turned off, a model could be steered into a write tool. |
+| **Prompt injection** (LLM01, LLM06 excessive agency) | The chat offers only 13 read-only tools, so injected text cannot add, delete or start anything from the dashboard (`buildTools` in `src/web/chat.ts`); at most 4 tool rounds; the reply is rendered as text without links or remote images, which closes the usual "render an image URL to exfiltrate" channel; the system prompt tells the model to report tool results, not act on them. In MCP clients, write tools are separate, named for what they do, and need the client's approval; adding movies is a two-step choose-then-confirm, and adding series is a preview that only its own one-time id can confirm, and only while nothing it showed has changed (`src/tools/seriesAdd.ts`, tested in `test/seriesAdd.test.ts`). | A crafted title or summary can still mislead an answer. In an MCP client with approval turned off, a model could be steered into a write tool. |
 | **Insecure design** (A04) | Threat model and boundaries above; bulk actions designed as rate-limited, resumable, confirmed jobs; TV mass upgrades refused by policy (`plan_media_upgrade` in `src/tools/jobs.ts`). | |
 | **Security misconfiguration** (A05) | Startup warning and UI banner when `WEB_PASSWORD` is unset; distroless image; `.dockerignore` keeps `.env`, databases and keys out of the build; non-root user by default (from 1.3.0), read-only operation documented in the README; `X-Frame-Options`, `frame-ancestors`, `nosniff` and `Referrer-Policy` headers and a strict Content-Security-Policy (`'self'` scripts and styles, nothing inline; `src/web/app.ts`); a `Host` allowlist when `WEB_PASSWORD` is unset (`src/web/hostCheck.ts`). | No HSTS (left to the TLS-terminating proxy). |
 | **Vulnerable and outdated components** (A06; CWE-1104) | Lockfiles with integrity hashes and `npm ci`; `npm audit --audit-level=high` in CI for both npm projects; Dependabot weekly for npm (both projects), Docker and Actions; digest-pinned images; SHA-pinned Actions; dependency review on every pull request; gitleaks secret scanning on every push and pull request. See [dependencies.md](dependencies.md). | Docker Scout image scan is reported but not yet blocking. |

@@ -42,6 +42,8 @@ can use. **Changes** marks tools that change something in your services.
 | ★ `diagnose_missing_media` | | Why a movie is missing, from Radarr metadata, history and the SABnzbd queue. |
 | `search_and_select_movies` | | Search TMDb and show a numbered grid of matches (remembers the grid for the next tool). |
 | `confirm_selected_choices` | yes | Add the chosen grid entries to Radarr as monitored movies and start a download search. |
+| `search_and_select_series` | | Search Sonarr's lookup for TV series and show a numbered grid of up to five matches (remembers the grid for the next tool). |
+| `confirm_selected_series` | yes (with a `previewId`) | With chosen grid numbers: a preview of what would be added to Sonarr and with which settings, changing nothing. With that preview's `previewId` alone: add those series to Sonarr as monitored, and by default start a search for their episodes. |
 | `manage_stalled_downloads` | yes (`PURGE_STALLED`) | `AUDIT` lists stalled or slow qBittorrent downloads with their hashes; `PURGE_STALLED` deletes only the ones named by hash, with their files. |
 | `check_indexer_health` | | Failing, backing-off and disabled Prowlarr indexers, and Prowlarr's warnings. |
 | `plan_media_upgrade` | yes (creates a job) | Schedule a `PENDING` batch of movies with no file or below 1080p (TV is refused). |
@@ -89,7 +91,8 @@ Conventions:
 Every variable is described in the README's
 [environment variable reference](../README.md#environment-variable-reference). Two kinds:
 
-- **Service connections** (`RADARR_URL`, `RADARR_API_KEY`, `RADARR_DEFAULT_QUALITY_PROFILE`, `SONARR_*`,
+- **Service connections** (`RADARR_URL`, `RADARR_API_KEY`, `RADARR_DEFAULT_QUALITY_PROFILE`, `SONARR_*`
+  (the URL, the API key and the four `SONARR_DEFAULT_*` values for new series),
   `PROWLARR_*`, `SABNZBD_*`, `QBITTORRENT_URL`/`_USER`/`_PASS`, `TAUTULLI_*`, `PLEX_URL`, `PLEX_TOKEN`,
   `PLEX_SKIP_LIBRARIES`, `TMDB_API_KEY`, `UBUNTU_HOSTS`, `SSH_USER`): copied into the database on first
   start; from then on the value saved in the database (edited on the Settings page) wins.
@@ -125,7 +128,7 @@ timeout. The one exception is Tautulli's `get_library_media_info`, which gets up
 | Service | Used for | Protocol and authentication | Endpoints called |
 | --- | --- | --- | --- |
 | Radarr | movie status and diagnosis, adding movies, batch-job searches, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/movie`, `/movie/lookup`, `/movie/lookup/tmdb`, `/history`, `/qualityprofile`, `/rootfolder`, `/system/backup`, `/command/{id}`; `POST /api/v3/movie` (add), `POST /api/v3/command` (`MoviesSearch`, `Backup`) |
-| Sonarr | TV completeness, status, diagnosis, calendar, quality, disk size, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/series`, `/episode`, `/episodefile`, `/history/series`, `/queue`, `/calendar`, `/qualityprofile`, `/system/backup`, `/command/{id}`; `POST /api/v3/command` (`Backup`) |
+| Sonarr | TV completeness, status, diagnosis, calendar, quality, disk size, adding series, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/series`, `/series/lookup`, `/episode`, `/episodefile`, `/history/series`, `/queue`, `/calendar`, `/qualityprofile`, `/rootfolder`, `/system/backup`, `/command/{id}`; `POST /api/v3/series` (add), `POST /api/v3/command` (`Backup`) |
 | Prowlarr | indexer health, backups | HTTP(S) REST v1, `X-Api-Key` header | `GET /api/v1/indexer`, `/indexerstatus`, `/health`, `/system/backup`, `/command/{id}`; `POST /api/v1/command` (`Backup`) |
 | SABnzbd | download queue, missing-media diagnosis | HTTP(S) API, `apikey` query parameter | `GET` the configured URL with `mode=queue&output=json` |
 | qBittorrent | download queue, stalled-download clean-up | HTTP(S) Web API v2 (qBittorrent 4.x and 5.x), username/password login then the session cookie (`SID`, or `QBT_SID_<port>` from 5.2); none when qBittorrent's auth bypass lets Plex Director in without one | `POST /api/v2/auth/login`, `GET /api/v2/torrents/info`, `POST /api/v2/torrents/delete` |
