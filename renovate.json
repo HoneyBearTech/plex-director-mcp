@@ -1,0 +1,44 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "timezone": "America/Chicago",
+  "schedule": ["before 6am on monday"],
+  "labels": ["dependencies"],
+  "osvVulnerabilityAlerts": true,
+  "vulnerabilityAlerts": {
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "Backend npm project: one pull request for all minor and patch updates",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "npm minor and patch updates"
+    },
+    {
+      "description": "Dashboard npm project (web/): its own minor and patch group",
+      "matchManagers": ["npm"],
+      "matchFileNames": ["web/package.json"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "web npm minor and patch updates"
+    },
+    {
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch"],
+      "groupName": "GitHub Actions minor and patch updates"
+    },
+    {
+      "description": "The Dockerfile build stages (node:24-trixie-slim), the distroless runtime (nodejs24-debian13) and the node-version in ci.yml must stay on the same Node line, since native add-ons built in one are loaded in the other. A major bump is coordinated by hand with whatever distroless nodejs variant is available.",
+      "matchDepNames": ["node"],
+      "matchUpdateTypes": ["major"],
+      "enabled": false
+    },
+    {
+      "description": "scout-action 1.25+ rejects tokens made from a Docker Hub personal access token, which broke publishing on 2026-10-15. Remove once DOCKERHUB_TOKEN is replaced with a token Scout accepts (see ci.yml).",
+      "matchManagers": ["github-actions"],
+      "matchPackageNames": ["docker/scout-action"],
+      "allowedVersions": "<1.25.0"
+    }
+  ]
+}

@@ -40,19 +40,31 @@ which has no package manager.
 
 ## Tracking dependencies
 
-- **Dependabot** (`.github/dependabot.yml`) opens update pull requests **weekly** for the backend's npm
-  dependencies, the dashboard's npm dependencies (`/web`), the Docker base images and the GitHub Actions,
-  and security updates as soon as an advisory appears. Minor and patch updates are grouped into one pull
-  request per ecosystem.
-- **Auto-merge** (`.github/workflows/dependabot-auto-merge.yml`): Dependabot's minor and patch updates
-  to npm packages and the Docker base image merge automatically, but only once all required checks on
-  `main` pass. Major updates, GitHub Actions updates (GitHub doesn't let the workflow token enable
-  auto-merge on a pull request that edits workflow files), and major Node.js base image bumps (which
-  Dependabot ignores, because the build and runtime images must move together) wait for the maintainer.
-  `docker/scout-action` is held below 1.25, which rejects the current Docker Hub token.
+- **Renovate** ([`renovate.json`](../renovate.json)) opens update pull requests **weekly** (before 6am on
+  Monday, `America/Chicago`), labeled `dependencies`, and security updates (also labeled `security`) as
+  soon as an advisory appears. What it tracks:
+
+  | Files | Renovate manager | Notes |
+  | --- | --- | --- |
+  | `package.json`, `package-lock.json` | npm | Minor and patch updates grouped into one pull request |
+  | `web/package.json`, `web/package-lock.json` | npm | The dashboard's own minor and patch group |
+  | `Dockerfile` | Dockerfile | Tags and digests of the `node` build stages, the digest of the distroless runtime, and the `# syntax=` frontend |
+  | `.github/workflows/*.yml` | GitHub Actions | Action SHAs and their version comments, and `node-version`; minor and patch updates grouped |
+
+  Two guard rails are carried in `renovate.json`:
+
+  - **Node.js major versions are never proposed**, for the `node` build image and for `node-version` in
+    `ci.yml`. The build stages and the distroless runtime (`nodejs24-debian13`, where the Node line is part
+    of the image name, so Renovate only refreshes its digest) must stay on the same Node line; a major bump
+    is done by hand, in all three places at once.
+  - **`docker/scout-action` is held below 1.25**, which rejects the current Docker Hub token.
+- **Merging** is done by the maintainer: Renovate's automerge is off, so every update pull request waits
+  for review and for all required checks on `main`. (`.github/workflows/dependabot-auto-merge.yml`, which
+  merged Dependabot's minor and patch updates automatically, only acts on pull requests from
+  `dependabot[bot]` and does nothing for Renovate's.)
 - **Every push and pull request** runs `npm audit --audit-level=high` on both npm projects in the `check`
   job of `.github/workflows/ci.yml`. A high or critical advisory anywhere in either locked dependency tree
-  fails CI, which blocks merging (including Dependabot's own pull requests).
+  fails CI, which blocks merging (including Renovate's own pull requests).
 - **Dependency review** (`.github/workflows/dependency-review.yml`) blocks a pull request that adds or
   changes a dependency with a known vulnerability of moderate or higher severity, or with a license outside
   the allowlist (MIT, Apache-2.0, BSD, ISC and similar permissive licenses; MPL-2.0; CC-BY-4.0 and OFL-1.1
@@ -67,7 +79,9 @@ which has no package manager.
   weekly and on every push to `main`; results appear in code scanning and on the README badge.
 - **Docker Scout** scans each published image for critical and high vulnerabilities and reports them in the
   job summary. It does not block publishing yet.
-- **GitHub's dependency graph** and Dependabot security alerts watch the default branch between changes.
+- **GitHub's dependency graph** and Dependabot security alerts watch the default branch between changes;
+  the alerts stay on (Renovate's security updates are driven by them), only the update pull requests moved
+  to Renovate.
 
 ## Policy for vulnerabilities in dependencies
 

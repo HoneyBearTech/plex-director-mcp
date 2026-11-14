@@ -31,9 +31,8 @@ reasoning, and may change course. Because the code is MIT-licensed, you can alwa
 | Contributor | Anyone who opens an issue or pull request | Follow [CONTRIBUTING.md](CONTRIBUTING.md) (coding standards, tests, sign-off) and the [Code of Conduct](CODE_OF_CONDUCT.md); report vulnerabilities privately; never post API keys or tokens. |
 | Security reporter | Anyone who reports a vulnerability | Report privately and allow time for a fix before disclosing, as described in [SECURITY.md](SECURITY.md). |
 
-Automated tools also take part: Dependabot proposes npm, Docker base image and GitHub Actions updates
-(anything but a major version bump merges automatically once CI passes; major versions wait for the
-maintainer), and CI, CodeQL and OpenSSF Scorecard check every change.
+Automated tools also take part: Renovate proposes npm, Docker base image and GitHub Actions updates
+(the maintainer merges them once CI passes), and CI, CodeQL and OpenSSF Scorecard check every change.
 
 ## Access to sensitive resources
 
@@ -47,7 +46,7 @@ Who can change the code, releases and project settings, as of the date of this f
 | Signing images | the CI workflow | cosign keyless signing with the workflow's GitHub OIDC identity (Sigstore); there is no long-lived signing key |
 | Creating GitHub Releases | the CI workflow, on a version tag | GitHub Actions, `GITHUB_TOKEN` |
 | Security advisories and private vulnerability reports | the maintainer | GitHub |
-| Automated changes | Dependabot (pull requests only; it can't merge without the required checks) | GitHub |
+| Automated changes | Renovate (pull requests only; it doesn't merge them) | the Renovate GitHub App |
 
 There are no other collaborators. The only stored secrets are the two Docker Hub ones above, which only the
 publish job uses, and only on pushes (never on pull requests). Every other job uses the per-job
