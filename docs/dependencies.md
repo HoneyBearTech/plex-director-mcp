@@ -40,19 +40,43 @@ which has no package manager.
 
 ## Tracking dependencies
 
-- **Dependabot** (`.github/dependabot.yml`) opens update pull requests **weekly** for the backend's npm
-  dependencies, the dashboard's npm dependencies (`/web`), the Docker base images and the GitHub Actions,
-  and security updates as soon as an advisory appears. Minor and patch updates are grouped into one pull
-  request per ecosystem.
-- **Auto-merge** (`.github/workflows/dependabot-auto-merge.yml`): Dependabot's minor and patch updates
-  to npm packages and the Docker base image merge automatically, but only once all required checks on
-  `main` pass. Major updates, GitHub Actions updates (GitHub doesn't let the workflow token enable
-  auto-merge on a pull request that edits workflow files), and major Node.js base image bumps (which
-  Dependabot ignores, because the build and runtime images must move together) wait for the maintainer.
-  `docker/scout-action` is held below 1.25, which rejects the current Docker Hub token.
+- **Renovate** ([`renovate.json`](../renovate.json)) opens the update pull requests: **weekly** (before 6am
+  on Monday, `America/Chicago`), labelled `dependencies`, and security fixes (labelled `dependencies` and
+  `security`) outside that schedule. What it tracks:
+
+  | Files | Renovate manager | Notes |
+  | --- | --- | --- |
+  | `package.json`, `package-lock.json` | npm | Minor and patch updates grouped into one pull request |
+  | `web/package.json`, `web/package-lock.json` | npm | The dashboard's own minor and patch group |
+  | `Dockerfile` | Dockerfile | Tags and digests of the `node` build stages, the digest of the distroless runtime, and the `# syntax=` frontend |
+  | `.github/workflows/*.yml` | GitHub Actions | Action SHAs and their version comments, and `node-version`; minor and patch updates grouped |
+
+  Two guard rails are carried in `renovate.json`:
+
+  - **Node.js major versions are never proposed**, for the `node` build image and for `node-version` in
+    `ci.yml`. The build stages and the distroless runtime (`nodejs24-debian13`, where the Node line is part
+    of the image name, so Renovate only refreshes its digest) must stay on the same Node line, because
+    native add-ons built in one are loaded in the other; a major bump is done by hand, in all three places
+    at once.
+  - **`docker/scout-action` is held below 1.25**, which rejects tokens made from a Docker Hub personal
+    access token, the kind the publish job uses today.
+- **Lock file maintenance**: once a week, in the same window, Renovate also proposes a refresh of both
+  lockfiles to the newest versions the declared ranges allow. It is there for the packages the project
+  doesn't name itself (dependencies of dependencies), which the regular update pull requests don't follow
+  but the audit in CI still checks. It is a weekly proposal, not a promise that an advisory is cleared: it
+  helps only when a fixed version exists inside those ranges, the required checks pass and the maintainer
+  merges it. Otherwise the fix is made by hand (`npm audit fix`), within the thresholds below.
+- **The maintainer merges every update.** Renovate's automerge is off (`"automerge": false`), so each of its
+  pull requests waits for review and for all required checks on `main`.
+- **What is left of Dependabot.** "Dependabot security updates" is a repository setting, which the move to
+  Renovate does not touch. While it is on, Dependabot still opens a pull request for a vulnerable package,
+  and `.github/workflows/dependabot-auto-merge.yml` merges it once the required checks pass, unless it is a
+  major update or an update of a GitHub Action: those wait for the maintainer. Renovate may open a pull
+  request for the same advisory. The workflow acts only on pull requests from `dependabot[bot]`, never on
+  Renovate's.
 - **Every push and pull request** runs `npm audit --audit-level=high` on both npm projects in the `check`
   job of `.github/workflows/ci.yml`. A high or critical advisory anywhere in either locked dependency tree
-  fails CI, which blocks merging (including Dependabot's own pull requests).
+  fails CI, which blocks merging (including Renovate's own pull requests).
 - **Dependency review** (`.github/workflows/dependency-review.yml`) blocks a pull request that adds or
   changes a dependency with a known vulnerability of moderate or higher severity, or with a license outside
   the allowlist (MIT, Apache-2.0, BSD, ISC and similar permissive licenses; MPL-2.0; CC-BY-4.0 and OFL-1.1
@@ -67,7 +91,9 @@ which has no package manager.
   weekly and on every push to `main`; results appear in code scanning and on the README badge.
 - **Docker Scout** scans each published image for critical and high vulnerabilities and reports them in the
   job summary. It does not block publishing yet.
-- **GitHub's dependency graph** and Dependabot security alerts watch the default branch between changes.
+- **GitHub's dependency graph** and Dependabot alerts watch the default branch between changes. The alerts
+  stay on: Renovate's security fixes are driven by them. Only the regular update pull requests moved to
+  Renovate.
 
 ## Policy for vulnerabilities in dependencies
 
