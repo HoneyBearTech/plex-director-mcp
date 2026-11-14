@@ -2,7 +2,9 @@
 // numbers as strings.
 
 export interface TautulliResponse<T> {
-  response?: { data?: T };
+  // result is "success" when the command worked; anything else is a failure,
+  // explained in message.
+  response?: { result?: string; message?: string | null; data?: T };
 }
 
 export interface TautulliSession {
@@ -50,4 +52,23 @@ export interface TautulliHomeStat {
   stat_id?: string;
   stat_title?: string;
   rows?: TautulliStatRow[];
+}
+
+// One row of get_library_media_info for a show library: one show.
+export interface TautulliMediaInfoRow {
+  // Plex's ratingKey for the show.
+  rating_key?: string | number;
+  title?: string;
+  // Plays in Tautulli's history; null or missing when it has none.
+  play_count?: string | number | null;
+  // Epoch seconds of the last play; null or missing when there is none.
+  last_played?: string | number | null;
+}
+
+// get_library_media_info. recordsTotal is how many items Tautulli says the
+// library has; data holds at most `length` of them.
+export interface TautulliLibraryMediaInfo {
+  recordsTotal?: string | number;
+  recordsFiltered?: string | number;
+  data?: TautulliMediaInfoRow[];
 }

@@ -10,7 +10,7 @@ internet: see [Running it securely](#running-it-securely) below and [security.md
 
 One Node.js process does three things at once:
 
-- an **MCP server** that talks to Claude Desktop over stdin/stdout (26 tools);
+- an **MCP server** that talks to Claude Desktop over stdin/stdout (27 tools);
 - a **web dashboard** and its HTTP API on port `3000` (`WEB_PORT`), with a health check at `GET /healthz`;
 - a **job runner** that advances started batch jobs, one Radarr search per minute.
 
@@ -155,7 +155,7 @@ stdout. Open **Settings → Developer → Edit Config** (`claude_desktop_config.
 }
 ```
 
-Restart Claude Desktop, and the `plex-director` server appears with its 26 tools.
+Restart Claude Desktop, and the `plex-director` server appears with its 27 tools.
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The dashboard also starts inside this container, but it stays unreachable unless you
@@ -373,7 +373,7 @@ openssl rand -base64 32        # put the result in plex-director.env as SETTINGS
 ### Review what Claude does
 
 The Query chat and Claude Desktop act with your keys. The chat only uses the read-only library, movie and TV
-tools. Claude Desktop has all 26, including the ones that add movies, delete stalled torrents, change jobs and
+tools. Claude Desktop has all 27, including the ones that add movies, delete stalled torrents, change jobs and
 start backups, and it asks before each use. The Query chat sends your questions and the tools' results to the
 Anthropic API, and is billed to your key.
 

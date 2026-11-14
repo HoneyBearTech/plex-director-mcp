@@ -33,6 +33,7 @@ Plex Director connects to the user's own Plex, Radarr, Sonarr, Prowlarr, SABnzbd
 - Do I have every episode of <show>? Which shows have gaps? → check_series_completeness, find_series_gaps
 - Is <show> monitored, what quality profile, what is queued? Why are episodes of <show> missing? → check_series_status, diagnose_missing_episodes
 - Which shows do I only have in 720p, or in mixed qualities? → find_series_by_quality
+- Which shows take the most disk space? Which big shows has nobody watched in years? → find_series_by_size
 - What's on this week? When does <show> come back? → get_upcoming_episodes
 - Add a movie to Radarr → search_and_select_movies, confirm_selected_choices
 - Are my indexers healthy? → check_indexer_health
