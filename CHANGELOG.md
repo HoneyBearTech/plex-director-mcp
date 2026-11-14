@@ -14,6 +14,13 @@ a security problem.
   updates (Node 24.14.0, libssl3 3.0.18, libc6 2.36), to `nodejs24-debian13` (Node 24.22.1). The build
   stage now uses the same Node line and Debian release (`node:24-trixie-slim`) instead of Node 26, so the
   native add-ons are built for the Node they run on.
+- **`body-parser` 2.4.0**, which Express uses to read every request body sent to the dashboard, fixes a denial
+  of service through trailing bytes after a compressed request body
+  ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828)), and **`follow-redirects` 1.16.3**,
+  which axios uses for every call to your services, fixes an advisory in which custom credential headers could
+  follow a redirect ([GHSA-mrwp-f3q8-3g9p](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p)). The same
+  lockfile update clears the moderate advisories in `hono` (now 4.13.18), `@hono/node-server` (2.1.8), `qs`
+  (6.17.1) and `fast-uri` (3.1.9).
 
 ### Changed
 
