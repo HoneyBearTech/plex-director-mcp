@@ -27,9 +27,9 @@ at most 15 minutes old, and still true. The preview is a consistency check, not 
   still be the one the preview was made with and the grid must still be the one the preview came from;
   otherwise the remaining shows are "not attempted".
 - Each show's line says only what is known. "Added" needs a successful answer that is the added series.
-  "Failed" needs a refusal (a 4xx answer) or a redirect. No answer, a server-side error, or any other
-  answer is "not known": the show may have been added, and a new search and preview will show it as already
-  in Sonarr if it was. Nothing is retried. Error text from Sonarr or a proxy is cut to 300 characters.
+  "Failed" needs a refusal (a 4xx answer). No answer, a redirect, a server-side error, or any other answer
+  is "not known": the show may have been added, and a new search and preview will show it as already in
+  Sonarr if it was. Nothing is retried. Error text from Sonarr or a proxy is cut to 300 characters.
 - A search replaces the grid and clears the preview only after Sonarr has answered, in one transaction. A
   grid number exists once. A preview worked out from a grid that has since been replaced is not stored.
 - The security docs say that the preview does not show a person saw it, because the reply hands its id
@@ -68,10 +68,11 @@ preview's id as a control against injected text.
   the last grid, the shape check runs once when the database is opened, and the first shape only existed on
   an unreleased branch.
 
-**Open.** A redirect from Sonarr's address is reported as "failed". The last audit pointed out that one
-kind of redirect (a 303) can follow a request that was carried out, so "not known" would be the strictly
-true word for it. The security review and QA judged "failed" acceptable, since Sonarr itself never answers
-an add with a redirect. Left for the owner to decide.
+**Decided by the owner.** A redirect from Sonarr's address was first reported as "failed". The last audit
+pointed out that one kind of redirect (a 303) can follow a request that was carried out, so "not known" is
+the strictly true word for it. The security review and QA had judged "failed" acceptable, since Sonarr
+itself never answers an add with a redirect. The owner chose "not known", which keeps the rule above
+without an exception.
 
 **Not decided here.** Whether adding TV series belongs in the product at all is the owner's decision; the
 roadmap lists it as undecided. Nothing in this job was tried against a live Sonarr.
