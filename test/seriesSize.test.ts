@@ -299,6 +299,23 @@ describe("find_series_by_size: the biggest shows", () => {
     assert.equal(plex.calls.length, 0);
   });
 
+  it("B2: a show with episode files and a size of 0 is listed; a show with no statistics is not", async () => {
+    sizeStock();
+    allSeries.push(
+      series(6, "Zero Size", 106, 0, { statistics: { episodeFileCount: 3, sizeOnDisk: 0 } }),
+      series(7, "No Statistics", 107, 0, { statistics: undefined }),
+    );
+    const result = await run();
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(titles(result), ["Huge", "Middle A", "Middle B", "Small", "Zero Size"]);
+    assert.match(text(result), /5 shows have files, 505\.0 GB in all\./);
+    assert.equal(
+      lines(result)[4],
+      "- Zero Size (2010) - 0 MB - 3 episode files - ended - not monitored",
+    );
+    assert.doesNotMatch(text(result), /No Statistics/);
+  });
+
   it("B10: the rows are attached as structuredContent (media, append false)", async () => {
     sizeStock();
     const result: any = await run({ limit: 1 });
@@ -388,6 +405,22 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     const result = await run({ notWatchedInYears: 3 });
     assert.ok(!titles(result).includes("Both Libraries"));
     assert.doesNotMatch(text(result), /no date recorded/);
+  });
+
+  it("B4: two Plex shows matched to one Sonarr series are one show: the more recent watching wins", async () => {
+    allSeries = [series(1, "Old Favourite", 101, 300)];
+    // One copy carries the TVDB id, the other none (matched by title and year).
+    library["3"] = [plexShow("11", "Old Favourite", 101, yearsAgo(6), yearsAgo(9))];
+    library["4"] = [plexShow("21", "Old Favourite", null, yearsAgo(4), yearsAgo(5))];
+    const old = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(old), ["Old Favourite"]);
+    assert.match(lines(old)[0]!, new RegExp(`last watched ${day(yearsAgo(4))}$`));
+    assert.deepEqual(rows(old)[0].libraries, ["TV Shows", "4k TV Shows"]);
+
+    library["4"] = [plexShow("21", "Old Favourite", null, yearsAgo(1), yearsAgo(5))];
+    const recent = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(recent), []);
+    assert.doesNotMatch(text(recent), /could not be matched/);
   });
 
   it("B4: a library of more than one page is read page by page, to the last show", async () => {
@@ -500,6 +533,22 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
       "Old Favourite",
       "Never Started",
     ]);
+  });
+
+  it("B8: a fractional period counts too: half a year", async () => {
+    watchStock();
+    library["3"]![2] = plexShow("13", "Recent Hit", 103, yearsAgo(0.6), yearsAgo(8));
+    const result = await run({ notWatchedInYears: 0.5 });
+    assert.match(text(result), /^## Big shows not watched in 0\.5 years/);
+    assert.deepEqual(titles(result), [
+      "Old Favourite",
+      "Never Started",
+      "Recent Hit",
+      "Forgotten",
+      "Both Libraries",
+    ]);
+    library["3"]![2] = plexShow("13", "Recent Hit", 103, yearsAgo(0.4), yearsAgo(8));
+    assert.ok(!titles(await run({ notWatchedInYears: 0.5 })).includes("Recent Hit"));
   });
 
   it("B8: each line and row detail carries the watch date, and the row's lastWatched and added are set", async () => {
