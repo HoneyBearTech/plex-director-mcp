@@ -100,17 +100,20 @@ function reduceSeasons(seasons: unknown): AddSeason[] {
 }
 
 // Images reduced to what is posted: coverType, url and remoteUrl, each only
-// when it is a string; entries that are not objects are dropped.
+// when it is a string; entries that are not objects, or have no string
+// coverType, are dropped.
 function reduceImages(images: unknown): Array<Record<string, string>> {
   if (!Array.isArray(images)) return [];
-  return images.filter(isObject).map((image) => {
-    const kept: Record<string, string> = {};
-    for (const key of ["coverType", "url", "remoteUrl"]) {
-      const value = image[key];
-      if (typeof value === "string") kept[key] = value;
-    }
-    return kept;
-  });
+  return images
+    .filter((image) => isObject(image) && typeof image.coverType === "string")
+    .map((image) => {
+      const kept: Record<string, string> = {};
+      for (const key of ["coverType", "url", "remoteUrl"]) {
+        const value = image[key];
+        if (typeof value === "string") kept[key] = value;
+      }
+      return kept;
+    });
 }
 
 const countSeasons = (seasons: AddSeason[]) => seasons.filter((s) => s.seasonNumber > 0).length;
@@ -566,12 +569,12 @@ function seasonDifferences(
 
 // The body of POST /api/v3/series: a fixed list of fields, nothing else from
 // the lookup record (no path, id, tags or other fields Sonarr sent), with the
-// images reduced to their named keys. The seasons are the ones the preview
-// stored.
+// images reduced to their named keys. The title is the one shown, as the
+// preview stored and compared it, and the seasons are the ones it stored.
 function addBody(record: SonarrSeries, seasons: AddSeason[], resolved: Resolved) {
   return {
     tvdbId: record.tvdbId,
-    title: record.title,
+    title: titleOf(record),
     titleSlug: record.titleSlug,
     year: record.year,
     images: reduceImages(record.images),

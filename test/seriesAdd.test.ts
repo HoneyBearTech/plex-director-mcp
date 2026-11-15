@@ -1209,8 +1209,9 @@ describe("confirm_selected_series: the confirmation", () => {
 
   it("C14: on a match, a fixed list of fields from Sonarr's lookup record is posted with the resolved settings, nothing else", async (t) => {
     const original = CATALOG[2]!;
-    // A lookup record carrying fields that must not go back to Sonarr.
-    CATALOG[2] = lookupSeries(503, "Harbour Nights", 2008, {
+    // A lookup record carrying fields that must not go back to Sonarr, and a
+    // raw title with a newline and double spaces.
+    CATALOG[2] = lookupSeries(503, "Harbour\n  Nights", 2008, {
       status: "ended",
       network: "Network Two",
       path: "/somewhere/else/Harbour Nights",
@@ -1231,6 +1232,8 @@ describe("confirm_selected_series: the confirmation", () => {
           path: "/config/MediaCover/503/poster.jpg",
         },
         { coverType: "fanart", remoteUrl: 42, url: null },
+        { url: "/MediaCover/503/banner.jpg", remoteUrl: "https://artworks.example.org/b.jpg" },
+        { coverType: 7, remoteUrl: "https://artworks.example.org/c.jpg" },
         "not-an-image",
         null,
       ],
@@ -1265,10 +1268,12 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(posts()[0]!.url, "/api/v3/series");
     assert.deepEqual(posts()[0]!.body, {
       tvdbId: 503,
+      // The title as shown: folded, as the preview stored and compared it.
       title: "Harbour Nights",
       titleSlug: "harbour-nights",
       year: 2008,
-      // Each image reduced to coverType, url and remoteUrl when they are strings.
+      // Each image reduced to coverType, url and remoteUrl when they are strings;
+      // an image without a string coverType is dropped.
       images: [
         {
           coverType: "poster",
