@@ -1429,6 +1429,30 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.match(lines[4]!, /- outcome not known: Sonarr answered HTTP 500 \(Internal error\)/);
   });
 
+  it("C14: Sonarr's or a proxy's error text is one line of at most 300 characters in the report, and a cut never leaves part of the key", async () => {
+    const long = `Upstream failed:\n${"line of proxy text\n".repeat(280)}`;
+    assert.ok(long.length > 5000);
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    addAnswers[501] = { status: 502, data: { message: long } };
+    addErrors[502] = { status: 400, data: [{ errorMessage: long }] };
+    // The key straddles the 300th character.
+    addErrors[503] = { status: 400, data: [{ errorMessage: `${"x".repeat(290)}${API_KEY} more` }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3, "one line per show");
+    const notKnown = /Sonarr answered HTTP 502 \((.*)\)\. The show may have been added/.exec(
+      lines[0]!,
+    );
+    assert.ok(notKnown, lines[0]!);
+    assert.ok(notKnown[1]!.startsWith("Upstream failed: line of proxy text line of proxy text"));
+    assert.equal(Array.from(notKnown[1]!).length, 300);
+    const failed = / - failed: (.*)$/.exec(lines[1]!);
+    assert.ok(failed, lines[1]!);
+    assert.equal(Array.from(failed[1]!).length, 300);
+    assert.ok(lines[2]!.endsWith(`${"x".repeat(290)}[redacted]`), lines[2]!);
+    assert.ok(!text(result).includes(API_KEY.slice(0, 8)), "no part of the key is shown");
+  });
+
   it("C14: a 2xx answer that is not the added series is reported as not known", async () => {
     const preview = await previewOf("harbour", [1, 2, 3]);
     addAnswers[501] = { status: 200, data: {} };

@@ -39,6 +39,8 @@ const OVERVIEW_LENGTH = 180;
 // A title or network from Sonarr's lookup is cut to this many characters
 // where it is stored and shown (grid, preview, report).
 const TEXT_LENGTH = 200;
+// Sonarr's (or a proxy's) error text in a report line is cut to this.
+const ERROR_LENGTH = 300;
 // How long a preview can be confirmed after it was made.
 const PREVIEW_LIFE_MINUTES = 15;
 const PREVIEW_LIFE_MS = PREVIEW_LIFE_MINUTES * 60 * 1000;
@@ -63,16 +65,21 @@ const MONITOR_WORDS: Record<MonitorOption, string> = {
 // function when it starts, and every reply removes the key that was in use
 // then (saved, and on the client) as well as the key saved when the reply is
 // built, so a key changed during the call is not shown when Sonarr echoes it.
+// reply.redact is the same removal, for text that is cut before it goes into
+// a reply, so a cut never leaves part of a key behind.
 function replyFor() {
   const header = sonarrClient.defaults.headers.common["X-Api-Key"];
   const keysAtStart = [getSetting("SONARR_API_KEY"), typeof header === "string" ? header : ""];
-  return (text: string, isError = false) => {
+  const redact = (text: string) => {
     let out = text;
     for (const key of [...keysAtStart, getSetting("SONARR_API_KEY")]) {
       if (key) out = out.split(key).join("[redacted]");
     }
-    return textReply(out, isError);
+    return out;
   };
+  return Object.assign((text: string, isError = false) => textReply(redact(text), isError), {
+    redact,
+  });
 }
 type Reply = ReturnType<typeof replyFor>;
 
@@ -124,18 +131,20 @@ const seasonsText = (n: number | null) =>
 const yearText = (year: unknown) => (typeof year === "number" && year > 0 ? String(year) : "N/A");
 const tvdbIdOf = (series: SonarrSeries) =>
   typeof series.tvdbId === "number" && series.tvdbId > 0 ? series.tvdbId : null;
-// Lookup text as it is stored and shown: runs of whitespace (newlines too)
-// become one space, the ends are trimmed, and it is cut to TEXT_LENGTH whole
-// characters (code points, so never through a surrogate pair). Not escaped:
-// the title is also the term a show is looked up by again.
-const cleanText = (text: unknown) =>
+// Text as it is stored and shown: runs of whitespace (newlines too) become
+// one space, the ends are trimmed, and it is cut to length whole characters
+// (code points, so never through a surrogate pair).
+const foldAndCut = (text: unknown, length: number) =>
   Array.from(
     String(text ?? "")
       .replace(/\s+/g, " ")
       .trim(),
   )
-    .slice(0, TEXT_LENGTH)
+    .slice(0, length)
     .join("");
+// Lookup text (title, network), cut to TEXT_LENGTH. Not escaped: the title is
+// also the term a show is looked up by again.
+const cleanText = (text: unknown) => foldAndCut(text, TEXT_LENGTH);
 const titleOf = (series: SonarrSeries) => cleanText(series.title);
 
 async function lookup(term: string): Promise<SonarrSeries[]> {
@@ -759,6 +768,10 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
         : status >= 400 && status <= 499
           ? `  ❌ ${showLabel(show)} - failed: ${message}\n`
           : notKnown(`Sonarr answered HTTP ${status} (${message})`);
+    // The one place an error becomes report text: folded and cut to
+    // ERROR_LENGTH whole characters, with the key removed before the cut.
+    const errorText = (error: unknown) =>
+      foldAndCut(reply.redact(radarrErrorMessage(error)), ERROR_LENGTH);
     try {
       // maxRedirects: 0, on this request only: a redirect would repeat the
       // POST, with its body and the API key, to a host no preview showed.
@@ -779,8 +792,8 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
       const status = isAxiosError(error) ? error.response?.status : undefined;
       report +=
         status !== undefined
-          ? byStatus(status, radarrErrorMessage(error))
-          : notKnown(`Sonarr did not answer (${getErrorMessage(error)})`);
+          ? byStatus(status, errorText(error))
+          : notKnown(`Sonarr did not answer (${errorText(error)})`);
     }
   }
   return reply(report);
