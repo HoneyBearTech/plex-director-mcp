@@ -153,6 +153,12 @@ async function libraryTvdbIds(): Promise<Map<number, SonarrSeries>> {
   return byTvdbId;
 }
 
+// Whether the grid with this generation is still the last series grid.
+const isCurrentGrid = (generation: string) =>
+  db
+    .prepare("SELECT 1 FROM series_selection_context WHERE generation = ? LIMIT 1")
+    .get(generation) !== undefined;
+
 // Replaces the series grid with these shows, under a new generation, and
 // clears the current preview: the old numbers are no longer the last grid.
 // One transaction, so two searches at once leave one whole grid.
@@ -453,10 +459,7 @@ function storePreview(
     })),
   };
   const isStored = db.transaction(() => {
-    const current = db
-      .prepare("SELECT 1 FROM series_selection_context WHERE generation = ? LIMIT 1")
-      .get(generation);
-    if (!current) return false;
+    if (!isCurrentGrid(generation)) return false;
     db.prepare("DELETE FROM series_add_preview").run();
     db.prepare("INSERT INTO series_add_preview (id, payload, created_at) VALUES (?, ?, ?)").run(
       id,
@@ -717,17 +720,25 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
 
   const { resolved } = fresh;
   let report = `🚀 **Adding series to Sonarr** (profile: ${resolved.qualityProfile}, folder: ${resolved.rootFolder}, type: ${resolved.seriesType}, monitor: ${resolved.monitor}, ${resolved.searchForMissing ? "search for monitored episodes started" : "no search started"})\n`;
-  // One confirmation talks to one Sonarr: once the saved URL is no longer the
-  // one the preview was made with, nothing more is sent.
-  let urlChanged = false;
+  // One confirmation talks to one Sonarr, for one grid: once the saved URL is
+  // no longer the one the preview was made with, or a newer search has
+  // replaced the grid the preview came from, nothing more is sent.
+  let stopped: string | null = null;
   for (const show of fresh.shows) {
     if (show.decision === "exists") {
       report += `  ⏭️ ${showLabel(show)} - already in Sonarr; not added.\n`;
       continue;
     }
-    if (getSetting("SONARR_URL") !== stored.sonarrUrl) urlChanged = true;
-    if (urlChanged) {
-      report += `  ⛔ ${showLabel(show)} - not attempted: the Sonarr URL on the Settings page changed while the shows were being added, so nothing more was sent. Run search_and_select_series again to add it.\n`;
+    if (stopped === null && getSetting("SONARR_URL") !== stored.sonarrUrl) {
+      stopped =
+        "the Sonarr URL on the Settings page changed while the shows were being added, so nothing more was sent";
+    }
+    if (stopped === null && !isCurrentGrid(String(stored.generation))) {
+      stopped =
+        "the series grid was replaced by a newer search_and_select_series while the shows were being added, so nothing more was sent";
+    }
+    if (stopped !== null) {
+      report += `  ⛔ ${showLabel(show)} - not attempted: ${stopped}. Run search_and_select_series again to add it.\n`;
       continue;
     }
     // Equal to what the preview stored: differences() found no change.

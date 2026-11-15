@@ -144,22 +144,31 @@ const grid = () =>
     year: string;
     generation: string;
   }>;
-// Holds the next request to Sonarr that matches until release() is called.
-function holdNext(match: (config: any) => boolean): () => void {
+// Holds the next request to Sonarr that matches until release() is called;
+// reached resolves once that request has arrived and is being held.
+function holdNext(match: (config: any) => boolean): {
+  release: () => void;
+  reached: Promise<void>;
+} {
   let release!: () => void;
+  let arrive!: () => void;
   const gate = new Promise<void>((resolve) => {
     release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    arrive = resolve;
   });
   const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
   let held = false;
   sonarrClient.defaults.adapter = async (config: any) => {
     if (!held && match(config)) {
       held = true;
+      arrive();
       await gate;
     }
     return fake(config);
   };
-  return release;
+  return { release, reached };
 }
 const previews = () =>
   db.prepare("SELECT id, payload FROM series_add_preview").all() as Array<{
@@ -418,7 +427,7 @@ describe("search_and_select_series", () => {
   });
 
   it("C3: two searches at the same moment leave one whole grid, of the search that answered last", async () => {
-    const release = holdNext((config) => config.params?.term === "harbour");
+    const { release } = holdNext((config) => config.params?.term === "harbour");
     const first = search("harbour");
     await search("quiet valley");
     release();
@@ -734,7 +743,7 @@ describe("confirm_selected_series: the preview", () => {
 
   it("C12: a preview that finishes after a newer search is not stored, does not replace the newer preview, and adds nothing", async () => {
     await search("quiet valley");
-    const release = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const { release } = holdNext((config) => config.url === "/api/v3/qualityprofile");
     const late = confirmSelectedSeries({ chosenIndexes: [1] });
     await search("harbour");
     const newer = await confirmSelectedSeries({ chosenIndexes: [2] });
@@ -758,7 +767,7 @@ describe("confirm_selected_series: the preview", () => {
   it("C13: a changed preview whose grid a newer search replaced meanwhile stores no new preview", async () => {
     const preview = await previewOf("quiet valley", [1]);
     setSetting("SONARR_DEFAULT_MONITOR", "pilot");
-    const release = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const { release } = holdNext((config) => config.url === "/api/v3/qualityprofile");
     const confirming = confirmSelectedSeries({ previewId: idOf(preview) });
     await search("harbour");
     release();
@@ -1360,6 +1369,31 @@ describe("confirm_selected_series: the confirmation", () => {
     }
     assert.match(lines[1]!, /Harbour Lights: Origins/);
     assert.match(lines[2]!, /Harbour Nights/);
+  });
+
+  it("C14: when a newer search replaces the grid while a confirmation runs, the remaining shows are not attempted and the newer preview stays current", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    // The first POST is held while a new search and a preview from it complete.
+    const { release, reached } = holdNext((config) => config.method === "post");
+    const confirming = confirmSelectedSeries({ previewId: idOf(preview) });
+    await reached;
+    await search("harbour");
+    const newer = await confirmSelectedSeries({ chosenIndexes: [1] });
+    release();
+    const result = await confirming;
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(lines[0]!, /✅ .*Quiet Valley \(2020\).* - added/);
+    assert.match(
+      lines[1]!,
+      /⛔ .*Quiet Valley Stories.* - not attempted: the series grid was replaced by a newer search_and_select_series while the shows were being added, so nothing more was sent\. Run search_and_select_series again to add it\./,
+    );
+    assert.deepEqual(added(), ["Quiet Valley"], "nothing is posted for the remaining show");
+    assert.deepEqual(
+      previews().map((p) => p.id),
+      [idOf(newer)],
+    );
+    await confirmSelectedSeries({ previewId: idOf(newer) });
+    assert.deepEqual(added(), ["Quiet Valley", "Harbour Lights"]);
   });
 
   it("C15: a key changed between two POSTs is still removed when Sonarr echoes the old one", async () => {
