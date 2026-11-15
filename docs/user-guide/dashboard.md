@@ -100,7 +100,8 @@ One tab per service: **Sonarr**, **Radarr**, **Prowlarr**, **SABnzbd**, **qBitto
 - **Radarr** also has the default quality profile for movies you add (blank uses Radarr's first profile).
 - **Sonarr** also has the defaults for series you add: quality profile and root folder (blank uses Sonarr's
   first of each), series type (blank means `standard`) and which episodes to monitor (blank means `all`).
-  See [Adding a show](tv.md#adding-a-show-search_and_select_series-and-confirm_selected_series).
+  A series type or monitor option that isn't one of Sonarr's values is refused on save, with the allowed
+  values listed, and nothing is saved. See [Adding a show](tv.md#adding-a-show-search_and_select_series-and-confirm_selected_series).
 - **Plex** also has the libraries to leave out of searches unless you name them, such as `Sports`.
 - **Nodes** has the hosts to monitor (comma-separated, with `:port` if SSH isn't on 22) and the SSH user. The
   private key itself is never entered here; it is a file given to the container ([installing.md](../installing.md#ssh-host-monitoring)).

@@ -8,6 +8,13 @@ import { getSetting, isConfigured } from "../settings.js";
 import { textReply, getErrorMessage, escapeTableCell } from "../util.js";
 import { chooseQualityProfile, radarrErrorMessage } from "./discovery.js";
 import { NOT_CONFIGURED } from "./series.js";
+import {
+  MONITOR_OPTIONS,
+  type MonitorOption,
+  matchOption,
+  SERIES_TYPES,
+  type SeriesType,
+} from "../seriesAddOptions.js";
 import type { SonarrQualityProfile, SonarrRootFolder, SonarrSeries } from "../types/sonarr.js";
 
 // Adding TV series to Sonarr, for MCP clients only (the dashboard's chat stays
@@ -36,22 +43,9 @@ const TEXT_LENGTH = 200;
 const PREVIEW_LIFE_MINUTES = 15;
 const PREVIEW_LIFE_MS = PREVIEW_LIFE_MINUTES * 60 * 1000;
 
-export const SERIES_TYPES = ["standard", "daily", "anime"] as const;
-export type SeriesType = (typeof SERIES_TYPES)[number];
-
-// The values of Sonarr's MonitorTypes this tool offers (its API schema lists
-// more, such as latestSeason and recent).
-export const MONITOR_OPTIONS = [
-  "all",
-  "future",
-  "missing",
-  "existing",
-  "firstSeason",
-  "lastSeason",
-  "pilot",
-  "none",
-] as const;
-export type MonitorOption = (typeof MONITOR_OPTIONS)[number];
+// The allowed series types and monitor options are defined once, in
+// src/seriesAddOptions.ts; the settings API checks saved defaults against them.
+export { MONITOR_OPTIONS, SERIES_TYPES };
 
 const MONITOR_WORDS: Record<MonitorOption, string> = {
   all: "all episodes",
@@ -276,7 +270,7 @@ function pickFromList<T extends string>(
 ): { value: T } | { error: string } {
   const wanted = asked?.trim() || saved.trim();
   if (!wanted) return { value: fallback };
-  const match = allowed.find((a) => a.toLowerCase() === wanted.toLowerCase());
+  const match = matchOption(allowed, wanted);
   if (match) return { value: match };
   const origin = asked?.trim() ? "" : ` (that is the ${settingName} saved on the Settings page)`;
   return {

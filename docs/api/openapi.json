@@ -486,7 +486,7 @@
         },
         "responses": {
           "400": {
-            "description": "The URL changed but a saved secret (API key, token or password) was not entered again. Nothing is saved.",
+            "description": "The URL changed but a saved secret (API key, token or password) was not entered again, or a sonarr defaultSeriesType or defaultMonitor is not one of the allowed values (the message lists them). Nothing is saved.",
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
             }
@@ -1037,11 +1037,11 @@
           },
           "defaultSeriesType": {
             "type": "string",
-            "description": "sonarr only. standard, daily or anime; checked when a series is added, not when saved."
+            "description": "sonarr only. standard, daily or anime (any case); anything else is refused with 400. Blank clears it."
           },
           "defaultMonitor": {
             "type": "string",
-            "description": "sonarr only. all, future, missing, existing, firstSeason, lastSeason, pilot or none; checked when a series is added, not when saved."
+            "description": "sonarr only. all, future, missing, existing, firstSeason, lastSeason, pilot or none (any case); anything else is refused with 400. Blank clears it."
           },
           "username": { "type": "string", "description": "qbittorrent only." },
           "password": {

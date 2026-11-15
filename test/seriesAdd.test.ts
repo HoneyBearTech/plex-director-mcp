@@ -1308,6 +1308,50 @@ describe("adding series: settings, registration and independence from the movie 
     assert.match(text(preview), /Series type: daily\n- Monitor: no episodes \(`none`\)/);
   });
 
+  it("C16: a series type or monitor option outside the allowed values is refused with HTTP 400 that lists them, and nothing is saved", async () => {
+    delete process.env.WEB_PASSWORD;
+    await putSonarr({ defaultSeriesType: "anime", defaultMonitor: "pilot" });
+
+    const badType = await putSonarr({
+      defaultQualityProfile: "WEB-2160p",
+      defaultSeriesType: " miniseries ",
+    });
+    assert.equal(badType.status, 400);
+    assert.equal(
+      ((await badType.json()) as { error: string }).error,
+      '"miniseries" is not an allowed default series type. Allowed: standard, daily, anime. Nothing was saved.',
+    );
+    const badMonitor = await putSonarr({ defaultMonitor: "latestSeason" });
+    assert.equal(badMonitor.status, 400);
+    assert.equal(
+      ((await badMonitor.json()) as { error: string }).error,
+      '"latestSeason" is not an allowed default monitor option. Allowed: all, future, missing, existing, firstSeason, lastSeason, pilot, none. Nothing was saved.',
+    );
+    // Nothing from a refused request was saved, not even its valid fields.
+    assert.equal(getSetting("SONARR_DEFAULT_QUALITY_PROFILE"), "");
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "anime");
+    assert.equal(getSetting("SONARR_DEFAULT_MONITOR"), "pilot");
+
+    // Matched without regard to case, as the tool does; an empty value still clears.
+    assert.equal((await putSonarr({ defaultSeriesType: "Daily" })).status, 200);
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "Daily");
+    assert.equal((await putSonarr({ defaultSeriesType: " ", defaultMonitor: "" })).status, 200);
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "");
+    assert.equal(getSetting("SONARR_DEFAULT_MONITOR"), "");
+  });
+
+  it("C16: the settings API checks against the lists the tool uses, imported, not copied", () => {
+    const route = fs.readFileSync(path.join(repo, "src/web/routes/settings.ts"), "utf8");
+    assert.match(
+      route,
+      /import \{[^}]*MONITOR_OPTIONS[^}]*SERIES_TYPES[^}]*\} from "..\/..\/seriesAddOptions.js"/,
+    );
+    assert.doesNotMatch(route, /"firstSeason"|"anime"/);
+    const tool = fs.readFileSync(path.join(repo, "src/tools/seriesAdd.ts"), "utf8");
+    assert.match(tool, /from "..\/seriesAddOptions.js"/);
+    assert.doesNotMatch(tool, /"firstSeason",|"daily",/);
+  });
+
   it("C16: the Settings page's Sonarr tab, the dashboard's API type, the OpenAPI document and .env.example carry the four settings", () => {
     const page = fs.readFileSync(path.join(repo, "web/src/pages/SettingsPage.tsx"), "utf8");
     const sonarrTab = page.slice(page.indexOf('value: "sonarr"'), page.indexOf('value: "radarr"'));
