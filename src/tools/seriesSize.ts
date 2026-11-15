@@ -45,8 +45,10 @@ const GB = 1e9;
 // Plex is read a page of this many at a time; Tautulli is asked for a whole
 // library in one page of at least this length.
 const FETCH_ALL = 5000;
-// Pages read from one Plex library at most (a million shows at full pages).
-const MAX_PLEX_PAGES = 200;
+// Pages read from one Plex library at most: 100,000 shows. A library that
+// says it holds more is reported as not read, before any further page.
+const MAX_PLEX_PAGES = 20;
+const MAX_PLEX_SHOWS = MAX_PLEX_PAGES * FETCH_ALL;
 // Tautulli builds this list from its own cache and can be slow on a big
 // library, so this one call may take longer than the clients' usual 10 seconds.
 const TAUTULLI_MEDIA_INFO_TIMEOUT_MS = 30_000;
@@ -97,36 +99,61 @@ type LibraryAnswer =
 // Plex answered, but not with the whole of a library.
 class PlexIncomplete extends Error {}
 
-// Every show of one library, page by page, until Plex's totalSize is reached
-// (or, when Plex gives no total, until a page comes back short). A list built
-// from part of a library is never returned.
+// Every show of one library, page by page, until it has as many different
+// shows (by ratingKey) as the largest totalSize any page announced, or, when
+// no page gives a total, until a page comes back short. Every page must be a
+// proper answer: a MediaContainer whose Metadata, if any, is a list of items
+// with a ratingKey. Plex gives every library item one, so an item without it
+// means the answer is not what it seems, and the read fails rather than guess.
+// A list built from part of a library is never returned.
 async function readPlexLibrary(section: PlexSection): Promise<PlexMetadata[]> {
   const items: PlexMetadata[] = [];
-  for (let page = 0; page < MAX_PLEX_PAGES; page++) {
+  const seen = new Set<string>();
+  let received = 0;
+  let announced: number | null = null;
+  const incomplete = (why: string) => new PlexIncomplete(`the library "${section.title}" ${why}`);
+  for (let page = 1; page <= MAX_PLEX_PAGES; page++) {
     const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
       params: {
         includeGuids: 1,
-        "X-Plex-Container-Start": items.length,
+        "X-Plex-Container-Start": received,
         "X-Plex-Container-Size": FETCH_ALL,
       },
     });
-    const container = response.data?.MediaContainer;
-    const got = container?.Metadata ?? [];
-    items.push(...got);
-    const total = container?.totalSize;
-    if (typeof total !== "number" || !Number.isFinite(total)) {
+    const container: unknown = response.data?.MediaContainer;
+    if (typeof container !== "object" || container === null || Array.isArray(container))
+      throw incomplete(`gave page ${page} without a list of shows`);
+    const { Metadata: got = [], totalSize } = container as NonNullable<
+      PlexContainer["MediaContainer"]
+    >;
+    if (!Array.isArray(got)) throw incomplete(`gave page ${page} without a list of shows`);
+    let fresh = 0;
+    for (const item of got as unknown[]) {
+      const key = (item as PlexMetadata | null)?.ratingKey;
+      if (typeof item !== "object" || item === null || key === undefined || key === null)
+        throw incomplete(`gave page ${page} with a show that has no ratingKey`);
+      if (seen.has(String(key))) continue;
+      seen.add(String(key));
+      items.push(item as PlexMetadata);
+      fresh++;
+    }
+    received += got.length;
+    // A later page with a smaller total, or none, does not end the read early.
+    if (typeof totalSize === "number" && Number.isFinite(totalSize))
+      announced = Math.max(announced ?? 0, totalSize);
+    if (announced !== null && announced > MAX_PLEX_SHOWS)
+      throw incomplete(
+        `holds ${announced} shows, more than the ${MAX_PLEX_SHOWS} this report reads`,
+      );
+    if (announced === null) {
       if (got.length < FETCH_ALL) return items;
+      if (fresh === 0) throw incomplete(`gave page ${page} again with no new shows`);
       continue;
     }
-    if (items.length >= total) return items;
-    if (got.length === 0)
-      throw new PlexIncomplete(
-        `the library "${section.title}" gave ${items.length} of the ${total} shows it holds`,
-      );
+    if (seen.size >= announced) return items;
+    if (fresh === 0) throw incomplete(`gave ${seen.size} of the ${announced} shows it holds`);
   }
-  throw new PlexIncomplete(
-    `the library "${section.title}" was not read to its end within ${MAX_PLEX_PAGES} pages`,
-  );
+  throw incomplete(`was not read to its end within ${MAX_PLEX_PAGES} pages`);
 }
 
 // Every show in every Plex show library, the ones left out of searches by the

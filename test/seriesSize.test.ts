@@ -471,7 +471,7 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     );
     assert.equal(rows(result).length, 0);
 
-    // A total that is never reached is given up on after a bounded number of pages.
+    // A total that is never reached is given up on after 20 pages.
     plexReply = (req) => {
       if (req.url === "/library/sections")
         return { data: { MediaContainer: { Directory: SECTIONS } } };
@@ -479,7 +479,7 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
       return {
         data: {
           MediaContainer: {
-            totalSize: 1_000_000_000,
+            totalSize: 100_000,
             Metadata: [plexShow(String(start), `Show ${start}`, null, null, yearsAgo(9))],
           },
         },
@@ -488,8 +488,86 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     plex.calls.length = 0;
     const endless = await run({ notWatchedInYears: 3 });
     assert.equal(endless.isError, true);
-    assert.match(text(endless), /Plex could not be read completely.*was not read to its end/);
-    assert.ok(pageStarts("3").length <= 200);
+    assert.match(
+      text(endless),
+      /Plex could not be read completely.*was not read to its end within 20 pages/,
+    );
+    assert.equal(pageStarts("3").length, 20);
+  });
+
+  it("B4: a page that is not a proper answer, a smaller total, a repeated page or a total beyond the bound is never taken as the end", async () => {
+    watchStock();
+    // 5,001 shows: Old Favourite, the one show beyond the first page, has a
+    // copy in no other library and was watched 6 years ago.
+    library["3"] = [...fillers(5000), library["3"]![0]!];
+    library["4"] = [];
+    // The second page of "TV Shows" is what `second` answers; the first is
+    // right, with totalSize 5001.
+    const withSecondPage = (second: (items: any[]) => FakeReply) => {
+      plexReply = (req) => {
+        if (req.url === "/library/sections")
+          return { data: { MediaContainer: { Directory: SECTIONS } } };
+        const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+        const start = Number(req.params["X-Plex-Container-Start"]);
+        if (start === 0)
+          return {
+            data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(0, 5000) } },
+          };
+        return second(items);
+      };
+      plex.calls.length = 0;
+    };
+    const fails = async (why: RegExp) => {
+      const result = await run({ notWatchedInYears: 3 });
+      assert.equal(result.isError, true, text(result));
+      assert.match(text(result), /^Plex could not be read completely/);
+      assert.match(text(result), why);
+      assert.equal(rows(result).length, 0);
+    };
+
+    // Read whole, the show beyond the first page is listed.
+    withSecondPage((items) => ({
+      data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(5000) } },
+    }));
+    assert.deepEqual(titles(await run({ notWatchedInYears: 3 })), ["Old Favourite"]);
+
+    // HTTP 200 with a sign-in page: no MediaContainer.
+    withSecondPage(() => ({ data: "<html><body>Sign in</body></html>" }));
+    await fails(/the library "TV Shows" gave page 2 without a list of shows/);
+    // A MediaContainer whose Metadata is not a list.
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: "none" } } }));
+    await fails(/gave page 2 without a list of shows/);
+    // A show with no ratingKey.
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: [{ title: "No Key" }] } } }));
+    await fails(/gave page 2 with a show that has no ratingKey/);
+
+    // A smaller total, or none, on the second page does not end the read: 5001 still stands.
+    withSecondPage(() => ({ data: { MediaContainer: { totalSize: 5000, Metadata: [] } } }));
+    await fails(/the library "TV Shows" gave 5000 of the 5001 shows it holds/);
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: [] } } }));
+    await fails(/gave 5000 of the 5001 shows it holds/);
+
+    // The first page again: 10,000 items received, but only 5,000 different shows.
+    withSecondPage((items) => ({
+      data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(0, 5000) } },
+    }));
+    await fails(/gave 5000 of the 5001 shows it holds/);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+
+    // A total beyond 100,000 is given up on at once: no further page is asked for.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      return {
+        data: { MediaContainer: { totalSize: 100_001, Metadata: items.slice(0, 5000) } },
+      };
+    };
+    plex.calls.length = 0;
+    await fails(
+      /the library "TV Shows" holds 100001 shows, more than the 100000 this report reads/,
+    );
+    assert.deepEqual(pageStarts("3"), [0]);
   });
 
   it("B4, B8: a show watched with no date anywhere can't be judged: left out and counted", async () => {
