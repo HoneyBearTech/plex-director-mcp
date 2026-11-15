@@ -732,19 +732,30 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
     }
     // Equal to what the preview stored: differences() found no change.
     const seasons = stored.shows.find((s) => s.tvdbId === show.tvdbId)?.seasons ?? [];
+    // Only what is known is reported, and nothing is retried. Added: a 2xx
+    // answer that is the added series. Failed: a 4xx answer, Sonarr refusing
+    // it. Anything else (no answer, a 5xx from Sonarr or something in front of
+    // it, an answer that is not the series) may have added it.
+    const notKnown = (why: string) =>
+      `  ❓ ${showLabel(show)} - outcome not known: ${why}. The show may have been added; a new search and preview will show it as already in Sonarr if it was.\n`;
     try {
-      await sonarrClient.post(
+      const response = await sonarrClient.post<unknown>(
         "/api/v3/series",
         addBody(show.record as SonarrSeries, seasons, resolved),
       );
-      report += `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`;
-    } catch (error: unknown) {
-      // Sonarr answered with an error: the show was not added. No answer at all
-      // (a timeout, a dropped connection): Sonarr may have added it. Never retried.
       report +=
-        isAxiosError(error) && error.response
-          ? `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`
-          : `  ❓ ${showLabel(show)} - outcome not known: Sonarr did not answer (${getErrorMessage(error)}). The show may have been added; a new search and preview will show it as already in Sonarr if it was.\n`;
+        isObject(response.data) && response.data.tvdbId === show.tvdbId
+          ? `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`
+          : notKnown("Sonarr's answer was not the added series");
+    } catch (error: unknown) {
+      const status = isAxiosError(error) ? error.response?.status : undefined;
+      if (status !== undefined && status >= 400 && status <= 499) {
+        report += `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`;
+      } else if (status !== undefined) {
+        report += notKnown(`Sonarr answered HTTP ${status} (${radarrErrorMessage(error)})`);
+      } else {
+        report += notKnown(`Sonarr did not answer (${getErrorMessage(error)})`);
+      }
     }
   }
   return reply(report);

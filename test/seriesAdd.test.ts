@@ -80,6 +80,8 @@ let profiles: typeof PROFILES;
 let roots: typeof ROOTS;
 // TVDB id -> what POST /series answers for that show instead of adding it.
 let addErrors: Record<number, FakeReply>;
+// TVDB id -> what POST /series answers for that show after adding it.
+let addAnswers: Record<number, FakeReply>;
 let sonarrDown: boolean;
 
 function sonarrFake() {
@@ -98,8 +100,10 @@ function sonarrFake() {
       const body = req.body as { tvdbId: number; title: string };
       const failure = addErrors[body.tvdbId];
       if (failure) return failure;
-      inSonarr.push({ id: 1000 + inSonarr.length, ...body });
-      return { status: 201, data: body };
+      // As Sonarr does: the added series, with its id.
+      const series = { id: 1000 + inSonarr.length, ...body };
+      inSonarr.push(series);
+      return addAnswers[body.tvdbId] ?? { status: 201, data: series };
     }
     return { status: 404 };
   });
@@ -113,6 +117,7 @@ beforeEach(async () => {
   profiles = [...PROFILES];
   roots = [...ROOTS];
   addErrors = {};
+  addAnswers = {};
   sonarrDown = false;
   sonarrFake();
 });
@@ -1274,6 +1279,37 @@ describe("confirm_selected_series: the confirmation", () => {
       [601],
     );
     assert.equal(posts().length, 2);
+  });
+
+  it("C14: a 5xx answer after Sonarr took the show is reported as not known; a 4xx stays failed", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addAnswers[601] = { status: 504, data: "Gateway Time-out" };
+    addErrors[602] = { status: 400, data: [{ errorMessage: "Series already exists" }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: Sonarr answered HTTP 504 \(.+\)\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+    );
+    assert.match(lines[1]!, /❌ .*Quiet Valley Stories.* - failed: Series already exists/);
+    assert.equal(posts().length, 2, "nothing is retried");
+  });
+
+  it("C14: a 2xx answer that is not the added series is reported as not known", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    addAnswers[501] = { status: 200, data: {} };
+    addAnswers[502] = { status: 200, data: "<html>Sign in</html>" };
+    addAnswers[503] = { status: 201, data: { id: 9, tvdbId: 999, title: "Something Else" } };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3);
+    for (const line of lines) {
+      assert.match(
+        line,
+        /❓ .* - outcome not known: Sonarr's answer was not the added series\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+      );
+    }
+    assert.equal(posts().length, 3);
   });
 
   it("C14: Sonarr unreachable at confirmation is an error reply, and nothing is added", async () => {
