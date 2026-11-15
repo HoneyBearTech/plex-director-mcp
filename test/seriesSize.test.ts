@@ -917,6 +917,51 @@ describe("find_series_by_size: big shows nobody has watched (Plex and Tautulli)"
     assert.match(lines(result)[3]!, /^- Both Libraries .*\(Plex account only\)$/);
   });
 
+  it("B7: a show Tautulli gave an old play for, with another of its libraries' answers unusable, keeps the date and is marked", async () => {
+    // Three copies: "TV Shows" has an old play, "4k TV Shows" no row, "Kids TV" failed.
+    library["5"] = [plexShow("35", "Both Libraries", 105, null, yearsAgo(6))];
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return {
+          data: {
+            MediaContainer: {
+              Directory: [...SECTIONS, { key: "5", type: "show", title: "Kids TV" }],
+            },
+          },
+        };
+      const items = library[req.url.match(/^\/library\/sections\/(\d+)\/all$/)![1]!] ?? [];
+      return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
+    };
+    tautulliLibrary["3"] = tautulliOk([row("15", 2, yearsAgo(3.5))]);
+    tautulliLibrary["4"] = tautulliOk([]);
+    tautulliLibrary["5"] = { status: 500 };
+    const result = await run({ notWatchedInYears: 3 });
+    const line = lines(result).find((l) => l.includes("Both Libraries"))!;
+    assert.match(
+      line,
+      new RegExp(`last watched ${day(yearsAgo(3.5))} \\(Tautulli history incomplete\\)$`),
+    );
+    assert.doesNotMatch(line, /Plex account only/);
+    assert.equal(
+      rows(result).find((r) => r.title === "Both Libraries").lastWatched,
+      day(yearsAgo(3.5)),
+    );
+    assert.match(
+      text(result),
+      /Tautulli's answer for the library "Kids TV" could not be used: the call failed .*; shows there were judged from the Plex account alone \(marked "Plex account only"\), except those another library's answer had plays for, which keep that date and are marked "Tautulli history incomplete"\./,
+    );
+    // The other three, in "TV Shows" only, had no row: the count is theirs alone.
+    assert.match(
+      text(result),
+      /3 listed shows were judged from the Plex account alone because Tautulli had no row or no plays for them/,
+    );
+
+    // With no library unusable, no such mark and no such clause.
+    tautulliLibrary["5"] = tautulliOk([]);
+    const whole = await run({ notWatchedInYears: 3 });
+    assert.doesNotMatch(text(whole), /Tautulli history incomplete/);
+  });
+
   it("B6: on the same data, the list with Tautulli is a subset of the list without it", async () => {
     const tautulliAnswers: Array<Record<string, FakeReply | (() => FakeReply)>> = [
       {},

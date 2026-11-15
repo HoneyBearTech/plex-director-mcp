@@ -90,6 +90,9 @@ interface Candidate {
   lastWatched: number | null;
   // Set when Tautulli is configured but added nothing for this show.
   plexOnly: "noRowOrNoPlays" | "libraryUnusable" | null;
+  // Set when Tautulli gave plays for it, but its answer for another of the
+  // show's libraries could not be used: part of its history is unread.
+  tautulliIncomplete: boolean;
 }
 
 type LibraryAnswer =
@@ -386,12 +389,18 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       continue;
     }
     if (activity * 1000 < cutoff)
-      candidates.push({ series, plex, lastWatched: lastViewed, plexOnly: null });
+      candidates.push({
+        series,
+        plex,
+        lastWatched: lastViewed,
+        plexOnly: null,
+        tautulliIncomplete: false,
+      });
   }
 
   // --- Then Tautulli, for the candidates only ---------------------------------
   const withTautulli = isConfigured("TAUTULLI");
-  const unusable: { title: string; why: string }[] = [];
+  const unusable: { key: string; title: string; why: string }[] = [];
   let removedByTautulli = 0;
   if (withTautulli && candidates.length > 0) {
     // Once per show library that holds a candidate.
@@ -409,7 +418,8 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
     );
     for (const section of wanted) {
       const answer = answers.get(section.key);
-      if (answer && !answer.usable) unusable.push({ title: section.title, why: answer.why });
+      if (answer && !answer.usable)
+        unusable.push({ key: section.key, title: section.title, why: answer.why });
     }
 
     // A play time is used only if it can be a time in epoch seconds: one later
@@ -450,6 +460,7 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
         return false;
       }
       candidate.lastWatched = latest(candidate.lastWatched, lastPlayed);
+      candidate.tautulliIncomplete = anyUnusable;
       return true;
     });
   }
@@ -465,8 +476,12 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
     output += ` ${plural(cannotJudge, "show has", "shows have")} been watched but with no date recorded, so ${cannotJudge === 1 ? "it was" : "they were"} left out because that can't be judged.`;
   if (removedByTautulli > 0)
     output += ` Tautulli's history took ${plural(removedByTautulli, "show")} off the list (played more recently there).`;
-  for (const { title, why } of unusable)
-    output += ` Tautulli's answer for the library "${title}" could not be used: ${why}; shows there were judged from the Plex account alone (marked "Plex account only").`;
+  for (const { key, title, why } of unusable) {
+    const partly = candidates.some(
+      (c) => c.tautulliIncomplete && c.plex.copies.some((copy) => copy.section.key === key),
+    );
+    output += ` Tautulli's answer for the library "${title}" could not be used: ${why}; shows there were judged from the Plex account alone (marked "Plex account only")${partly ? ', except those another library\'s answer had plays for, which keep that date and are marked "Tautulli history incomplete"' : ""}.`;
+  }
   output += "\n";
   if (candidates.length === 0) return textReply(output.trimEnd());
 
@@ -483,7 +498,12 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       c.lastWatched !== null
         ? `last watched ${isoDay(c.lastWatched)}`
         : `never watched, added ${isoDay(c.plex.watch.addedFirst)}`;
-    return `${sizeLine(c.series)} - ${dated}${c.plexOnly ? " (Plex account only)" : ""}`;
+    const mark = c.plexOnly
+      ? " (Plex account only)"
+      : c.tautulliIncomplete
+        ? " (Tautulli history incomplete)"
+        : "";
+    return `${sizeLine(c.series)} - ${dated}${mark}`;
   };
   for (const c of shown) output += `- ${label(c.series)} - ${watchLine(c)}\n`;
   const media = shown.map((c) => {
