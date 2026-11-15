@@ -46,7 +46,9 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 - The dashboard is read-only for anything that touches your services, apart from saving settings and
   approving a changed SSH host key: it cannot add movies, delete downloads, or start, pause or cancel jobs.
 - The Query chat can only use the 13 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
-  tool that adds, deletes or starts anything.
+  tool that adds, deletes or starts anything. Its `find_series_by_size` tool passes each show's title, size,
+  Sonarr status and watch dates to the service that answers the chat, as the other read-only tools pass their
+  results.
 - Batch jobs are created `PENDING` and never start on their own; the job runner sends at most one Radarr
   search per interval (60 seconds by default) and pauses a job after three failures in a row.
   `plan_media_upgrade` refuses TV outright.
@@ -74,7 +76,8 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   or remote images.
 - User text passed to service APIs is URL-encoded or sent as request parameters; database access always
   uses prepared statements with bound parameters.
-- Every outgoing request has a 10-second timeout (`src/clients.ts`).
+- Every outgoing request has a 10-second timeout (`src/clients.ts`), except the Tautulli library list read by
+  `find_series_by_size`, which may take 30 seconds, at most one such request per show library at a time.
 
 ## What Plex Director does not protect against
 
