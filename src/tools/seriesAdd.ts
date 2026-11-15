@@ -375,8 +375,12 @@ async function resolveAdd(
         error: `❌ Sonarr's lookup no longer returns ${show.title} (TVDB id ${show.tvdbId}), so it can't be added. Run search_and_select_series again.`,
       };
     }
+    // A show to add is shown with the title and year of Sonarr's lookup record
+    // as it is now, cut and folded as the grid shows them.
     decided.push({
       ...show,
+      title: titleOf(record),
+      year: yearText(record.year),
       decision: "add",
       seasonCount: seasonCount(record),
       seasons: reduceSeasons(record.seasons),
@@ -502,6 +506,11 @@ function differences(stored: StoredPreview, now: Resolution): string[] {
     const after = now.shows.find((s) => s.tvdbId === before.tvdbId);
     if (!after) continue;
     if (after.decision === before.decision) {
+      if (after.title !== before.title || after.year !== before.year) {
+        out.push(
+          `${before.title} is now listed as ${after.title} (${after.year}) (the preview showed ${before.title} (${before.year}))`,
+        );
+      }
       out.push(...seasonDifferences(before.title, before.seasons, after.seasons));
       continue;
     }

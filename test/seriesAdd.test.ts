@@ -1020,6 +1020,51 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.notEqual(idOf(result), idOf(preview));
   });
 
+  it("C13: a show's year changed in Sonarr's lookup between preview and confirmation adds nothing and returns a new preview with the new year", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2030);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.ok(
+      text(result).includes(
+        "Quiet Valley is now listed as Quiet Valley (2030) (the preview showed Quiet Valley (2020))",
+      ),
+      text(result),
+    );
+    assert.match(
+      text(result),
+      /- \*\*Quiet Valley \(2030\)\*\* \[TVDB: 601\], 2 seasons: will be added/,
+    );
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.equal((posts()[0]!.body as any).year, 2030);
+  });
+
+  it("C13: a show's title changed in Sonarr's lookup between preview and confirmation adds nothing and returns a new preview with the new title", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley: Reborn", 2020);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.ok(
+      text(result).includes(
+        "Quiet Valley is now listed as Quiet Valley: Reborn (2020) (the preview showed Quiet Valley (2020))",
+      ),
+      text(result),
+    );
+    assert.match(text(result), /- \*\*Quiet Valley: Reborn \(2020\)\*\* \[TVDB: 601\]/);
+    assert.equal(JSON.parse(previews()[0]!.payload).shows[0].title, "Quiet Valley: Reborn");
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.deepEqual(added(), ["Quiet Valley: Reborn"]);
+  });
+
   it("C13: a season added to the show between preview and confirmation adds nothing and returns a new preview", async (t) => {
     const original = CATALOG[6]!;
     t.after(() => {
