@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { isAxiosError } from "axios";
 import { z } from "zod";
 import { server } from "../server.js";
 import { db, type SeriesSelectionRow } from "../db.js";
@@ -627,7 +628,12 @@ async function confirmPreview(previewId: string, now: number) {
       );
       report += `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`;
     } catch (error: unknown) {
-      report += `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`;
+      // Sonarr answered with an error: the show was not added. No answer at all
+      // (a timeout, a dropped connection): Sonarr may have added it. Never retried.
+      report +=
+        isAxiosError(error) && error.response
+          ? `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`
+          : `  ❓ ${showLabel(show)} - outcome not known: Sonarr did not answer (${getErrorMessage(error)}). The show may have been added; a new search and preview will show it as already in Sonarr if it was.\n`;
     }
   }
   return reply(report);

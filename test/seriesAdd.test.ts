@@ -925,6 +925,33 @@ describe("confirm_selected_series: the confirmation", () => {
     );
   });
 
+  it("C14: when Sonarr accepts a show and the connection then fails, the outcome is reported as not known, not as failed, and nothing is retried", async () => {
+    // The fake adds the show, then the answer never arrives.
+    const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+    sonarrClient.defaults.adapter = async (config: any) => {
+      const response = await fake(config);
+      if (config.method === "post") throw new Error("socket hang up");
+      return response;
+    };
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addErrors[602] = { status: 400, data: [{ errorMessage: "Series already exists" }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: Sonarr did not answer \(socket hang up\)\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+    );
+    assert.doesNotMatch(lines[0]!, /failed/);
+    // An HTTP error from Sonarr is still a failure, with Sonarr's message.
+    assert.match(lines[1]!, /❌ .*Quiet Valley Stories.* - failed: Series already exists/);
+    // Sonarr did add the first show, and nothing was posted twice.
+    assert.deepEqual(
+      inSonarr.map((s) => s.tvdbId),
+      [601],
+    );
+    assert.equal(posts().length, 2);
+  });
+
   it("C14: Sonarr unreachable at confirmation is an error reply, and nothing is added", async () => {
     const preview = await previewOf("quiet valley", [1]);
     sonarrDown = true;
