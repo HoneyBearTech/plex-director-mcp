@@ -99,7 +99,8 @@ What "watched" can know is limited, and the reply says which of these it had:
   its lists.
 
 Left out, and counted in the reply: shows Sonarr has that could not be matched to a Plex show (they are matched by TVDB id,
-or by title and year when Plex has none), and shows Plex marks as watched without a date.
+or by title and year when Plex has none), and shows watched at a time that is not known: a Plex copy watched with no
+date, or plays in Tautulli with no usable play time, even when an older date is known from elsewhere.
 
 It is a report: it deletes nothing and changes nothing.
 
