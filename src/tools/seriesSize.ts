@@ -230,6 +230,9 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
   } catch (error: unknown) {
     return textReply(`Failed to check Sonarr: ${getErrorMessage(error)}`, true);
   }
+  // A sign-in page answered with HTTP 200, say, is not a list of series.
+  if (!Array.isArray(all) || all.some((s) => typeof s !== "object" || s === null))
+    return textReply("Failed to check Sonarr: Sonarr did not answer with a list of series", true);
 
   const withFiles = all.filter((s) => filesOf(s) > 0 || sizeOf(s) > 0);
   const totalSize = (list: SonarrSeries[]) => list.reduce((sum, s) => sum + sizeOf(s), 0);

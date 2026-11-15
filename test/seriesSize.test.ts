@@ -279,6 +279,26 @@ describe("find_series_by_size: the biggest shows", () => {
     assert.match(text(result), /Failed to check Sonarr: database is locked/);
   });
 
+  it("B2: a Sonarr answer that is not a list of series is an error reply", async () => {
+    for (const answer of [
+      "<html><body>Sign in</body></html>",
+      [series(1, "Huge", 101, 400), null],
+    ]) {
+      sonarr.restore();
+      sonarr = fakeApi(sonarrClient, () => ({ status: 200, data: answer }));
+      for (const options of [{}, { notWatchedInYears: 3 }]) {
+        const result = await run(options);
+        assert.equal(result.isError, true, JSON.stringify(answer));
+        assert.equal(
+          text(result),
+          "Failed to check Sonarr: Sonarr did not answer with a list of series",
+        );
+        assert.equal(rows(result).length, 0);
+      }
+    }
+    assert.equal(plex.calls.length, 0);
+  });
+
   it("B10: the rows are attached as structuredContent (media, append false)", async () => {
     sizeStock();
     const result: any = await run({ limit: 1 });
