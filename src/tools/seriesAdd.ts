@@ -29,6 +29,9 @@ import type { SonarrQualityProfile, SonarrRootFolder, SonarrSeries } from "../ty
 
 const GRID_SIZE = 5;
 const OVERVIEW_LENGTH = 180;
+// A title or network from Sonarr's lookup is cut to this many characters
+// where it is stored and shown (grid, preview, report).
+const TEXT_LENGTH = 200;
 // How long a preview can be confirmed after it was made.
 const PREVIEW_LIFE_MINUTES = 15;
 const PREVIEW_LIFE_MS = PREVIEW_LIFE_MINUTES * 60 * 1000;
@@ -77,6 +80,7 @@ const seasonsText = (n: number | null) =>
 const yearText = (year: unknown) => (typeof year === "number" && year > 0 ? String(year) : "N/A");
 const tvdbIdOf = (series: SonarrSeries) =>
   typeof series.tvdbId === "number" && series.tvdbId > 0 ? series.tvdbId : null;
+const titleOf = (series: SonarrSeries) => String(series.title ?? "").slice(0, TEXT_LENGTH);
 
 async function lookup(term: string): Promise<SonarrSeries[]> {
   const response = await sonarrClient.get<SonarrSeries[]>("/api/v3/series/lookup", {
@@ -109,7 +113,14 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
     // A new search makes the old numbers and any preview of them meaningless.
     clearSeriesGrid();
 
-    const results = (await lookup(query)).filter((s) => tvdbIdOf(s) !== null);
+    // One row per show: a TVDB id the lookup returns again is left out.
+    const seen = new Set<number>();
+    const results = (await lookup(query)).filter((s) => {
+      const id = tvdbIdOf(s);
+      if (id === null || seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
     if (results.length === 0) {
       return reply(`No series matched "${query}" in Sonarr's lookup.`);
     }
@@ -120,7 +131,7 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
     );
     db.transaction(() => {
       choices.forEach((series, index) => {
-        insert.run(index + 1, series.tvdbId, String(series.title ?? ""), yearText(series.year));
+        insert.run(index + 1, series.tvdbId, titleOf(series), yearText(series.year));
       });
     })();
 
@@ -130,7 +141,7 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
     output += "| Choice | Poster | Series |\n";
     output += "| :---: | :---: | :--- |\n";
     choices.forEach((series, index) => {
-      const title = escapeTableCell(String(series.title ?? "Untitled"));
+      const title = escapeTableCell(titleOf(series) || "Untitled");
       const posterUrl =
         series.remotePoster ?? series.images?.find((i) => i.coverType === "poster")?.remoteUrl;
       const poster =
@@ -145,8 +156,10 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
           ? `${overviewClean.slice(0, OVERVIEW_LENGTH)}...`
           : overviewClean;
       const facts = [
-        series.network ? escapeTableCell(series.network) : "network unknown",
-        series.status ?? "status unknown",
+        series.network
+          ? escapeTableCell(String(series.network).slice(0, TEXT_LENGTH))
+          : "network unknown",
+        series.status ? escapeTableCell(String(series.status)) : "status unknown",
         seasonsText(seasonCount(series)),
         `TVDB ID: ${series.tvdbId}`,
       ].join(" · ");
@@ -550,7 +563,10 @@ async function previewSeries(chosenIndexes: number[], options: GivenOptions, now
   const shows: ChosenShow[] = [];
   for (const index of [...new Set(chosenIndexes)]) {
     const row = find.get(index) as SeriesSelectionRow | undefined;
-    if (row) shows.push({ tvdbId: row.tvdb_id, title: row.title, year: row.year });
+    // One line per show, also if two numbers point to the same TVDB id.
+    if (row && !shows.some((s) => s.tvdbId === row.tvdb_id)) {
+      shows.push({ tvdbId: row.tvdb_id, title: row.title, year: row.year });
+    }
   }
   if (shows.length === 0) {
     return reply(

@@ -258,6 +258,54 @@ describe("search_and_select_series", () => {
     for (const i of [0, 1, 3, 4]) assert.doesNotMatch(rows[i]!, /Already in Sonarr/);
   });
 
+  it("C3: a TVDB id the lookup returns twice is one row of the grid, the first", async (t) => {
+    CATALOG.splice(7, 0, lookupSeries(601, "Quiet Valley Again", 2020));
+    t.after(() => {
+      CATALOG.splice(7, 1);
+    });
+    const result = await search("quiet valley");
+    assert.deepEqual(
+      grid().map((g) => [g.selection_index, g.tvdb_id, g.title]),
+      [
+        [1, 601, "Quiet Valley"],
+        [2, 602, "Quiet Valley Stories"],
+      ],
+    );
+    assert.doesNotMatch(text(result), /Quiet Valley Again/);
+    assert.equal((text(result).match(/TVDB ID: 601/g) ?? []).length, 1);
+  });
+
+  it("C4: title and network are cut to 200 characters where they are stored and shown, and status is escaped", async (t) => {
+    const original = CATALOG[6]!;
+    const longTitle = `Quiet Valley ${"t".repeat(300)}`;
+    CATALOG[6] = lookupSeries(601, longTitle, 2020, {
+      network: `Network ${"n".repeat(300)}`,
+      status: "continuing | ended",
+    });
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const cut = longTitle.slice(0, 200);
+    const result = await search("quiet valley");
+    assert.equal(grid()[0]!.title, cut);
+    const row = text(result)
+      .split("\n")
+      .find((l) => l.includes("Choice 1"))!;
+    assert.ok(row.includes(`**${cut} (2020)**`), row);
+    assert.ok(!row.includes(longTitle.slice(0, 201)), "the title is not longer than 200");
+    assert.ok(row.includes(`*Network ${"n".repeat(192)} · `), "the network is cut to 200");
+    assert.ok(!row.includes(`Network ${"n".repeat(193)}`));
+    assert.ok(row.includes("continuing \\| ended"), "status is escaped");
+    assert.equal(row.replace(/\\\\/g, "").replace(/\\\|/g, "").split("|").length, 5);
+
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.ok(text(preview).includes(`**${cut} (2020)**`));
+    assert.ok(!text(preview).includes(longTitle.slice(0, 201)));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.ok(text(report).includes(`**${cut} (2020)**`));
+    assert.ok(!text(report).includes(longTitle.slice(0, 201)));
+  });
+
   it("C5: it sends only GET requests", async () => {
     await search("harbour");
     await search("nothing matches this");
@@ -449,6 +497,19 @@ describe("confirm_selected_series: the preview", () => {
     assert.match(text(off), /Search: no search is started/);
     await confirmSelectedSeries({ previewId: idOf(off) });
     assert.equal((posts()[1]!.body as any).addOptions.searchForMissingEpisodes, false);
+  });
+
+  it("C12: grid numbers that point to the same TVDB id are one show in the preview, and it is posted once", async () => {
+    await search("quiet valley");
+    db.prepare(
+      "UPDATE series_selection_context SET tvdb_id = 601, title = 'Quiet Valley', year = '2020' WHERE selection_index = 2",
+    ).run();
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1, 2] });
+    assert.equal((text(preview).match(/\[TVDB: 601\]/g) ?? []).length, 1);
+    assert.match(text(preview), /Confirming adds 1 show as monitored/);
+    assert.equal(JSON.parse(previews()[0]!.payload).shows.length, 1);
+    await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
   });
 
   it("C12: a preview sends only GET requests, no POST", async () => {
