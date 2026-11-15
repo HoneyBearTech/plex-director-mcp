@@ -121,7 +121,8 @@ Outside Docker, a `.env` file in the repository root is read at start-up (`src/e
 All of these are outgoing: none of these services connect to Plex Director. URLs and credentials come from
 the settings store, except TMDb's and Anthropic's fixed addresses. Each axios client has a 10-second
 timeout. The one exception is the Tautulli library list (`get_library_media_info`) read by
-`find_series_by_size`, which may take 30 seconds, at most one such request per show library at a time.
+`find_series_by_size`, which may take 30 seconds, at most one such request per show library per call. That
+report reads each Plex show library in pages of 5,000, at most 20 pages a library.
 
 | Service | Used for | Protocol and authentication | Endpoints called |
 | --- | --- | --- | --- |
