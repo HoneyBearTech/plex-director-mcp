@@ -1,6 +1,8 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { radarrClient, sonarrClient, tmdbClient } from "../src/clients.js";
@@ -84,29 +86,76 @@ let addErrors: Record<number, FakeReply>;
 let addAnswers: Record<number, FakeReply>;
 let sonarrDown: boolean;
 
+// What the fake Sonarr answers to one request.
+function sonarrAnswer(req: RecordedRequest): FakeReply {
+  if (sonarrDown) throw new Error("connect ECONNREFUSED");
+  if (req.method === "get" && req.url === "/api/v3/series/lookup") {
+    // Like a search engine, it ignores case and differences in whitespace.
+    const words = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+    const term = words(String(req.params.term ?? ""));
+    return { data: CATALOG.filter((s) => words(s.title).includes(term)) };
+  }
+  if (req.method === "get" && req.url === "/api/v3/series") return { data: inSonarr };
+  if (req.method === "get" && req.url === "/api/v3/qualityprofile") return { data: profiles };
+  if (req.method === "get" && req.url === "/api/v3/rootfolder") return { data: roots };
+  if (req.method === "post" && req.url === "/api/v3/series") {
+    const body = req.body as { tvdbId: number; title: string };
+    const failure = addErrors[body.tvdbId];
+    if (failure) return failure;
+    // As Sonarr does: the added series, with its id.
+    const series = { id: 1000 + inSonarr.length, ...body };
+    inSonarr.push(series);
+    return addAnswers[body.tvdbId] ?? { status: 201, data: series };
+  }
+  return { status: 404 };
+}
+
 function sonarrFake() {
-  sonarr = fakeApi(sonarrClient, (req) => {
-    if (sonarrDown) throw new Error("connect ECONNREFUSED");
-    if (req.method === "get" && req.url === "/api/v3/series/lookup") {
-      // Like a search engine, it ignores case and differences in whitespace.
-      const words = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
-      const term = words(String(req.params.term ?? ""));
-      return { data: CATALOG.filter((s) => words(s.title).includes(term)) };
-    }
-    if (req.method === "get" && req.url === "/api/v3/series") return { data: inSonarr };
-    if (req.method === "get" && req.url === "/api/v3/qualityprofile") return { data: profiles };
-    if (req.method === "get" && req.url === "/api/v3/rootfolder") return { data: roots };
-    if (req.method === "post" && req.url === "/api/v3/series") {
-      const body = req.body as { tvdbId: number; title: string };
-      const failure = addErrors[body.tvdbId];
-      if (failure) return failure;
-      // As Sonarr does: the added series, with its id.
-      const series = { id: 1000 + inSonarr.length, ...body };
-      inSonarr.push(series);
-      return addAnswers[body.tvdbId] ?? { status: 201, data: series };
-    }
-    return { status: 404 };
+  sonarr = fakeApi(sonarrClient, sonarrAnswer);
+}
+
+// A real HTTP server on 127.0.0.1, for the one test that needs axios's own
+// transport (redirects). Every request it gets is kept.
+async function localServer(answer: (req: RecordedRequest) => FakeReply) {
+  const requests: RecordedRequest[] = [];
+  const httpServer = http.createServer((incoming, outgoing) => {
+    let raw = "";
+    incoming.on("data", (chunk) => {
+      raw += chunk;
+    });
+    incoming.on("end", () => {
+      const url = new URL(String(incoming.url), "http://127.0.0.1");
+      let body: unknown = raw;
+      try {
+        body = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        /* not JSON - keep the string */
+      }
+      const req: RecordedRequest = {
+        method: String(incoming.method).toLowerCase(),
+        url: url.pathname,
+        params: Object.fromEntries(url.searchParams),
+        body,
+        headers: incoming.headers as Record<string, string>,
+        limits: {},
+      };
+      requests.push(req);
+      const reply = answer(req);
+      outgoing.writeHead(reply.status ?? 200, {
+        "Content-Type": "application/json",
+        ...(reply.headers ?? {}),
+      });
+      outgoing.end(JSON.stringify(reply.data ?? {}));
+    });
   });
+  httpServer.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => httpServer.once("listening", () => resolve()));
+  const { port } = httpServer.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests,
+    close: () => new Promise<void>((resolve) => httpServer.close(() => resolve())),
+  };
 }
 
 beforeEach(async () => {
@@ -1321,6 +1370,58 @@ describe("confirm_selected_series: the confirmation", () => {
     );
     assert.match(lines[1]!, /❌ .*Quiet Valley Stories.* - failed: Series already exists/);
     assert.equal(posts().length, 2, "nothing is retried");
+  });
+
+  it("C14: a redirect from the Sonarr address is not followed: nothing reaches the host it names, and the show is reported as failed", async (t) => {
+    const elsewhere = await localServer(() => ({ status: 201, data: {} }));
+    const atSonarr = await localServer((req) =>
+      req.method === "post"
+        ? { status: 307, headers: { Location: `${elsewhere.url}/api/v3/series` } }
+        : sonarrAnswer(req),
+    );
+    const baseURL = sonarrClient.defaults.baseURL ?? "";
+    t.after(async () => {
+      sonarrClient.defaults.baseURL = baseURL;
+      await atSonarr.close();
+      await elsewhere.close();
+    });
+    // axios's own HTTP transport, to the two local servers only.
+    setSetting("SONARR_URL", atSonarr.url);
+    sonarrClient.defaults.baseURL = atSonarr.url;
+    sonarrClient.defaults.adapter = "http";
+
+    const preview = await previewOf("quiet valley", [1]);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.equal(elsewhere.requests.length, 0, "the redirect's host gets no request");
+    assert.equal(atSonarr.requests.filter((r) => r.method === "post").length, 1);
+    const line = text(result).split("\n").slice(1).filter(Boolean)[0]!;
+    assert.match(
+      line,
+      /❌ .*Quiet Valley \(2020\).* - failed: the Sonarr address answered with a redirect \(HTTP 307\); it was not followed and nothing was sent anywhere else\. Check the Sonarr URL on the Settings page\./,
+    );
+    assert.ok(!text(result).includes(elsewhere.url), "the redirect's Location is not in the reply");
+  });
+
+  it("C14: the POST is sent with maxRedirects 0, and the status rule's bounds: 299 is not a failure, 300 to 499 fail, 500 is not known", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3, 4, 5]);
+    // The suite's fake rejects only statuses from 400; lower ones come back as
+    // answers, which go through the same status rule.
+    addAnswers[501] = { status: 299, data: {} };
+    addAnswers[502] = { status: 300, data: {} };
+    addAnswers[503] = { status: 399, data: {} };
+    addAnswers[504] = { status: 499, data: [{ errorMessage: "No." }] };
+    addAnswers[505] = { status: 500, data: { message: "Internal error" } };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    for (const post of posts()) assert.equal(post.limits.maxRedirects, 0);
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /Harbour Lights \(2019\).* - outcome not known: Sonarr's answer was not the added series/,
+    );
+    assert.match(lines[1]!, /- failed: the Sonarr address answered with a redirect \(HTTP 300\)/);
+    assert.match(lines[2]!, /- failed: the Sonarr address answered with a redirect \(HTTP 399\)/);
+    assert.match(lines[3]!, /- failed: No\./);
+    assert.match(lines[4]!, /- outcome not known: Sonarr answered HTTP 500 \(Internal error\)/);
   });
 
   it("C14: a 2xx answer that is not the added series is reported as not known", async () => {

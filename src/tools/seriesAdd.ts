@@ -744,29 +744,40 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
     // Equal to what the preview stored: differences() found no change.
     const seasons = stored.shows.find((s) => s.tvdbId === show.tvdbId)?.seasons ?? [];
     // Only what is known is reported, and nothing is retried. Added: a 2xx
-    // answer that is the added series. Failed: a 4xx answer, Sonarr refusing
-    // it. Anything else (no answer, a 5xx from Sonarr or something in front of
-    // it, an answer that is not the series) may have added it.
+    // answer that is the added series. Failed: a 3xx (a redirect, which is
+    // never followed) or a 4xx answer, Sonarr refusing it. Anything else (no
+    // answer, a 5xx from Sonarr or something in front of it, an answer that is
+    // not the series) may have added it.
     const notKnown = (why: string) =>
       `  ❓ ${showLabel(show)} - outcome not known: ${why}. The show may have been added; a new search and preview will show it as already in Sonarr if it was.\n`;
+    const byStatus = (status: number, message: string) =>
+      status >= 300 && status <= 399
+        ? `  ❌ ${showLabel(show)} - failed: the Sonarr address answered with a redirect (HTTP ${status}); it was not followed and nothing was sent anywhere else. Check the Sonarr URL on the Settings page.\n`
+        : status >= 400 && status <= 499
+          ? `  ❌ ${showLabel(show)} - failed: ${message}\n`
+          : notKnown(`Sonarr answered HTTP ${status} (${message})`);
     try {
+      // maxRedirects: 0, on this request only: a redirect would repeat the
+      // POST, with its body and the API key, to a host no preview showed.
       const response = await sonarrClient.post<unknown>(
         "/api/v3/series",
         addBody(show.record as SonarrSeries, seasons, resolved),
+        { maxRedirects: 0 },
       );
-      report +=
-        isObject(response.data) && response.data.tvdbId === show.tvdbId
-          ? `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`
-          : notKnown("Sonarr's answer was not the added series");
+      if (response.status < 200 || response.status > 299) {
+        report += byStatus(response.status, "not a success answer");
+      } else {
+        report +=
+          isObject(response.data) && response.data.tvdbId === show.tvdbId
+            ? `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`
+            : notKnown("Sonarr's answer was not the added series");
+      }
     } catch (error: unknown) {
       const status = isAxiosError(error) ? error.response?.status : undefined;
-      if (status !== undefined && status >= 400 && status <= 499) {
-        report += `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`;
-      } else if (status !== undefined) {
-        report += notKnown(`Sonarr answered HTTP ${status} (${radarrErrorMessage(error)})`);
-      } else {
-        report += notKnown(`Sonarr did not answer (${getErrorMessage(error)})`);
-      }
+      report +=
+        status !== undefined
+          ? byStatus(status, radarrErrorMessage(error))
+          : notKnown(`Sonarr did not answer (${getErrorMessage(error)})`);
     }
   }
   return reply(report);
