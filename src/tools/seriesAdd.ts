@@ -64,10 +64,8 @@ const MONITOR_WORDS: Record<MonitorOption, string> = {
 // then (saved, and on the client) as well as the key saved when the reply is
 // built, so a key changed during the call is not shown when Sonarr echoes it.
 function replyFor() {
-  const keysAtStart = [
-    getSetting("SONARR_API_KEY"),
-    String(sonarrClient.defaults.headers.common["X-Api-Key"] ?? ""),
-  ];
+  const header = sonarrClient.defaults.headers.common["X-Api-Key"];
+  const keysAtStart = [getSetting("SONARR_API_KEY"), typeof header === "string" ? header : ""];
   return (text: string, isError = false) => {
     let out = text;
     for (const key of [...keysAtStart, getSetting("SONARR_API_KEY")]) {
