@@ -106,8 +106,15 @@ beforeEach(async () => {
       return { data: { MediaContainer: { Directory: SECTIONS } } };
     const m = req.url.match(/^\/library\/sections\/(\d+)\/all$/);
     if (m) {
+      // Honours the page asked for, as Plex does, and says how many the library holds.
       const items = library[m[1]!] ?? [];
-      return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
+      const start = Number(req.params["X-Plex-Container-Start"] ?? 0);
+      const size = Number(req.params["X-Plex-Container-Size"] ?? items.length);
+      return {
+        data: {
+          MediaContainer: { totalSize: items.length, Metadata: items.slice(start, start + size) },
+        },
+      };
     }
     return { status: 404 };
   });
@@ -132,6 +139,14 @@ const lines = (r: any) =>
     .split("\n")
     .filter((l) => l.startsWith("- "));
 const allCalls = () => [...sonarr.calls, ...plex.calls, ...tautulli.calls];
+const fillers = (count: number) =>
+  Array.from({ length: count }, (_, i) =>
+    plexShow(String(1000 + i), `Filler ${i}`, 9000 + i, yearsAgo(1), yearsAgo(2)),
+  );
+const pageStarts = (section: string) =>
+  plex.calls
+    .filter((c) => c.url === `/library/sections/${section}/all`)
+    .map((c) => c.params["X-Plex-Container-Start"]);
 const useTautulli = () => setSetting("TAUTULLI_URL", "http://tautulli:8181");
 
 function sizeStock() {
@@ -353,6 +368,75 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     const result = await run({ notWatchedInYears: 3 });
     assert.ok(!titles(result).includes("Both Libraries"));
     assert.doesNotMatch(text(result), /no date recorded/);
+  });
+
+  it("B4: a library of more than one page is read page by page, to the last show", async () => {
+    watchStock();
+    // The recently watched copy of Both Libraries is beyond the first page;
+    // its 4K copy was watched 4 years ago.
+    library["3"] = [...fillers(5200), ...library["3"]!];
+    library["3"][5204] = plexShow("15", "Both Libraries", 105, yearsAgo(1), yearsAgo(8));
+    const result = await run({ notWatchedInYears: 3 });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(titles(result), ["Old Favourite", "Never Started", "Forgotten"]);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+    assert.deepEqual(pageStarts("4"), [0]);
+    for (const call of plex.calls.filter((c) => /\/all$/.test(c.url)))
+      assert.equal(call.params["X-Plex-Container-Size"], 5000);
+
+    // With no totalSize, the read stops at the first page shorter than asked for.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      return { data: { MediaContainer: { Metadata: items.slice(start, start + 5000) } } };
+    };
+    plex.calls.length = 0;
+    const noTotal = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(noTotal), ["Old Favourite", "Never Started", "Forgotten"]);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+  });
+
+  it("B4: a library that can't be read to its end is an error reply, never a list from part of it", async () => {
+    watchStock();
+    library["3"] = [...fillers(5200), ...library["3"]!];
+    // Plex says 5205 shows, but its second page is empty.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      const page = start >= 5000 ? [] : items.slice(start, start + 5000);
+      return { data: { MediaContainer: { totalSize: items.length, Metadata: page } } };
+    };
+    const result = await run({ notWatchedInYears: 3 });
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /Plex could not be read completely.*the library "TV Shows" gave 5000 of the 5205 shows it holds/,
+    );
+    assert.equal(rows(result).length, 0);
+
+    // A total that is never reached is given up on after a bounded number of pages.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      return {
+        data: {
+          MediaContainer: {
+            totalSize: 1_000_000_000,
+            Metadata: [plexShow(String(start), `Show ${start}`, null, null, yearsAgo(9))],
+          },
+        },
+      };
+    };
+    plex.calls.length = 0;
+    const endless = await run({ notWatchedInYears: 3 });
+    assert.equal(endless.isError, true);
+    assert.match(text(endless), /Plex could not be read completely.*was not read to its end/);
+    assert.ok(pageStarts("3").length <= 200);
   });
 
   it("B4, B8: a show watched with no date anywhere can't be judged: left out and counted", async () => {

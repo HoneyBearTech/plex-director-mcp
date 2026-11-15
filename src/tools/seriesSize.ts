@@ -42,9 +42,11 @@ const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 200;
 const DAY_MS = 86_400_000;
 const GB = 1e9;
-// Plex and Tautulli are each asked for a whole library in one go; libraries
-// here are well under this.
+// Plex is read a page of this many at a time; Tautulli is asked for a whole
+// library in one page of at least this length.
 const FETCH_ALL = 5000;
+// Pages read from one Plex library at most (a million shows at full pages).
+const MAX_PLEX_PAGES = 200;
 // Tautulli builds this list from its own cache and can be slow on a big
 // library, so this one call may take longer than the clients' usual 10 seconds.
 const TAUTULLI_MEDIA_INFO_TIMEOUT_MS = 30_000;
@@ -92,6 +94,41 @@ type LibraryAnswer =
   | { usable: true; rows: Map<string, TautulliMediaInfoRow> }
   | { usable: false; why: string };
 
+// Plex answered, but not with the whole of a library.
+class PlexIncomplete extends Error {}
+
+// Every show of one library, page by page, until Plex's totalSize is reached
+// (or, when Plex gives no total, until a page comes back short). A list built
+// from part of a library is never returned.
+async function readPlexLibrary(section: PlexSection): Promise<PlexMetadata[]> {
+  const items: PlexMetadata[] = [];
+  for (let page = 0; page < MAX_PLEX_PAGES; page++) {
+    const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
+      params: {
+        includeGuids: 1,
+        "X-Plex-Container-Start": items.length,
+        "X-Plex-Container-Size": FETCH_ALL,
+      },
+    });
+    const container = response.data?.MediaContainer;
+    const got = container?.Metadata ?? [];
+    items.push(...got);
+    const total = container?.totalSize;
+    if (typeof total !== "number" || !Number.isFinite(total)) {
+      if (got.length < FETCH_ALL) return items;
+      continue;
+    }
+    if (items.length >= total) return items;
+    if (got.length === 0)
+      throw new PlexIncomplete(
+        `the library "${section.title}" gave ${items.length} of the ${total} shows it holds`,
+      );
+  }
+  throw new PlexIncomplete(
+    `the library "${section.title}" was not read to its end within ${MAX_PLEX_PAGES} pages`,
+  );
+}
+
 // Every show in every Plex show library, the ones left out of searches by the
 // "libraries to skip" setting included: a clean-up report is about all of them.
 async function readPlexShows(): Promise<{
@@ -102,16 +139,7 @@ async function readPlexShows(): Promise<{
 }> {
   const sections = await getSections(["show"]);
   const perSection = await Promise.all(
-    sections.map(async (section) => {
-      const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
-        params: {
-          includeGuids: 1,
-          "X-Plex-Container-Start": 0,
-          "X-Plex-Container-Size": FETCH_ALL,
-        },
-      });
-      return { section, items: response.data?.MediaContainer?.Metadata ?? [] };
-    }),
+    sections.map(async (section) => ({ section, items: await readPlexLibrary(section) })),
   );
   // One entry per show, however many libraries hold it (as search_plex_library groups them).
   const byKey = new Map<string, PlexShow>();
@@ -266,6 +294,12 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
   try {
     ({ sections, shows: plexShows, counts: plexCounts } = await readPlexShows());
   } catch (error: unknown) {
+    if (error instanceof PlexIncomplete) {
+      return textReply(
+        `Plex could not be read completely, so what has been watched can't be checked: ${error.message}. No list is built from part of a library.`,
+        true,
+      );
+    }
     return textReply(
       `Plex could not be read, so what has been watched can't be checked: ${getErrorMessage(error)}. This is a failure to reach Plex, not a result of "no shows".`,
       true,
