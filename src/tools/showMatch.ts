@@ -7,14 +7,26 @@ import type { SonarrSeries } from "../types/sonarr.js";
 // matched by title and year instead. Nothing is guessed beyond that: a show
 // that matches neither way is reported as not matched.
 
-// Lowercase, no accents, "&" as "and", punctuation as spaces.
+// What is folded: symbols become spaces before anything else, so "™" and "№"
+// do not turn into letters; case; "&" as "and"; punctuation as spaces; width
+// and compatibility forms (full-width ＡＢＣ and ２, half-width katakana, the ﬁ
+// ligature); superscripts and fractions fold to their digits ("²" is "2", "½"
+// is "1 2"); optional marks on Latin, Greek, Hebrew and Arabic letters
+// (Pokémon = Pokemon, Greek tonos, Hebrew points, Arabic vowel marks, hamza and
+// madda, so أ and ا fold together); and a mark that follows no letter. What is
+// not: marks in other scripts are kept, composed where possible, because they
+// separate letters (Japanese か and が, Cyrillic й and и, Devanagari and Thai
+// signs). Known limits: Cyrillic ё and е stay different, "ß" is not "ss".
 export function foldShowTitle(title: string): string {
   return title
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
+    .replace(/\p{S}+/gu, " ")
+    .normalize("NFKD")
+    .replace(/([\p{Script=Latin}\p{Script=Greek}\p{Script=Hebrew}\p{Script=Arabic}])\p{M}+/gu, "$1")
+    .replace(/(^|[^\p{L}\p{M}])\p{M}+/gu, "$1")
+    .normalize("NFC")
     .toLowerCase()
     .replace(/&/g, " and ")
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, " ")
     .trim();
 }
 
@@ -55,7 +67,8 @@ export function indexSonarrSeries(all: SonarrSeries[]): SonarrShowIndex {
 }
 
 // The Sonarr series for one Plex show, given every library copy of it; null
-// when Sonarr doesn't have it. A show with a TVDB id is matched by that id
+// when Sonarr doesn't have it, when its title and year match more than one
+// series, or when the Sonarr series has no TVDB id while the Plex show has one. A show with a TVDB id is matched by that id
 // alone: its title is not tried, because a different show can share a title.
 export function matchShowToSonarr(
   copies: PlexMetadata[],

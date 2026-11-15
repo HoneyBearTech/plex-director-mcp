@@ -4,7 +4,12 @@ import { afterEach, beforeEach, describe, it } from "node:test";
 import { plexClient, sonarrClient } from "../src/clients.js";
 import { searchPlexLibrary } from "../src/tools/plex.js";
 import { movieTools } from "../src/tools/movies.js";
-import { indexSonarrSeries, matchShowToSonarr, tvdbIdsOf } from "../src/tools/showMatch.js";
+import {
+  foldShowTitle,
+  indexSonarrSeries,
+  matchShowToSonarr,
+  tvdbIdsOf,
+} from "../src/tools/showMatch.js";
 import { setSetting } from "../src/settings.js";
 import { fakeApi, resetDb, type FakeReply, type RecordedRequest } from "./helpers.js";
 
@@ -186,7 +191,10 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     allSeries = [series(1, "Amelie and Friends", 2019, 555, "ended")];
     const result = await searchPlexLibrary({ showStatus: "ended" });
     assert.deepEqual(titles(result), ["Amélie & Friends"]);
-    assert.match(text(result), /1 show that matched the other filters is not in Sonarr/);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
   });
 
   it("S3: a show with a TVDB id is not matched by title when Sonarr has another id for that title", async () => {
@@ -194,7 +202,10 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     allSeries = [series(1, "Kingdom", 2019, 222, "ended")];
     const result = await searchPlexLibrary({ showStatus: "ended" });
     assert.deepEqual(titles(result), []);
-    assert.match(text(result), /1 show that matched the other filters is not in Sonarr/);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
   });
 
   it("S3: the matching is exported from showMatch for other tools", () => {
@@ -212,6 +223,124 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     assert.equal(matchShowToSonarr([show("Twin", 2000, null)], index), null);
   });
 
+  it("S3: two different non-Latin titles that share only digits and the year do not match each other", async () => {
+    library["3"] = [show("大阪 2", 2025, null)];
+    allSeries = [series(1, "東京 2", 2025, 555, "ended")];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result), []);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
+    assert.equal(
+      matchShowToSonarr([show("大阪 2", 2025, null)], indexSonarrSeries(allSeries)),
+      null,
+    );
+  });
+
+  it("S3: a show with a wholly Japanese or Cyrillic title and no TVDB id matches the Sonarr series of that title and year", async () => {
+    library["3"] = [show("進撃の巨人", 2013, null), show("Игра в кальмара", 2021, null)];
+    allSeries = [
+      series(1, "進撃の巨人", 2013, 555, "ended"),
+      series(2, "Игра в кальмара", 2021, 556, "ended"),
+    ];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result).sort(), ["Игра в кальмара", "進撃の巨人"].sort());
+    assert.doesNotMatch(text(result), /could not be matched/);
+  });
+
+  it("S3: marks that separate letters outside Latin are kept (か is not が, й is not и)", async () => {
+    library["3"] = [show("がく", 2020, null), show("Война", 2020, null)];
+    allSeries = [series(1, "かく", 2020, 1, "ended"), series(2, "Воина", 2020, 2, "ended")];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result), []);
+  });
+
+  it("S3: vowel signs and tone marks that do not compose are kept (Devanagari, Thai)", async () => {
+    // कि and की differ only in the vowel sign.
+    library["3"] = [show("कि", 2020, null), show("สวัสดี", 2021, null)];
+    allSeries = [series(1, "की", 2020, 1, "ended"), series(2, "สวัสดี", 2021, 2, "ended")];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result), ["สวัสดี"]);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
+    assert.equal(foldShowTitle("हिंदी"), "हिंदी");
+    assert.equal(foldShowTitle("สวัสดี"), "สวัสดี");
+  });
+
+  it("S3: marks that follow no letter, and width and compatibility forms, fold away", () => {
+    const same: [string, string][] = [
+      ["I ❤️ Tokyo", "I ❤ Tokyo"],
+      ["1️⃣ Day", "1 Day"],
+      ["進撃の巨人２", "進撃の巨人2"],
+      ["ｶﾞﾝﾀﾞﾑ", "ガンダム"],
+      ["ＡＢＣ", "ABC"],
+      ["ﬁnal", "final"],
+      ["Tom ＆ Jerry", "Tom and Jerry"],
+    ];
+    for (const [a, b] of same) assert.equal(foldShowTitle(a), foldShowTitle(b), `${a} / ${b}`);
+  });
+
+  it("S3: optional marks fold in Greek, Arabic and Hebrew", () => {
+    assert.equal(foldShowTitle("Η Λάμψη"), foldShowTitle("Η Λαμψη"));
+    assert.equal(foldShowTitle("Η Λάμψη"), foldShowTitle("Η ΛΑΜΨΗ"));
+    assert.equal(foldShowTitle("مُسَلْسَل"), foldShowTitle("مسلسل"));
+    assert.equal(foldShowTitle("שָׁלוֹם"), foldShowTitle("שלום"));
+  });
+
+  it("S3: titles that must stay different stay different", () => {
+    const diff: [string, string][] = [
+      ["か", "が"],
+      ["कि", "की"],
+      ["й", "и"],
+      ["สวัสดี", "สวัสดู"],
+      ["大阪 2", "東京 2"],
+    ];
+    for (const [a, b] of diff) assert.notEqual(foldShowTitle(a), foldShowTitle(b), `${a} / ${b}`);
+  });
+
+  it("S3: Latin titles with a symbol or a digit still match", () => {
+    assert.equal(foldShowTitle("Pokémon ★ Ash"), foldShowTitle("pokemon ash"));
+    assert.equal(foldShowTitle("Café 2"), foldShowTitle("cafe 2"));
+    assert.equal(foldShowTitle("MasterChef™"), foldShowTitle("MasterChef"));
+    assert.equal(foldShowTitle("Brand™ Show"), foldShowTitle("Brand Show"));
+    assert.equal(foldShowTitle("Show №1"), foldShowTitle("Show 1"));
+    assert.equal(foldShowTitle("Café ℃"), foldShowTitle("Cafe"));
+    assert.notEqual(foldShowTitle("Café 2"), foldShowTitle("cafe 3"));
+  });
+
+  it("S3: Latin folding is unchanged: accents, '&' and 'and', punctuation, case", () => {
+    const index = indexSonarrSeries([series(1, "Pokemon Ash and Co", 1997, 9, "ended")] as any);
+    for (const title of ["Pokémon: Ash & Co.", "POKEMON ASH AND CO", "pokemon - ash and co!"])
+      assert.equal(matchShowToSonarr([show(title, 1997, null)], index)?.id, 1, title);
+    assert.equal(matchShowToSonarr([show("Pokemon Ash Co", 1997, null)], index), null);
+  });
+
+  it("S3: two Sonarr series with the same folded title and year: the show is left out and the note says it could not be matched", async () => {
+    library["3"] = [show("Twin", 2000, null)];
+    allSeries = [series(1, "Twin", 2000, 0, "ended"), series(2, "TWIN!", 2000, 0, "ended")];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result), []);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series, so its status is unknown and it was left out\./,
+    );
+    assert.doesNotMatch(text(result), /not in Sonarr/);
+  });
+
+  it("S3: a Sonarr series with no tvdbId while the Plex show has one: left out, same note", async () => {
+    library["3"] = [show("Kingdom", 2019, 111)];
+    allSeries = [{ id: 1, title: "Kingdom", year: 2019, status: "ended" }];
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.deepEqual(titles(result), []);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
+  });
+
   it("S4: only shows with that status are returned; shows Sonarr doesn't have are left out and counted", async () => {
     stockShows();
     library["3"]!.push(show("Not In Sonarr", 2020, 900), show("Also Missing", 2021, 901));
@@ -219,7 +348,7 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     assert.deepEqual(titles(continuing), ["Alpha", "Charlie", "Echo"]);
     assert.match(
       text(continuing),
-      /2 shows that matched the other filters are not in Sonarr, so their status is unknown and they were left out\./,
+      /2 shows that matched the other filters could not be matched to a Sonarr series, so their status is unknown and they were left out\./,
     );
     assert.deepEqual(titles(await searchPlexLibrary({ showStatus: "ended" })), ["Bravo"]);
     assert.deepEqual(titles(await searchPlexLibrary({ showStatus: "upcoming" })), ["Delta"]);
@@ -233,11 +362,14 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     );
     const narrowed = await searchPlexLibrary({ showStatus: "continuing", yearFrom: 2015 });
     assert.deepEqual(titles(narrowed), ["Echo"]);
-    assert.match(text(narrowed), /1 show that matched the other filters is not in Sonarr/);
+    assert.match(
+      text(narrowed),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
 
     library["3"] = library["3"]!.slice(0, 5);
     const all = await searchPlexLibrary({ showStatus: "continuing" });
-    assert.doesNotMatch(text(all), /not in Sonarr/);
+    assert.doesNotMatch(text(all), /could not be matched to a Sonarr series/);
   });
 
   it("S4: when nothing has the status, the reply still says how many shows Sonarr doesn't have", async () => {
@@ -246,7 +378,10 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     const result = await searchPlexLibrary({ showStatus: "ended" });
     assert.notEqual(result.isError, true);
     assert.match(text(result), /No shows in Plex match show status "ended" in Sonarr\./);
-    assert.match(text(result), /1 show that matched the other filters is not in Sonarr/);
+    assert.match(
+      text(result),
+      /1 show that matched the other filters could not be matched to a Sonarr series/,
+    );
   });
 
   it("S5: the filter runs before sorting and paging: total, limit and offset count the filtered set", async () => {
@@ -260,6 +395,17 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     assert.match(text(second), /3 matching shows, listed 3-3\./);
     const past = await searchPlexLibrary({ showStatus: "continuing", offset: 3 });
     assert.match(text(past), /Offset 3 is past the end: there are only 3 matching shows/);
+  });
+
+  it("S5: an offset past the end still carries the note about shows left out", async () => {
+    stockShows();
+    library["3"]!.push(show("Not In Sonarr", 2020, 900));
+    const past = await searchPlexLibrary({ showStatus: "continuing", offset: 3 });
+    assert.match(text(past), /Offset 3 is past the end: there are only 3 matching shows/);
+    assert.match(
+      text(past),
+      /1 show that matched the other filters could not be matched to a Sonarr series, so its status is unknown and it was left out\./,
+    );
   });
 
   it("S6: each listed show's line and its row's detail carry the status", async () => {
@@ -285,6 +431,31 @@ describe("search_plex_library: showStatus (from Sonarr)", () => {
     assert.match(text(result), /database is locked/);
     assert.doesNotMatch(text(result), /No shows in Plex match/);
     assert.equal(rows(result).length, 0);
+  });
+
+  it("S7: Sonarr answering 200 with a non-array body is 'could not be read', never 'no shows match'", async () => {
+    stockShows();
+    sonarrReply = () => ({ data: "<html><body>Sign in</body></html>" });
+    const result = await searchPlexLibrary({ showStatus: "ended" });
+    assert.equal(result.isError, true);
+    assert.match(text(result), /Sonarr could not be read/);
+    assert.doesNotMatch(text(result), /No shows in Plex match/);
+    assert.equal(rows(result).length, 0);
+  });
+
+  it("S7: Sonarr answering with an array of strings or containing null is 'could not be read'", async () => {
+    for (const body of [["x", "y"], [null], [{ id: 1 }, null]]) {
+      stockShows();
+      sonarrReply = () => ({ data: body });
+      const result = await searchPlexLibrary({ showStatus: "ended" });
+      assert.equal(result.isError, true, JSON.stringify(body));
+      assert.match(
+        text(result),
+        /Sonarr could not be read, so show status can't be checked: Sonarr did not answer with a list of series\./,
+      );
+      assert.match(text(result), /failure to reach or read Sonarr/);
+      assert.equal(rows(result).length, 0);
+    }
   });
 
   it("S7: Sonarr unreachable is 'could not be read' too", async () => {
