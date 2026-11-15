@@ -663,6 +663,23 @@ describe("confirm_selected_series: the preview", () => {
     );
   });
 
+  it("C12: Sonarr unreachable at preview stores nothing, and an earlier preview stays as it was", async () => {
+    const earlier = await previewOf("quiet valley", [1]);
+    const before = previews();
+    sonarrDown = true;
+    const result = await confirmSelectedSeries({ chosenIndexes: [2] });
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /Sonarr could not be read, so nothing was added: connect ECONNREFUSED/,
+    );
+    assert.doesNotMatch(text(result), /previewId "|used up/);
+    assert.deepEqual(previews(), before);
+    sonarrDown = false;
+    await confirmSelectedSeries({ previewId: idOf(earlier) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
   it("C12: a preview that finishes after a newer search is not stored, does not replace the newer preview, and adds nothing", async () => {
     await search("quiet valley");
     const release = holdNext((config) => config.url === "/api/v3/qualityprofile");
@@ -835,6 +852,21 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(sonarr.calls.length, before, "nothing is sent to Sonarr");
     assert.deepEqual(previews(), [], "the expired preview is removed");
     assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C13: two confirmations of the same id started at the same moment add once", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    const id = idOf(preview);
+    const results = await Promise.all([
+      confirmSelectedSeries({ previewId: id }),
+      confirmSelectedSeries({ previewId: id }),
+    ]);
+    assert.deepEqual(added(), ["Quiet Valley", "Quiet Valley Stories"]);
+    assert.deepEqual(
+      results.map((r) => r.isError === true),
+      [false, true],
+    );
+    assert.match(text(results[1]!), /not the current preview/);
   });
 
   it("C13: a setting changed after the preview adds nothing and returns a new preview that says what differs", async () => {
