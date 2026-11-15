@@ -64,10 +64,10 @@ function redact(text: string): string {
 }
 const reply = (text: string, isError = false) => textReply(redact(text), isError);
 
+const countSeasons = (seasons: Array<{ seasonNumber?: number | undefined }>) =>
+  seasons.filter((s) => Number(s.seasonNumber) > 0).length;
 const seasonCount = (series: SonarrSeries): number | null =>
-  Array.isArray(series.seasons)
-    ? series.seasons.filter((s) => Number(s.seasonNumber) > 0).length
-    : null;
+  Array.isArray(series.seasons) ? countSeasons(series.seasons) : null;
 const seasonsText = (n: number | null) =>
   n === null ? "seasons unknown" : `${n} season${n === 1 ? "" : "s"}`;
 const yearText = (year: unknown) => (typeof year === "number" && year > 0 ? String(year) : "N/A");
@@ -181,13 +181,28 @@ interface ChosenShow {
 
 type Decision = "add" | "exists";
 
+// A season as it is posted to Sonarr: its number and whether it is monitored,
+// as Sonarr's lookup gave them, nothing else.
+interface AddSeason {
+  seasonNumber: number | undefined;
+  monitored: boolean | undefined;
+}
+
 // A chosen show with its decision. record is Sonarr's lookup record for a show
-// to add; it is posted back whole, so it is kept as Sonarr sent it.
+// to add, and seasons are its seasons as they would be posted; both are null
+// for a show already in Sonarr. seasonCount is what the preview shows.
 interface DecidedShow extends ChosenShow {
   decision: Decision;
-  seasons: number | null;
+  seasonCount: number | null;
+  seasons: AddSeason[] | null;
   record: SonarrSeries | null;
 }
+
+const addSeasons = (record: SonarrSeries): AddSeason[] =>
+  (Array.isArray(record.seasons) ? record.seasons : []).map((s) => ({
+    seasonNumber: s.seasonNumber,
+    monitored: s.monitored,
+  }));
 
 interface Resolution {
   resolved: Resolved;
@@ -210,7 +225,7 @@ interface StoredPreview {
   given: GivenOptions & { chosenIndexes?: number[] | undefined };
   sonarrUrl: string;
   resolved: Resolved;
-  shows: (ChosenShow & { decision: Decision })[];
+  shows: (ChosenShow & { decision: Decision; seasons: AddSeason[] | null })[];
 }
 
 const sameFolder = (a: string, b: string) => a.replace(/\/+$/, "") === b.replace(/\/+$/, "");
@@ -284,7 +299,13 @@ async function resolveAdd(
   for (const show of shows) {
     const existing = owned.get(show.tvdbId);
     if (existing) {
-      decided.push({ ...show, decision: "exists", seasons: seasonCount(existing), record: null });
+      decided.push({
+        ...show,
+        decision: "exists",
+        seasonCount: seasonCount(existing),
+        seasons: null,
+        record: null,
+      });
       continue;
     }
     const record = await lookupRecord(show);
@@ -293,7 +314,14 @@ async function resolveAdd(
         error: `❌ Sonarr's lookup no longer returns ${show.title} (TVDB id ${show.tvdbId}), so it can't be added. Run search_and_select_series again.`,
       };
     }
-    decided.push({ ...show, decision: "add", seasons: seasonCount(record), record });
+    const seasons = addSeasons(record);
+    decided.push({
+      ...show,
+      decision: "add",
+      seasonCount: Array.isArray(record.seasons) ? countSeasons(seasons) : null,
+      seasons,
+      record,
+    });
   }
 
   return {
@@ -342,11 +370,12 @@ function storePreview(given: StoredPreview["given"], resolution: Resolution): st
     given,
     sonarrUrl: getSetting("SONARR_URL"),
     resolved: resolution.resolved,
-    shows: resolution.shows.map(({ tvdbId, title, year, decision }) => ({
+    shows: resolution.shows.map(({ tvdbId, title, year, decision, seasons }) => ({
       tvdbId,
       title,
       year,
       decision,
+      seasons,
     })),
   };
   db.transaction(() => {
@@ -360,7 +389,7 @@ function storePreview(given: StoredPreview["given"], resolution: Resolution): st
   const adding = resolution.shows.filter((s) => s.decision === "add").length;
   let output = "## Preview: adding series to Sonarr (nothing has been added yet)\n";
   for (const show of resolution.shows) {
-    output += `- ${showLabel(show)}, ${seasonsText(show.seasons)}: ${show.decision === "add" ? "will be added" : "already in Sonarr, will not be added"}\n`;
+    output += `- ${showLabel(show)}, ${seasonsText(show.seasonCount)}: ${show.decision === "add" ? "will be added" : "already in Sonarr, will not be added"}\n`;
   }
   output += `\nSettings that will be used:\n${settingsLines(resolution.resolved)}\n\n`;
   output +=
@@ -394,7 +423,11 @@ function differences(stored: StoredPreview, now: Resolution): string[] {
     );
   for (const before of stored.shows) {
     const after = now.shows.find((s) => s.tvdbId === before.tvdbId);
-    if (!after || after.decision === before.decision) continue;
+    if (!after) continue;
+    if (after.decision === before.decision) {
+      out.push(...seasonDifferences(before.title, before.seasons, after.seasons));
+      continue;
+    }
     out.push(
       after.decision === "exists"
         ? `${before.title} is now already in Sonarr (the preview showed it would be added)`
@@ -402,6 +435,68 @@ function differences(stored: StoredPreview, now: Resolution): string[] {
     );
   }
   return out;
+}
+
+const sameSeasons = (a: AddSeason[] | null, b: AddSeason[] | null) =>
+  JSON.stringify(a) === JSON.stringify(b);
+
+// What differs between the seasons a preview stored for a show and the ones
+// Sonarr's lookup gives now.
+function seasonDifferences(
+  title: string,
+  before: AddSeason[] | null,
+  after: AddSeason[] | null,
+): string[] {
+  if (sameSeasons(before, after)) return [];
+  const was = before ?? [];
+  const is = after ?? [];
+  if (countSeasons(was) !== countSeasons(is)) {
+    return [
+      `${title} now has ${seasonsText(countSeasons(is))} (the preview showed ${countSeasons(was)})`,
+    ];
+  }
+  const numbers = (list: AddSeason[]) => list.map((s) => s.seasonNumber).join(", ");
+  if (numbers(was) !== numbers(is)) {
+    return [`${title}'s seasons are now ${numbers(is)} (the preview showed ${numbers(was)})`];
+  }
+  const state = (monitored: boolean | undefined) =>
+    monitored === true
+      ? "monitored"
+      : monitored === false
+        ? "not monitored"
+        : "without a monitored flag";
+  const flags = is.flatMap((season, i) =>
+    season.monitored === was[i]?.monitored
+      ? []
+      : [
+          `season ${season.seasonNumber} of ${title} is now ${state(season.monitored)} in Sonarr's lookup (the preview showed it ${state(was[i]?.monitored)})`,
+        ],
+  );
+  return flags.length > 0 ? flags : [`the seasons of ${title} have changed`];
+}
+
+// The body of POST /api/v3/series: a fixed list of fields, nothing else from
+// the lookup record (no path, id, tags or other fields Sonarr sent). The
+// seasons are the ones the preview stored.
+function addBody(record: SonarrSeries, seasons: AddSeason[], resolved: Resolved) {
+  return {
+    tvdbId: record.tvdbId,
+    title: record.title,
+    titleSlug: record.titleSlug,
+    year: record.year,
+    images: record.images,
+    seasons,
+    qualityProfileId: resolved.qualityProfileId,
+    rootFolderPath: resolved.rootFolder,
+    monitored: true,
+    seasonFolder: true,
+    seriesType: resolved.seriesType,
+    addOptions: {
+      monitor: resolved.monitor,
+      searchForMissingEpisodes: resolved.searchForMissing,
+      searchForCutoffUnmetEpisodes: false,
+    },
+  };
 }
 
 const PREVIEW_AGAIN =
@@ -508,20 +603,13 @@ async function confirmPreview(previewId: string) {
       report += `  ⏭️ ${showLabel(show)} - already in Sonarr; not added.\n`;
       continue;
     }
+    // Equal to what the preview stored: differences() found no change.
+    const seasons = stored.shows.find((s) => s.tvdbId === show.tvdbId)?.seasons ?? [];
     try {
-      await sonarrClient.post("/api/v3/series", {
-        ...show.record,
-        qualityProfileId: resolved.qualityProfileId,
-        rootFolderPath: resolved.rootFolder,
-        monitored: true,
-        seasonFolder: true,
-        seriesType: resolved.seriesType,
-        addOptions: {
-          monitor: resolved.monitor,
-          searchForMissingEpisodes: resolved.searchForMissing,
-          searchForCutoffUnmetEpisodes: false,
-        },
-      });
+      await sonarrClient.post(
+        "/api/v3/series",
+        addBody(show.record as SonarrSeries, seasons, resolved),
+      );
       report += `  ✅ ${showLabel(show)} - added${resolved.searchForMissing ? "; search for its monitored episodes started" : ""}.\n`;
     } catch (error: unknown) {
       report += `  ❌ ${showLabel(show)} - failed: ${radarrErrorMessage(error)}\n`;

@@ -50,7 +50,11 @@ const lookupSeries = (
   images: [
     { coverType: "poster", remoteUrl: `https://artworks.example.org/posters/${tvdbId}.jpg` },
   ],
-  seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+  seasons: [
+    { seasonNumber: 0, monitored: false },
+    { seasonNumber: 1, monitored: true },
+    { seasonNumber: 2, monitored: true },
+  ],
   titleSlug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
   ...extra,
 });
@@ -58,7 +62,9 @@ const lookupSeries = (
 // What Sonarr's lookup knows.
 const CATALOG = [
   lookupSeries(501, "Harbour Lights", 2019),
-  lookupSeries(502, "Harbour Lights: Origins", 2021, { seasons: [{ seasonNumber: 1 }] }),
+  lookupSeries(502, "Harbour Lights: Origins", 2021, {
+    seasons: [{ seasonNumber: 1, monitored: true }],
+  }),
   lookupSeries(503, "Harbour Nights", 2008, { status: "ended", network: "Network Two" }),
   lookupSeries(504, "The Harbour", 1999),
   lookupSeries(505, "Harbour Patrol", 2015),
@@ -495,9 +501,20 @@ describe("confirm_selected_series: the preview", () => {
         searchForMissing: false,
       },
       // By TVDB id and title, not by grid number.
+      // A show to add carries its seasons as they would be posted.
       shows: [
-        { tvdbId: 501, title: "Harbour Lights", year: "2019", decision: "add" },
-        { tvdbId: 503, title: "Harbour Nights", year: "2008", decision: "exists" },
+        {
+          tvdbId: 501,
+          title: "Harbour Lights",
+          year: "2019",
+          decision: "add",
+          seasons: [
+            { seasonNumber: 0, monitored: false },
+            { seasonNumber: 1, monitored: true },
+            { seasonNumber: 2, monitored: true },
+          ],
+        },
+        { tvdbId: 503, title: "Harbour Nights", year: "2008", decision: "exists", seasons: null },
       ],
     });
   });
@@ -730,6 +747,52 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.notEqual(idOf(result), idOf(preview));
   });
 
+  it("C13: a season added to the show between preview and confirmation adds nothing and returns a new preview", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    assert.match(text(preview), /\[TVDB: 601\], 2 seasons: will be added/);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2020, {
+      seasons: [...original.seasons, { seasonNumber: 3, monitored: true }],
+    });
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.match(text(result), /Quiet Valley now has 3 seasons \(the preview showed 2\)/);
+    assert.match(text(result), /\[TVDB: 601\], 3 seasons: will be added/);
+
+    // The new preview adds the seasons it showed.
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.deepEqual(
+      (posts()[0]!.body as any).seasons.map((s: any) => s.seasonNumber),
+      [0, 1, 2, 3],
+    );
+  });
+
+  it("C13: a season's monitored flag changed between preview and confirmation adds nothing and returns a new preview", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2020, {
+      seasons: [
+        { seasonNumber: 0, monitored: false },
+        { seasonNumber: 1, monitored: false },
+        { seasonNumber: 2, monitored: true },
+      ],
+    });
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(
+      text(result),
+      /season 1 of Quiet Valley is now not monitored in Sonarr's lookup \(the preview showed it monitored\)/,
+    );
+    assert.notEqual(idOf(result), idOf(preview));
+  });
+
   it("C13: when what the preview showed can no longer be resolved, nothing is added", async () => {
     const preview = await previewOf("quiet valley", [1], { qualityProfile: "Anime" });
     profiles = PROFILES.slice(0, 2);
@@ -744,7 +807,30 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.deepEqual(previews(), []);
   });
 
-  it("C14: on a match, Sonarr's own lookup record for the TVDB id is posted with the resolved settings", async () => {
+  it("C14: on a match, a fixed list of fields from Sonarr's lookup record is posted with the resolved settings, nothing else", async (t) => {
+    const original = CATALOG[2]!;
+    // A lookup record carrying fields that must not go back to Sonarr.
+    CATALOG[2] = lookupSeries(503, "Harbour Nights", 2008, {
+      status: "ended",
+      network: "Network Two",
+      path: "/somewhere/else/Harbour Nights",
+      id: 77,
+      tags: [3, 4],
+      languageProfileId: 1,
+      qualityProfileId: 99,
+      rootFolderPath: "/elsewhere",
+      monitored: false,
+      added: "2020-01-01T00:00:00Z",
+      statistics: { seasonCount: 2 },
+      seasons: [
+        { seasonNumber: 0, monitored: false, statistics: { episodeCount: 3 } },
+        { seasonNumber: 1, monitored: true, images: [] },
+        { seasonNumber: 2, monitored: false },
+      ],
+    });
+    t.after(() => {
+      CATALOG[2] = original;
+    });
     const preview = await previewOf("harbour", [3], {
       qualityProfile: "WEB-2160p",
       rootFolder: "/media/tvshowskids",
@@ -756,8 +842,18 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(posts().length, 1);
     assert.equal(posts()[0]!.url, "/api/v3/series");
     assert.deepEqual(posts()[0]!.body, {
-      // The lookup record, whole.
-      ...CATALOG[2],
+      tvdbId: 503,
+      title: "Harbour Nights",
+      titleSlug: "harbour-nights",
+      year: 2008,
+      images: [
+        { coverType: "poster", remoteUrl: "https://artworks.example.org/posters/503.jpg" },
+      ],
+      seasons: [
+        { seasonNumber: 0, monitored: false },
+        { seasonNumber: 1, monitored: true },
+        { seasonNumber: 2, monitored: false },
+      ],
       qualityProfileId: 6,
       rootFolderPath: "/media/tvshowskids/",
       monitored: true,

@@ -11,6 +11,7 @@ export interface SonarrImage {
 export interface SonarrSeason {
   // 0 is "Specials".
   seasonNumber?: number;
+  monitored?: boolean;
 }
 
 export interface SonarrRootFolder {
@@ -22,6 +23,8 @@ export interface SonarrSeries {
   // The show's id at TheTVDB, which Plex also records for a matched show.
   tvdbId?: number;
   title?: string;
+  // Sonarr's url-safe form of the title, on /series/lookup results too.
+  titleSlug?: string;
   year?: number;
   monitored?: boolean;
   // "continuing", "ended", "upcoming" or "deleted".
