@@ -71,14 +71,27 @@ export interface SelectionRow {
 
 // The last search_and_select_series grid. Kept apart from the movie grid above,
 // so a movie search never changes which shows the numbers mean, and the other
-// way round.
+// way round. Each grid number exists once (selection_index is the key), and
+// every row of one grid carries the same generation, a random id written with
+// it: a preview is only stored while the grid it was worked out from is still
+// the current one.
+//
+// The table's first shape (an id key, no generation) may still be in a
+// development database. The table only ever holds the last grid, so a table in
+// that shape is dropped and made again; nothing of value is lost.
+const seriesGridColumns = db.pragma("table_info(series_selection_context)") as Array<{
+  name: string;
+}>;
+if (seriesGridColumns.length > 0 && !seriesGridColumns.some((c) => c.name === "generation")) {
+  db.exec("DROP TABLE series_selection_context");
+}
 db.exec(`
   CREATE TABLE IF NOT EXISTS series_selection_context (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    selection_index INTEGER NOT NULL,
+    selection_index INTEGER PRIMARY KEY,
     tvdb_id INTEGER NOT NULL,
     title TEXT NOT NULL,
     year TEXT,
+    generation TEXT NOT NULL,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 `);
@@ -89,6 +102,7 @@ export interface SeriesSelectionRow {
   tvdb_id: number;
   title: string;
   year: string | null;
+  generation: string;
 }
 
 // The current preview of confirm_selected_series: at most one row. payload is

@@ -128,9 +128,32 @@ const idOf = (r: { content: Array<{ text: string }> }) => {
 const grid = () =>
   db
     .prepare(
-      "SELECT selection_index, tvdb_id, title, year FROM series_selection_context ORDER BY selection_index",
+      "SELECT selection_index, tvdb_id, title, year, generation FROM series_selection_context ORDER BY selection_index",
     )
-    .all() as Array<{ selection_index: number; tvdb_id: number; title: string; year: string }>;
+    .all() as Array<{
+    selection_index: number;
+    tvdb_id: number;
+    title: string;
+    year: string;
+    generation: string;
+  }>;
+// Holds the next request to Sonarr that matches until release() is called.
+function holdNext(match: (config: any) => boolean): () => void {
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+  let held = false;
+  sonarrClient.defaults.adapter = async (config: any) => {
+    if (!held && match(config)) {
+      held = true;
+      await gate;
+    }
+    return fake(config);
+  };
+  return release;
+}
 const previews = () =>
   db.prepare("SELECT id, payload FROM series_add_preview").all() as Array<{
     id: string;
@@ -313,13 +336,55 @@ describe("search_and_select_series", () => {
     assert.deepEqual(nonGets(), []);
   });
 
-  it("C1: Sonarr unreachable is an error reply, and nothing stays to confirm", async () => {
-    await search("quiet valley");
+  it("C1: Sonarr unreachable is an error reply, and the grid and the current preview stay as they were", async () => {
+    const preview = await previewOf("quiet valley", [1]);
+    const gridBefore = grid();
+    const previewBefore = previews();
     sonarrDown = true;
     const result = await search("harbour");
     assert.equal(result.isError, true);
     assert.match(text(result), /Failed to search Sonarr for series: connect ECONNREFUSED/);
-    assert.deepEqual(grid(), []);
+    assert.deepEqual(grid(), gridBefore);
+    assert.deepEqual(previews(), previewBefore);
+
+    // Also when the lookup answers and the library read that follows fails.
+    sonarrDown = false;
+    sonarr.restore();
+    sonarr = fakeApi(sonarrClient, (req) => {
+      if (req.url === "/api/v3/series/lookup") return { data: CATALOG.slice(0, 5) };
+      throw new Error("connect ECONNRESET");
+    });
+    assert.equal((await search("harbour")).isError, true);
+    assert.deepEqual(grid(), gridBefore);
+    assert.deepEqual(previews(), previewBefore);
+
+    // The preview can still be confirmed.
+    sonarr.restore();
+    sonarrFake();
+    await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C3: two searches at the same moment leave one whole grid, of the search that answered last", async () => {
+    const release = holdNext((config) => config.params?.term === "harbour");
+    const first = search("harbour");
+    await search("quiet valley");
+    release();
+    await first;
+    const rows = db
+      .prepare("SELECT selection_index, tvdb_id, generation FROM series_selection_context")
+      .all() as Array<{ selection_index: number; tvdb_id: number; generation: string }>;
+    assert.deepEqual(
+      rows.map((r) => [r.selection_index, r.tvdb_id]),
+      [
+        [1, 501],
+        [2, 502],
+        [3, 503],
+        [4, 504],
+        [5, 505],
+      ],
+    );
+    assert.equal(new Set(rows.map((r) => r.generation)).size, 1, "one generation");
   });
 });
 
@@ -549,7 +614,11 @@ describe("confirm_selected_series: the preview", () => {
     const stored = previews();
     assert.equal(stored.length, 1);
     assert.equal(stored[0]!.id, idOf(result));
-    assert.deepEqual(JSON.parse(stored[0]!.payload), {
+    const { generation, ...payload } = JSON.parse(stored[0]!.payload);
+    // The generation of the grid it was worked out from.
+    assert.equal(generation, grid()[0]!.generation);
+    assert.match(generation, /^[0-9a-f-]{36}$/);
+    assert.deepEqual(payload, {
       given: { monitor: "pilot", searchForMissing: false, chosenIndexes: [1, 3] },
       sonarrUrl: "http://sonarr:8989",
       resolved: {
@@ -592,6 +661,45 @@ describe("confirm_selected_series: the preview", () => {
       previews().map((p) => p.id),
       [idOf(second)],
     );
+  });
+
+  it("C12: a preview that finishes after a newer search is not stored, does not replace the newer preview, and adds nothing", async () => {
+    await search("quiet valley");
+    const release = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const late = confirmSelectedSeries({ chosenIndexes: [1] });
+    await search("harbour");
+    const newer = await confirmSelectedSeries({ chosenIndexes: [2] });
+    release();
+    const result = await late;
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /The series grid was replaced by a newer search_and_select_series while this was being worked out, so no preview was stored\. Nothing was added\./,
+    );
+    assert.doesNotMatch(text(result), /previewId "/);
+    assert.deepEqual(
+      previews().map((p) => p.id),
+      [idOf(newer)],
+    );
+    assert.deepEqual(posts(), []);
+    await confirmSelectedSeries({ previewId: idOf(newer) });
+    assert.deepEqual(added(), ["Harbour Lights: Origins"]);
+  });
+
+  it("C13: a changed preview whose grid a newer search replaced meanwhile stores no new preview", async () => {
+    const preview = await previewOf("quiet valley", [1]);
+    setSetting("SONARR_DEFAULT_MONITOR", "pilot");
+    const release = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const confirming = confirmSelectedSeries({ previewId: idOf(preview) });
+    await search("harbour");
+    release();
+    const result = await confirming;
+    assert.equal(result.isError, true);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.match(text(result), /no preview was stored/);
+    assert.doesNotMatch(text(result), /previewId "/);
+    assert.deepEqual(previews(), []);
+    assert.deepEqual(posts(), []);
   });
 
   it("C12: a new search_and_select_series clears the current preview", async () => {

@@ -100,9 +100,19 @@ async function libraryTvdbIds(): Promise<Map<number, SonarrSeries>> {
   return byTvdbId;
 }
 
-const clearSeriesGrid = db.transaction(() => {
+// Replaces the series grid with these shows, under a new generation, and
+// clears the current preview: the old numbers are no longer the last grid.
+// One transaction, so two searches at once leave one whole grid.
+const replaceSeriesGrid = db.transaction((choices: SonarrSeries[]) => {
   db.prepare("DELETE FROM series_selection_context").run();
   db.prepare("DELETE FROM series_add_preview").run();
+  const generation = randomUUID();
+  const insert = db.prepare(
+    "INSERT INTO series_selection_context (selection_index, tvdb_id, title, year, generation) VALUES (?, ?, ?, ?, ?)",
+  );
+  choices.forEach((series, index) => {
+    insert.run(index + 1, series.tvdbId, titleOf(series), yearText(series.year), generation);
+  });
 });
 
 // --- search_and_select_series -------------------------------------------------
@@ -110,9 +120,6 @@ const clearSeriesGrid = db.transaction(() => {
 export async function searchAndSelectSeries({ query }: { query: string }) {
   if (!isConfigured("SONARR")) return reply(NOT_CONFIGURED, true);
   try {
-    // A new search makes the old numbers and any preview of them meaningless.
-    clearSeriesGrid();
-
     // One row per show: a TVDB id the lookup returns again is left out.
     const seen = new Set<number>();
     const results = (await lookup(query)).filter((s) => {
@@ -121,19 +128,15 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
       seen.add(id);
       return true;
     });
+    // The grid and the current preview are replaced only once Sonarr has
+    // answered: a failed lookup or library read leaves both as they were.
     if (results.length === 0) {
+      replaceSeriesGrid([]);
       return reply(`No series matched "${query}" in Sonarr's lookup.`);
     }
     const owned = await libraryTvdbIds();
     const choices = results.slice(0, GRID_SIZE);
-    const insert = db.prepare(
-      "INSERT INTO series_selection_context (selection_index, tvdb_id, title, year) VALUES (?, ?, ?, ?)",
-    );
-    db.transaction(() => {
-      choices.forEach((series, index) => {
-        insert.run(index + 1, series.tvdbId, titleOf(series), yearText(series.year));
-      });
-    })();
+    replaceSeriesGrid(choices);
 
     let output = `📺 **Series matching "${query}"** (from Sonarr's lookup)\n`;
     output +=
@@ -237,8 +240,10 @@ interface Resolved {
   searchForMissing: boolean;
 }
 
-// What a preview showed, as stored in series_add_preview.payload.
+// What a preview showed, as stored in series_add_preview.payload. generation
+// is that of the grid the preview was worked out from.
 interface StoredPreview {
+  generation: string;
   given: GivenOptions & { chosenIndexes?: number[] | undefined };
   sonarrUrl: string;
   resolved: Resolved;
@@ -380,12 +385,20 @@ function settingsLines(resolved: Resolved): string {
   ].join("\n");
 }
 
-// Stores a preview as the current one (replacing any other) and renders it.
-// now (milliseconds) is when it was made: it can be confirmed for
+// Stores a preview as the current one (replacing any other) and renders it,
+// but only while the grid it was worked out from (generation) is still the
+// current one; otherwise it stores nothing and returns null. now
+// (milliseconds) is when it was made: it can be confirmed for
 // PREVIEW_LIFE_MINUTES after that.
-function storePreview(given: StoredPreview["given"], resolution: Resolution, now: number): string {
+function storePreview(
+  generation: string,
+  given: StoredPreview["given"],
+  resolution: Resolution,
+  now: number,
+): string | null {
   const id = randomUUID();
   const stored: StoredPreview = {
+    generation,
     given,
     sonarrUrl: getSetting("SONARR_URL"),
     resolved: resolution.resolved,
@@ -397,14 +410,20 @@ function storePreview(given: StoredPreview["given"], resolution: Resolution, now
       seasons,
     })),
   };
-  db.transaction(() => {
+  const isStored = db.transaction(() => {
+    const current = db
+      .prepare("SELECT 1 FROM series_selection_context WHERE generation = ? LIMIT 1")
+      .get(generation);
+    if (!current) return false;
     db.prepare("DELETE FROM series_add_preview").run();
     db.prepare("INSERT INTO series_add_preview (id, payload, created_at) VALUES (?, ?, ?)").run(
       id,
       JSON.stringify(stored),
       now,
     );
+    return true;
   })();
+  if (!isStored) return null;
 
   const adding = resolution.shows.filter((s) => s.decision === "add").length;
   let output = "## Preview: adding series to Sonarr (nothing has been added yet)\n";
@@ -519,6 +538,9 @@ function addBody(record: SonarrSeries, seasons: AddSeason[], resolved: Resolved)
   };
 }
 
+const GRID_REPLACED =
+  "The series grid was replaced by a newer search_and_select_series while this was being worked out, so no preview was stored. Nothing was added. Run search_and_select_series again and choose from its numbers.";
+
 const PREVIEW_AGAIN =
   "Call confirm_selected_series with chosenIndexes (and any options) for a new preview, show it to the user, and confirm with the previewId it returns.";
 
@@ -561,8 +583,11 @@ export async function confirmSelectedSeries(args: ConfirmSeriesArgs, now: number
 async function previewSeries(chosenIndexes: number[], options: GivenOptions, now: number) {
   const find = db.prepare("SELECT * FROM series_selection_context WHERE selection_index = ?");
   const shows: ChosenShow[] = [];
+  // Read with no await in between, so every row is of the same grid.
+  let generation = "";
   for (const index of [...new Set(chosenIndexes)]) {
     const row = find.get(index) as SeriesSelectionRow | undefined;
+    if (row) generation = row.generation;
     // One line per show, also if two numbers point to the same TVDB id.
     if (row && !shows.some((s) => s.tvdbId === row.tvdb_id)) {
       shows.push({ tvdbId: row.tvdb_id, title: row.title, year: row.year });
@@ -576,7 +601,8 @@ async function previewSeries(chosenIndexes: number[], options: GivenOptions, now
   }
   const resolution = await resolveAdd(options, shows);
   if ("error" in resolution) return reply(`${resolution.error} Nothing was added.`, true);
-  return reply(storePreview({ ...options, chosenIndexes }, resolution, now));
+  const preview = storePreview(generation, { ...options, chosenIndexes }, resolution, now);
+  return preview === null ? reply(`❌ ${GRID_REPLACED}`, true) : reply(preview);
 }
 
 async function confirmPreview(previewId: string, now: number) {
@@ -622,9 +648,16 @@ async function confirmPreview(previewId: string, now: number) {
   }
   const changed = differences(stored, fresh);
   if (changed.length > 0) {
-    const preview = storePreview(stored.given, fresh, now);
+    const preview = storePreview(String(stored.generation), stored.given, fresh, now);
+    const list = changed.map((c) => `- ${c}`).join("\n");
+    if (preview === null) {
+      return reply(
+        `Nothing was added: what the preview showed has changed since it was made.\n${list}\n\n${GRID_REPLACED}`,
+        true,
+      );
+    }
     return reply(
-      `Nothing was added: what the preview showed has changed since it was made.\n${changed.map((c) => `- ${c}`).join("\n")}\n\nThis is a new preview with a new id; the old id no longer works.\n\n${preview}`,
+      `Nothing was added: what the preview showed has changed since it was made.\n${list}\n\nThis is a new preview with a new id; the old id no longer works.\n\n${preview}`,
     );
   }
 
