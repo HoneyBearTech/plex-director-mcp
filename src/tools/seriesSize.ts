@@ -433,7 +433,7 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
     : "Watch data: only the one Plex account the app is connected with, so a show someone else watched can still be listed (Tautulli is not set up). ";
   output += `Not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}: ${plural(candidates.length, "show")}, ${formatSize(totalSize(candidates.map((c) => c.series)))}.`;
   if (notInPlex > 0)
-    output += ` ${plural(notInPlex, "show")} Sonarr has ${notInPlex === 1 ? "was" : "were"} not found in Plex and left out.`;
+    output += ` ${plural(notInPlex, "show")} Sonarr has could not be matched to a Plex show and ${notInPlex === 1 ? "was" : "were"} left out.`;
   if (cannotJudge > 0)
     output += ` ${plural(cannotJudge, "show has", "shows have")} been watched but with no date recorded, so ${cannotJudge === 1 ? "it was" : "they were"} left out because that can't be judged.`;
   if (removedByTautulli > 0)

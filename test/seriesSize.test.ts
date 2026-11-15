@@ -480,8 +480,20 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
       "Both Libraries",
     ]);
     assert.match(text(result), /Not watched in 3 years: 4 shows, 680\.0 GB\./);
-    assert.match(text(result), /1 show Sonarr has was not found in Plex and left out\./);
+    assert.match(
+      text(result),
+      /1 show Sonarr has could not be matched to a Plex show and was left out\./,
+    );
     assert.doesNotMatch(text(result), /Only In Sonarr/);
+    assert.doesNotMatch(text(result), /not found in Plex/);
+
+    // In Plex, but with another TVDB id than Sonarr's: not matched either.
+    allSeries.push(series(7, "Other Id", 107, 400));
+    library["3"]!.push(plexShow("17", "Other Id", 777, yearsAgo(6), yearsAgo(9)));
+    assert.match(
+      text(await run({ notWatchedInYears: 3 })),
+      /2 shows Sonarr has could not be matched to a Plex show and were left out\./,
+    );
 
     // A longer period keeps fewer.
     assert.deepEqual(titles(await run({ notWatchedInYears: 5.5 })), [

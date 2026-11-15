@@ -96,7 +96,7 @@ What "watched" can know is limited, and the reply says which of these it had:
   "Plex account only". If Tautulli's answer for a library fails or is incomplete, the reply names the library
   and judges its shows from the Plex account alone. Tautulli is never asked to rebuild its lists.
 
-Left out, and counted in the reply: shows Sonarr has that were not found in Plex (they are matched by TVDB id,
+Left out, and counted in the reply: shows Sonarr has that could not be matched to a Plex show (they are matched by TVDB id,
 or by title and year when Plex has none), and shows Plex marks as watched without a date.
 
 It is a report: it deletes nothing and changes nothing.
