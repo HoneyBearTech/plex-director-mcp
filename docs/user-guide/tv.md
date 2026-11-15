@@ -138,11 +138,17 @@ Adding is three steps, so that nothing is added by mistake:
 3. **Confirm.** When you agree, `confirm_selected_series` is called again with nothing but that preview's id.
    Only then are the shows added to Sonarr, **monitored**, with season folders, and, unless you asked
    otherwise, with a **search for the monitored episodes started** straight away. The reply opens with the
-   settings used and has one line per show: added, already there, failed with Sonarr's reason, or not
-   known (Sonarr didn't answer: the show may have been added, and a new search and preview will show it as
-   already in Sonarr if it was). One show failing doesn't stop the others. If Sonarr's address is changed
-   on the Settings page while shows are being added, the remaining ones are not sent, and their lines say
-   so.
+   settings used and has one line per show:
+   - **added**: Sonarr answered with the added series;
+   - **already there**: it was in Sonarr already and was not sent;
+   - **failed**: Sonarr refused it, with Sonarr's reason;
+   - **not known**: Sonarr didn't answer, answered with a server-side error (such as a 502 or 504 from a
+     proxy in front of it), or answered with something that wasn't the added series. The show may have
+     been added; a new search and preview will show it as already in Sonarr if it was. Nothing is retried;
+   - **not attempted**: Sonarr's address was changed on the Settings page, or a newer search replaced the
+     grid, while the shows were being added; the remaining shows were not sent.
+
+   One show failing doesn't stop the others.
 
 What each setting is, in the order it is looked for:
 
@@ -159,9 +165,10 @@ The monitor options are Sonarr's: `all` (all episodes), `future` (episodes that 
 first episode only) and `none`.
 
 A quality profile or root folder that Sonarr doesn't have is refused with the list of the ones it does have,
-also when it is a saved default that has since been renamed or removed in Sonarr. A saved series type or
-monitor option that isn't one of the values above is refused the same way. The root folder must be one of
-Sonarr's own root folders.
+also when it is a saved default that has since been renamed or removed in Sonarr. A series type or monitor
+option that isn't one of the values above is refused when it is saved on the Settings page. A value that
+came from the environment at first start isn't checked there; a bad one is reported at preview time, the
+same way, and nothing is added. The root folder must be one of Sonarr's own root folders.
 
 **The preview is what gets added, or nothing is.**
 
@@ -169,12 +176,14 @@ Sonarr's own root folders.
   a new preview makes the earlier id useless, and so does waiting longer; using it adds nothing and says to
   preview again.
 - When you confirm, everything is checked again. If a default on the Settings page, Sonarr's address, the
-  profile or folder in Sonarr, a show's state (it has been added to Sonarr meanwhile, or removed from it)
-  or its seasons no longer match what the preview showed, **nothing is added**: you get a new preview that
-  says what differs, to agree to or not.
-- The preview makes sure that what is added is what you were shown; it can't tell whether you actually
-  read it. Your MCP client asking you before each tool call is what does that, so don't set "always allow"
-  for `confirm_selected_series` (or `confirm_selected_choices`, which adds movies).
+  profile or folder in Sonarr, a show's state (it has been added to Sonarr meanwhile, or removed from it),
+  its title or year as Sonarr lists it, or its seasons no longer match what the preview showed, **nothing
+  is added**: you get a new preview that says what differs, to agree to or not.
+- The preview makes sure that what is added is what you were shown: the shows (title, year and TVDB id),
+  their seasons and the settings. It can't tell whether you actually read it. Your MCP client asking you
+  before each tool call is what does that, so don't set "always allow" for `confirm_selected_series` (or
+  `confirm_selected_choices`, which adds movies): with it set, text in a looked-up title or overview could
+  steer the model to preview and confirm in a row, with nobody asked.
 - Only the most recent series grid counts, and it is separate from the movie grid: searching for a movie
   doesn't disturb a series search, or the other way round.
 
