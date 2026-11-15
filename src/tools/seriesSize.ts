@@ -130,10 +130,15 @@ async function readPlexLibrary(section: PlexSection): Promise<PlexMetadata[]> {
       PlexContainer["MediaContainer"]
     >;
     if (!Array.isArray(got)) throw incomplete(`gave page ${page} without a list of shows`);
+    // A server that ignores the page size asked for is not read any further.
+    if (got.length > FETCH_ALL)
+      throw incomplete(`gave page ${page} with more than the ${FETCH_ALL} shows asked for`);
     let fresh = 0;
     for (const item of got as unknown[]) {
-      const key = (item as PlexMetadata | null)?.ratingKey;
-      if (typeof item !== "object" || item === null || key === undefined || key === null)
+      if (typeof item !== "object" || item === null || Array.isArray(item))
+        throw incomplete(`gave page ${page} with an entry that is not a show`);
+      const key = (item as PlexMetadata).ratingKey;
+      if (key === undefined || key === null)
         throw incomplete(`gave page ${page} with a show that has no ratingKey`);
       if (seen.has(String(key))) continue;
       seen.add(String(key));

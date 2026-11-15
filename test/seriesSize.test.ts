@@ -570,6 +570,62 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     assert.deepEqual(pageStarts("3"), [0]);
   });
 
+  it("B4: a first page that is not a proper answer, a bad entry, an endless library or an oversized page is an error reply", async () => {
+    watchStock();
+    // "TV Shows" answers with whatever `answer` gives for the page starting at `start`.
+    const tvShowsAnswers = (answer: (start: number) => FakeReply) => {
+      plexReply = (req) => {
+        if (req.url === "/library/sections")
+          return { data: { MediaContainer: { Directory: SECTIONS } } };
+        if (req.url.endsWith("/4/all"))
+          return { data: { MediaContainer: { totalSize: 1, Metadata: library["4"] } } };
+        return answer(Number(req.params["X-Plex-Container-Start"]));
+      };
+      plex.calls.length = 0;
+    };
+    const fails = async (why: RegExp) => {
+      const result = await run({ notWatchedInYears: 3 });
+      assert.equal(result.isError, true, text(result));
+      assert.match(text(result), /^Plex could not be read completely/);
+      assert.match(text(result), why);
+      assert.equal(rows(result).length, 0);
+    };
+
+    // HTTP 200 with a sign-in page, on the first page.
+    tvShowsAnswers(() => ({ data: "<html><body>Sign in</body></html>" }));
+    await fails(/the library "TV Shows" gave page 1 without a list of shows/);
+    // A MediaContainer that is a list.
+    tvShowsAnswers(() => ({ data: { MediaContainer: [] } }));
+    await fails(/the library "TV Shows" gave page 1 without a list of shows/);
+    // A null entry among the shows.
+    tvShowsAnswers(() => ({
+      data: { MediaContainer: { totalSize: 2, Metadata: [library["3"]![0], null] } },
+    }));
+    await fails(/the library "TV Shows" gave page 1 with an entry that is not a show/);
+
+    // No total on any page, and every page full of new shows: given up after 20 pages.
+    tvShowsAnswers((start) => ({
+      data: {
+        MediaContainer: {
+          Metadata: Array.from({ length: 5000 }, (_, i) =>
+            plexShow(String(start + i), `Show ${start + i}`, null, null, yearsAgo(9)),
+          ),
+        },
+      },
+    }));
+    await fails(/the library "TV Shows" was not read to its end within 20 pages/);
+    assert.equal(pageStarts("3").length, 20);
+    assert.equal(pageStarts("3")[19], 95_000);
+
+    // A page longer than the 5,000 asked for, as from a server that ignores the page size.
+    library["3"] = [...fillers(5000), ...library["3"]!];
+    tvShowsAnswers(() => ({
+      data: { MediaContainer: { totalSize: library["3"]!.length, Metadata: library["3"] } },
+    }));
+    await fails(/the library "TV Shows" gave page 1 with more than the 5000 shows asked for/);
+    assert.deepEqual(pageStarts("3"), [0]);
+  });
+
   it("B4, B8: a show watched with no date anywhere can't be judged: left out and counted", async () => {
     watchStock();
     library["3"]![3] = plexShow("14", "Forgotten", 104, "undated", yearsAgo(8));
