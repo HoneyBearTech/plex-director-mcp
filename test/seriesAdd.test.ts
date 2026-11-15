@@ -1139,6 +1139,54 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.deepEqual(posts(), []);
   });
 
+  // Runs change() once the first POST has been answered.
+  function afterFirstPost(change: () => void) {
+    const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+    let done = false;
+    sonarrClient.defaults.adapter = async (config: any) => {
+      const response = await fake(config);
+      if (config.method === "post" && !done) {
+        done = true;
+        change();
+      }
+      return response;
+    };
+  }
+
+  it("C14: when the Sonarr URL is changed between two POSTs, the remaining shows are not attempted and the report says so for each", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    afterFirstPost(() => setSetting("SONARR_URL", "http://another-sonarr:8989"));
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Harbour Lights"]);
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3);
+    assert.match(lines[0]!, /✅ .*Harbour Lights \(2019\).* - added/);
+    for (const line of lines.slice(1)) {
+      assert.match(
+        line,
+        /⛔ .* - not attempted: the Sonarr URL on the Settings page changed while the shows were being added, so nothing more was sent\./,
+      );
+    }
+    assert.match(lines[1]!, /Harbour Lights: Origins/);
+    assert.match(lines[2]!, /Harbour Nights/);
+  });
+
+  it("C15: a key changed between two POSTs is still removed when Sonarr echoes the old one", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addErrors[602] = {
+      status: 401,
+      data: [{ errorMessage: `Key ${API_KEY} is no longer valid` }],
+    };
+    afterFirstPost(() => setSetting("SONARR_API_KEY", "a-new-sonarr-key"));
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(
+      inSonarr.map((show) => show.tvdbId),
+      [601],
+    );
+    assert.ok(!text(result).includes(API_KEY), text(result));
+    assert.match(text(result), /failed: Key \[redacted\] is no longer valid/);
+  });
+
   it("C15: no reply or error contains the API key, even when Sonarr's own messages do", async () => {
     const replies: string[] = [];
     const keep = (r: { content: Array<{ text: string }> }) => {

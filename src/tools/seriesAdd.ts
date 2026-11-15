@@ -64,12 +64,25 @@ const MONITOR_WORDS: Record<MonitorOption, string> = {
   none: "no episodes",
 };
 
-// Never show the Sonarr API key, whatever text a reply or an error is built from.
-function redact(text: string): string {
-  const key = getSetting("SONARR_API_KEY");
-  return key ? text.split(key).join("[redacted]") : text;
+// Never show the Sonarr API key, whatever text a reply or an error is built
+// from. This is the one place replies are made: each tool call gets its reply
+// function when it starts, and every reply removes the key that was in use
+// then (saved, and on the client) as well as the key saved when the reply is
+// built, so a key changed during the call is not shown when Sonarr echoes it.
+function replyFor() {
+  const keysAtStart = [
+    getSetting("SONARR_API_KEY"),
+    String(sonarrClient.defaults.headers.common["X-Api-Key"] ?? ""),
+  ];
+  return (text: string, isError = false) => {
+    let out = text;
+    for (const key of [...keysAtStart, getSetting("SONARR_API_KEY")]) {
+      if (key) out = out.split(key).join("[redacted]");
+    }
+    return textReply(out, isError);
+  };
 }
-const reply = (text: string, isError = false) => textReply(redact(text), isError);
+type Reply = ReturnType<typeof replyFor>;
 
 const countSeasons = (seasons: Array<{ seasonNumber?: number | undefined }>) =>
   seasons.filter((s) => Number(s.seasonNumber) > 0).length;
@@ -118,6 +131,7 @@ const replaceSeriesGrid = db.transaction((choices: SonarrSeries[]) => {
 // --- search_and_select_series -------------------------------------------------
 
 export async function searchAndSelectSeries({ query }: { query: string }) {
+  const reply = replyFor();
   if (!isConfigured("SONARR")) return reply(NOT_CONFIGURED, true);
   try {
     // One row per show: a TVDB id the lookup returns again is left out.
@@ -548,6 +562,7 @@ const PREVIEW_AGAIN =
 
 // now (milliseconds) is the clock a preview's age is measured with.
 export async function confirmSelectedSeries(args: ConfirmSeriesArgs, now: number = Date.now()) {
+  const reply = replyFor();
   if (!isConfigured("SONARR")) return reply(NOT_CONFIGURED, true);
   const { previewId, chosenIndexes, ...options } = args;
   const optionsGiven = Object.values(options).some((v) => v !== undefined);
@@ -568,8 +583,8 @@ export async function confirmSelectedSeries(args: ConfirmSeriesArgs, now: number
   }
 
   try {
-    if (hasIndexes) return await previewSeries(chosenIndexes, options, now);
-    return await confirmPreview(String(previewId), now);
+    if (hasIndexes) return await previewSeries(chosenIndexes, options, now, reply);
+    return await confirmPreview(String(previewId), now, reply);
   } catch (error: unknown) {
     // A confirmation has already used its preview up by the time Sonarr is read.
     const next = hasPreviewId ? ` That preview is used up. ${PREVIEW_AGAIN}` : "";
@@ -580,7 +595,12 @@ export async function confirmSelectedSeries(args: ConfirmSeriesArgs, now: number
   }
 }
 
-async function previewSeries(chosenIndexes: number[], options: GivenOptions, now: number) {
+async function previewSeries(
+  chosenIndexes: number[],
+  options: GivenOptions,
+  now: number,
+  reply: Reply,
+) {
   const find = db.prepare("SELECT * FROM series_selection_context WHERE selection_index = ?");
   const shows: ChosenShow[] = [];
   // Read with no await in between, so every row is of the same grid.
@@ -605,7 +625,7 @@ async function previewSeries(chosenIndexes: number[], options: GivenOptions, now
   return preview === null ? reply(`❌ ${GRID_REPLACED}`, true) : reply(preview);
 }
 
-async function confirmPreview(previewId: string, now: number) {
+async function confirmPreview(previewId: string, now: number, reply: Reply) {
   // Taken and removed in one statement: an id can be used once, and only
   // while it is the current preview.
   const taken = db
@@ -663,9 +683,17 @@ async function confirmPreview(previewId: string, now: number) {
 
   const { resolved } = fresh;
   let report = `🚀 **Adding series to Sonarr** (profile: ${resolved.qualityProfile}, folder: ${resolved.rootFolder}, type: ${resolved.seriesType}, monitor: ${resolved.monitor}, ${resolved.searchForMissing ? "search for monitored episodes started" : "no search started"})\n`;
+  // One confirmation talks to one Sonarr: once the saved URL is no longer the
+  // one the preview was made with, nothing more is sent.
+  let urlChanged = false;
   for (const show of fresh.shows) {
     if (show.decision === "exists") {
       report += `  ⏭️ ${showLabel(show)} - already in Sonarr; not added.\n`;
+      continue;
+    }
+    if (getSetting("SONARR_URL") !== stored.sonarrUrl) urlChanged = true;
+    if (urlChanged) {
+      report += `  ⛔ ${showLabel(show)} - not attempted: the Sonarr URL on the Settings page changed while the shows were being added, so nothing more was sent. Run search_and_select_series again to add it.\n`;
       continue;
     }
     // Equal to what the preview stored: differences() found no change.
