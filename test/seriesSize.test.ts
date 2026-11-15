@@ -337,6 +337,24 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     assert.ok(!titles(await run({ notWatchedInYears: 3 })).includes("Both Libraries"));
   });
 
+  it("B4, B8: a copy watched with no date is not outweighed by another copy's old date: left out and counted", async () => {
+    watchStock();
+    // "TV Shows": watched 7 years ago. "4k TV Shows": watched, with no date.
+    library["4"] = [plexShow("25", "Both Libraries", 105, "undated", yearsAgo(5))];
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Both Libraries"));
+    assert.match(text(result), /1 show has been watched but with no date recorded/);
+  });
+
+  it("B4, B8: a copy watched with no date, and another watched recently: not listed, and not counted as can't be judged", async () => {
+    watchStock();
+    library["3"]![4] = plexShow("15", "Both Libraries", 105, yearsAgo(1), yearsAgo(8));
+    library["4"] = [plexShow("25", "Both Libraries", 105, "undated", yearsAgo(5))];
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Both Libraries"));
+    assert.doesNotMatch(text(result), /no date recorded/);
+  });
+
   it("B4, B8: a show watched with no date anywhere can't be judged: left out and counted", async () => {
     watchStock();
     library["3"]![3] = plexShow("14", "Forgotten", 104, "undated", yearsAgo(8));
@@ -604,6 +622,56 @@ describe("find_series_by_size: big shows nobody has watched (Plex and Tautulli)"
     const result = await run({ notWatchedInYears: 3 });
     assert.ok(!titles(result).includes("Never Started"));
     assert.match(text(result), /1 show has been watched but with no date recorded/);
+  });
+
+  it("B6: plays in Tautulli with no date are not outweighed by Plex's old date: left out and counted", async () => {
+    // Plex: watched 6 years ago. Tautulli: played, at a time it does not give.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, null)]);
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Old Favourite"));
+    assert.match(text(result), /1 show has been watched but with no date recorded/);
+    assert.doesNotMatch(text(result), /off the list/);
+  });
+
+  it("B6: a play time in milliseconds is no usable time: left out as can't be judged, not as played recently", async () => {
+    tautulliLibrary["3"] = tautulliOk([
+      row("11", 3, yearsAgo(5) * 1000),
+      row("14", 1, yearsAgo(0.1) * 1000),
+    ]);
+    const result = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(result), ["Never Started", "Both Libraries"]);
+    assert.match(text(result), /2 shows have been watched but with no date recorded/);
+    assert.doesNotMatch(text(result), /played more recently/);
+
+    // Up to a day ahead of now (a clock a little off) still counts as a time.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, Math.round(NOW / 1000) + 3600)]);
+    const ahead = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(ahead).includes("Old Favourite"));
+    assert.match(text(ahead), /Tautulli's history took 1 show off the list/);
+    assert.doesNotMatch(text(ahead), /no date recorded/);
+  });
+
+  it("B7: a show whose libraries include one with an unusable answer is marked for that, not for 'no row or no plays'", async () => {
+    // "TV Shows" answers, with no row for Both Libraries; "4k TV Shows" fails.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, yearsAgo(5))]);
+    tautulliLibrary["4"] = { status: 500 };
+    const result = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(result), [
+      "Old Favourite",
+      "Never Started",
+      "Forgotten",
+      "Both Libraries",
+    ]);
+    // Never Started and Forgotten only: Both Libraries is under the library that could not be used.
+    assert.match(
+      text(result),
+      /2 listed shows were judged from the Plex account alone because Tautulli had no row or no plays for them/,
+    );
+    assert.match(
+      text(result),
+      /Tautulli's answer for the library "4k TV Shows" could not be used: the call failed .*; shows there were judged from the Plex account alone/,
+    );
+    assert.match(lines(result)[3]!, /^- Both Libraries .*\(Plex account only\)$/);
   });
 
   it("B6: on the same data, the list with Tautulli is a subset of the list without it", async () => {

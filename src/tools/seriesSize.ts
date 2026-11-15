@@ -307,14 +307,22 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       continue;
     }
     // The latest watching over its copies; never watched counts from when it
-    // was first added; watched with no date anywhere can't be judged.
+    // was first added. Watched recently on any copy: not a candidate. Otherwise
+    // a copy watched with no date can't be judged, whatever older date another
+    // copy has.
+    const lastViewed = plex.watch.lastViewed;
+    if (lastViewed !== null && lastViewed * 1000 >= cutoff) continue;
+    const undatedCopy = plex.copies.some((copy) => {
+      const watch = watchOf(copy.item, "show");
+      return watch.seen > 0 && watch.lastViewed === null;
+    });
     const activity = lastActivity("show", plex.watch);
-    if (activity === null) {
+    if (undatedCopy || activity === null) {
       cannotJudge++;
       continue;
     }
     if (activity * 1000 < cutoff)
-      candidates.push({ series, plex, lastWatched: plex.watch.lastViewed, plexOnly: null });
+      candidates.push({ series, plex, lastWatched: lastViewed, plexOnly: null });
   }
 
   // --- Then Tautulli, for the candidates only ---------------------------------
@@ -340,36 +348,44 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       if (answer && !answer.usable) unusable.push({ title: section.title, why: answer.why });
     }
 
+    // A play time is used only if it can be a time in epoch seconds: one later
+    // than a day from now (a time in milliseconds, say) is no usable time.
+    const latestUsable = now / 1000 + DAY_MS / 1000;
     candidates = candidates.filter((candidate) => {
-      let anyUsable = false;
+      let anyUnusable = false;
       let played = false;
+      let undatedPlay = false;
       let lastPlayed: number | null = null;
       for (const copy of candidate.plex.copies) {
         const answer = answers.get(copy.section.key);
-        if (!answer?.usable) continue;
-        anyUsable = true;
+        if (!answer?.usable) {
+          anyUnusable = true;
+          continue;
+        }
         const row = answer.rows.get(String(copy.item.ratingKey));
         if (!row || !(Number(row.play_count) > 0)) continue;
         played = true;
         const at = Number(row.last_played);
-        if (Number.isFinite(at) && at > 0) lastPlayed = latest(lastPlayed, at);
+        if (Number.isFinite(at) && at > 0 && at <= latestUsable)
+          lastPlayed = latest(lastPlayed, at);
+        else undatedPlay = true;
       }
       if (!played) {
         // No plays, no row, or no usable answer: Tautulli adds nothing.
-        candidate.plexOnly = anyUsable ? "noRowOrNoPlays" : "libraryUnusable";
+        candidate.plexOnly = anyUnusable ? "libraryUnusable" : "noRowOrNoPlays";
         return true;
       }
-      const watchedAt = latest(candidate.lastWatched, lastPlayed);
-      if (watchedAt === null) {
-        // Played according to Tautulli, but no date anywhere.
-        cannotJudge++;
-        return false;
-      }
-      if (watchedAt * 1000 >= cutoff) {
+      if (lastPlayed !== null && lastPlayed * 1000 >= cutoff) {
         removedByTautulli++;
         return false;
       }
-      candidate.lastWatched = watchedAt;
+      if (undatedPlay) {
+        // Played according to Tautulli at a time that is not known: an older
+        // date elsewhere can't outweigh it.
+        cannotJudge++;
+        return false;
+      }
+      candidate.lastWatched = latest(candidate.lastWatched, lastPlayed);
       return true;
     });
   }
