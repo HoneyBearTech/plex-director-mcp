@@ -1095,10 +1095,25 @@ describe("confirm_selected_series: the confirmation", () => {
       monitored: false,
       added: "2020-01-01T00:00:00Z",
       statistics: { seasonCount: 2 },
+      images: [
+        {
+          coverType: "poster",
+          url: "/MediaCover/503/poster.jpg",
+          remoteUrl: "https://artworks.example.org/posters/503.jpg",
+          extension: ".jpg",
+          path: "/config/MediaCover/503/poster.jpg",
+        },
+        { coverType: "fanart", remoteUrl: 42, url: null },
+        "not-an-image",
+        null,
+      ],
       seasons: [
         { seasonNumber: 0, monitored: false, statistics: { episodeCount: 3 } },
-        { seasonNumber: 1, monitored: true, images: [] },
-        { seasonNumber: 2, monitored: false },
+        { seasonNumber: 1, monitored: true, images: [], path: "/x" },
+        { seasonNumber: 2, monitored: "yes" },
+        { seasonNumber: "3", monitored: true },
+        { seasonNumber: 4.5, monitored: true },
+        "season five",
       ],
     });
     t.after(() => {
@@ -1110,6 +1125,13 @@ describe("confirm_selected_series: the confirmation", () => {
       seriesType: "anime",
       monitor: "firstSeason",
     });
+    // What the preview stored is the same reduced list.
+    assert.deepEqual(JSON.parse(previews()[0]!.payload).shows[0].seasons, [
+      { seasonNumber: 0, monitored: false },
+      { seasonNumber: 1, monitored: true },
+      { seasonNumber: 2 },
+    ]);
+    assert.match(text(preview), /\[TVDB: 503\], 2 seasons: will be added/);
     const result = await confirmSelectedSeries({ previewId: idOf(preview) });
     assert.equal(result.isError, undefined);
     assert.equal(posts().length, 1);
@@ -1119,11 +1141,20 @@ describe("confirm_selected_series: the confirmation", () => {
       title: "Harbour Nights",
       titleSlug: "harbour-nights",
       year: 2008,
-      images: [{ coverType: "poster", remoteUrl: "https://artworks.example.org/posters/503.jpg" }],
+      // Each image reduced to coverType, url and remoteUrl when they are strings.
+      images: [
+        {
+          coverType: "poster",
+          url: "/MediaCover/503/poster.jpg",
+          remoteUrl: "https://artworks.example.org/posters/503.jpg",
+        },
+        { coverType: "fanart" },
+      ],
+      // Only seasons with an integer number; monitored only when a boolean.
       seasons: [
         { seasonNumber: 0, monitored: false },
         { seasonNumber: 1, monitored: true },
-        { seasonNumber: 2, monitored: false },
+        { seasonNumber: 2 },
       ],
       qualityProfileId: 6,
       rootFolderPath: "/media/tvshowskids/",

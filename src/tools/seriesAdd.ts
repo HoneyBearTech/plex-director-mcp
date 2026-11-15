@@ -76,10 +76,46 @@ function replyFor() {
 }
 type Reply = ReturnType<typeof replyFor>;
 
-const countSeasons = (seasons: Array<{ seasonNumber?: number | undefined }>) =>
-  seasons.filter((s) => Number(s.seasonNumber) > 0).length;
+// A season as it is posted to Sonarr: its number and, when Sonarr's lookup
+// gave one, whether it is monitored; nothing else.
+interface AddSeason {
+  seasonNumber: number;
+  monitored?: boolean;
+}
+
+const isObject = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+// Seasons reduced to what is posted: only entries whose seasonNumber is an
+// integer, with monitored only when it is a boolean. This is also what a
+// preview stores and compares.
+function reduceSeasons(seasons: unknown): AddSeason[] {
+  if (!Array.isArray(seasons)) return [];
+  return seasons
+    .filter((s): s is Record<string, unknown> => isObject(s) && Number.isInteger(s.seasonNumber))
+    .map((s) => ({
+      seasonNumber: s.seasonNumber as number,
+      ...(typeof s.monitored === "boolean" ? { monitored: s.monitored } : {}),
+    }));
+}
+
+// Images reduced to what is posted: coverType, url and remoteUrl, each only
+// when it is a string; entries that are not objects are dropped.
+function reduceImages(images: unknown): Array<Record<string, string>> {
+  if (!Array.isArray(images)) return [];
+  return images.filter(isObject).map((image) => {
+    const kept: Record<string, string> = {};
+    for (const key of ["coverType", "url", "remoteUrl"]) {
+      const value = image[key];
+      if (typeof value === "string") kept[key] = value;
+    }
+    return kept;
+  });
+}
+
+const countSeasons = (seasons: AddSeason[]) => seasons.filter((s) => s.seasonNumber > 0).length;
 const seasonCount = (series: SonarrSeries): number | null =>
-  Array.isArray(series.seasons) ? countSeasons(series.seasons) : null;
+  Array.isArray(series.seasons) ? countSeasons(reduceSeasons(series.seasons)) : null;
 const seasonsText = (n: number | null) =>
   n === null ? "seasons unknown" : `${n} season${n === 1 ? "" : "s"}`;
 const yearText = (year: unknown) => (typeof year === "number" && year > 0 ? String(year) : "N/A");
@@ -217,13 +253,6 @@ interface ChosenShow {
 
 type Decision = "add" | "exists";
 
-// A season as it is posted to Sonarr: its number and whether it is monitored,
-// as Sonarr's lookup gave them, nothing else.
-interface AddSeason {
-  seasonNumber: number | undefined;
-  monitored: boolean | undefined;
-}
-
 // A chosen show with its decision. record is Sonarr's lookup record for a show
 // to add, and seasons are its seasons as they would be posted; both are null
 // for a show already in Sonarr. seasonCount is what the preview shows.
@@ -233,12 +262,6 @@ interface DecidedShow extends ChosenShow {
   seasons: AddSeason[] | null;
   record: SonarrSeries | null;
 }
-
-const addSeasons = (record: SonarrSeries): AddSeason[] =>
-  (Array.isArray(record.seasons) ? record.seasons : []).map((s) => ({
-    seasonNumber: s.seasonNumber,
-    monitored: s.monitored,
-  }));
 
 interface Resolution {
   resolved: Resolved;
@@ -352,12 +375,11 @@ async function resolveAdd(
         error: `❌ Sonarr's lookup no longer returns ${show.title} (TVDB id ${show.tvdbId}), so it can't be added. Run search_and_select_series again.`,
       };
     }
-    const seasons = addSeasons(record);
     decided.push({
       ...show,
       decision: "add",
-      seasonCount: Array.isArray(record.seasons) ? countSeasons(seasons) : null,
-      seasons,
+      seasonCount: seasonCount(record),
+      seasons: reduceSeasons(record.seasons),
       record,
     });
   }
@@ -531,15 +553,16 @@ function seasonDifferences(
 }
 
 // The body of POST /api/v3/series: a fixed list of fields, nothing else from
-// the lookup record (no path, id, tags or other fields Sonarr sent). The
-// seasons are the ones the preview stored.
+// the lookup record (no path, id, tags or other fields Sonarr sent), with the
+// images reduced to their named keys. The seasons are the ones the preview
+// stored.
 function addBody(record: SonarrSeries, seasons: AddSeason[], resolved: Resolved) {
   return {
     tvdbId: record.tvdbId,
     title: record.title,
     titleSlug: record.titleSlug,
     year: record.year,
-    images: record.images,
+    images: reduceImages(record.images),
     seasons,
     qualityProfileId: resolved.qualityProfileId,
     rootFolderPath: resolved.rootFolder,
