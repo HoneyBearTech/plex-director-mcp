@@ -915,6 +915,25 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.deepEqual(added(), ["Quiet Valley"]);
   });
 
+  it("C13: the expiry boundary: exactly 15 minutes adds; a clock before the preview was made adds nothing", async () => {
+    const LIFE = 15 * 60 * 1000;
+    const start = Date.parse("2026-11-15T12:00:00Z");
+    await search("quiet valley");
+    const atLimit = await confirmSelectedSeries({ chosenIndexes: [1] }, start);
+    const exactly = await confirmSelectedSeries({ previewId: idOf(atLimit) }, start + LIFE);
+    assert.equal(exactly.isError, undefined);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+
+    const early = await confirmSelectedSeries({ chosenIndexes: [2] }, start);
+    const before = sonarr.calls.length;
+    const result = await confirmSelectedSeries({ previewId: idOf(early) }, start - 1);
+    assert.equal(result.isError, true);
+    assert.match(text(result), /That preview has expired/);
+    assert.equal(sonarr.calls.length, before, "nothing is sent to Sonarr");
+    assert.deepEqual(previews(), []);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
   it("C13: two confirmations of the same id started at the same moment add once", async () => {
     const preview = await previewOf("quiet valley", [1, 2]);
     const id = idOf(preview);
