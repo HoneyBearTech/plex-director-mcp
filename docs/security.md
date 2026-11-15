@@ -55,10 +55,16 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 - Adding TV series is search, preview, then confirm (`search_and_select_series`, then
   `confirm_selected_series` twice). The preview only reads Sonarr and says exactly what would be added,
   with which quality profile, root folder (one Sonarr already has), series type and monitor option. Adding
-  takes a second call with nothing but that preview's id, a random value that works once. It is refused
-  when the id is not the current preview, and when a setting, Sonarr's address or a show's state has
-  changed since the preview; then nothing is added and a new preview says what differs. Replies never
-  contain the Sonarr API key.
+  takes a second call with nothing but that preview's id, a random value that works once and for 15
+  minutes. It is refused when the id is not the current preview or has expired, and when a setting,
+  Sonarr's address, a show's state or its seasons have changed since the preview; then nothing is added
+  and a new preview says what differs. Only a fixed list of fields is posted to Sonarr, and if Sonarr's
+  address changes during an add, the remaining shows are not sent. Replies never contain the Sonarr API
+  key.
+- The preview makes sure that what is added is what was shown, and that an old or altered request adds
+  nothing. It does not show that a person saw it: its id goes back to the same model. What stops injected
+  text (in a looked-up title or overview, say) from adding something is the MCP client asking you before
+  each tool call, so don't set "always allow" for `confirm_selected_series` or `confirm_selected_choices`.
 
 **SSH host monitoring**
 
@@ -105,11 +111,12 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   `confirm_selected_series` (adds TV series to Sonarr and, by default, starts a search for their episodes),
   `manage_stalled_downloads` with `PURGE_STALLED` (deletes the torrents named by hash from an earlier `AUDIT`, with their files),
   `update_job_status` and `run_cluster_backup`. The MCP client's approval prompt is the control; review
-  what it proposes. Whoever can start the process (or `docker run` the image with your env file) has all
+  what it proposes, and don't set "always allow" for the tools that add. Whoever can start the process (or `docker run` the image with your env file) has all
   your service credentials.
 - **Prompt injection.** Titles, summaries, torrent names and indexer messages come from your services and,
   through them, from the internet. A crafted one could try to steer the model. The chat's read-only tools
-  limit what that can achieve there; in an MCP client, keep tool approval on.
+  limit what that can achieve there; in an MCP client, keep tool approval on, and don't set "always allow"
+  for `confirm_selected_series` or `confirm_selected_choices`.
 - **The first SSH connection.** Trust on first use protects against a host being impersonated *after* first
   contact. To be sure of the first one, compare the fingerprint with
   `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged SSH user.

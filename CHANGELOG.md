@@ -31,14 +31,18 @@ a security problem.
   changes nothing: which shows would be added, the quality profile, root folder, series type, which
   episodes are monitored and whether a search starts. Called again with only that preview's id, it adds
   the shows as monitored series and, unless turned off, starts a search for their episodes. A preview's id
-  works once and only while it is the newest; if a setting, Sonarr's address or a show's state changed
-  after the preview, nothing is added and a new preview says what differs. **This is a tool that changes
-  Sonarr.** Written for Sonarr v4.
+  works once, for 15 minutes, and only while it is the newest; if a setting, Sonarr's address, a show's
+  state or its seasons changed after the preview, nothing is added and a new preview says what differs.
+  Only a fixed list of fields is posted to Sonarr. The preview holds the add to what was shown; the MCP
+  client's approval prompt is what puts a person in between, so don't set "always allow" for
+  `confirm_selected_series` or `confirm_selected_choices`. **This is a tool that changes Sonarr.** Written
+  for Sonarr v4.
 - **Four Sonarr settings for new series**, on the Sonarr tab of the Settings page and as environment
   variables that seed them: `SONARR_DEFAULT_QUALITY_PROFILE`, `SONARR_DEFAULT_ROOT_FOLDER`,
   `SONARR_DEFAULT_SERIES_TYPE` (`standard`, `daily` or `anime`) and `SONARR_DEFAULT_MONITOR` (`all`,
   `future`, `missing`, `existing`, `firstSeason`, `lastSeason`, `pilot` or `none`). All optional: blank
-  means Sonarr's first profile and root folder, `standard` and `all`.
+  means Sonarr's first profile and root folder, `standard` and `all`. A series type or monitor option
+  outside those values is refused when saved.
 
 ### Security
 

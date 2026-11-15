@@ -43,7 +43,7 @@ can use. **Changes** marks tools that change something in your services.
 | `search_and_select_movies` | | Search TMDb and show a numbered grid of matches (remembers the grid for the next tool). |
 | `confirm_selected_choices` | yes | Add the chosen grid entries to Radarr as monitored movies and start a download search. |
 | `search_and_select_series` | | Search Sonarr's lookup for TV series and show a numbered grid of up to five matches (remembers the grid for the next tool). |
-| `confirm_selected_series` | yes (with a `previewId`) | With chosen grid numbers: a preview of what would be added to Sonarr and with which settings, changing nothing. With that preview's `previewId` alone: add those series to Sonarr as monitored, and by default start a search for their episodes. |
+| `confirm_selected_series` | yes (with a `previewId`) | With chosen grid numbers: a preview of what would be added to Sonarr and with which settings, changing nothing. With that preview's `previewId` alone, within 15 minutes: add those series to Sonarr as monitored, and by default start a search for their episodes. |
 | `manage_stalled_downloads` | yes (`PURGE_STALLED`) | `AUDIT` lists stalled or slow qBittorrent downloads with their hashes; `PURGE_STALLED` deletes only the ones named by hash, with their files. |
 | `check_indexer_health` | | Failing, backing-off and disabled Prowlarr indexers, and Prowlarr's warnings. |
 | `plan_media_upgrade` | yes (creates a job) | Schedule a `PENDING` batch of movies with no file or below 1080p (TV is refused). |
