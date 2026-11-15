@@ -28,6 +28,9 @@ import type { SonarrQualityProfile, SonarrRootFolder, SonarrSeries } from "../ty
 
 const GRID_SIZE = 5;
 const OVERVIEW_LENGTH = 180;
+// How long a preview can be confirmed after it was made.
+const PREVIEW_LIFE_MINUTES = 15;
+const PREVIEW_LIFE_MS = PREVIEW_LIFE_MINUTES * 60 * 1000;
 
 export const SERIES_TYPES = ["standard", "daily", "anime"] as const;
 export type SeriesType = (typeof SERIES_TYPES)[number];
@@ -364,7 +367,9 @@ function settingsLines(resolved: Resolved): string {
 }
 
 // Stores a preview as the current one (replacing any other) and renders it.
-function storePreview(given: StoredPreview["given"], resolution: Resolution): string {
+// now (milliseconds) is when it was made: it can be confirmed for
+// PREVIEW_LIFE_MINUTES after that.
+function storePreview(given: StoredPreview["given"], resolution: Resolution, now: number): string {
   const id = randomUUID();
   const stored: StoredPreview = {
     given,
@@ -380,9 +385,10 @@ function storePreview(given: StoredPreview["given"], resolution: Resolution): st
   };
   db.transaction(() => {
     db.prepare("DELETE FROM series_add_preview").run();
-    db.prepare("INSERT INTO series_add_preview (id, payload) VALUES (?, ?)").run(
+    db.prepare("INSERT INTO series_add_preview (id, payload, created_at) VALUES (?, ?, ?)").run(
       id,
       JSON.stringify(stored),
+      now,
     );
   })();
 
@@ -396,7 +402,7 @@ function storePreview(given: StoredPreview["given"], resolution: Resolution): st
     adding === 0
       ? "Nothing would be added: every chosen show is already in Sonarr.\n"
       : `Confirming adds ${adding} show${adding === 1 ? "" : "s"} as monitored, with season folders.\n`;
-  output += `Show this preview to the user. Once they agree, call confirm_selected_series again with only previewId "${id}". That id belongs to this preview alone: a new preview or a new search replaces it, and the add only goes through if nothing shown here has changed.`;
+  output += `Show this preview to the user. Once they agree, call confirm_selected_series again with only previewId "${id}". That id belongs to this preview alone and is good for ${PREVIEW_LIFE_MINUTES} minutes: a new preview or a new search replaces it, and the add only goes through if nothing shown here has changed.`;
   return output;
 }
 
@@ -504,7 +510,8 @@ const PREVIEW_AGAIN =
 
 // --- confirm_selected_series ---------------------------------------------------
 
-export async function confirmSelectedSeries(args: ConfirmSeriesArgs) {
+// now (milliseconds) is the clock a preview's age is measured with.
+export async function confirmSelectedSeries(args: ConfirmSeriesArgs, now: number = Date.now()) {
   if (!isConfigured("SONARR")) return reply(NOT_CONFIGURED, true);
   const { previewId, chosenIndexes, ...options } = args;
   const optionsGiven = Object.values(options).some((v) => v !== undefined);
@@ -525,8 +532,8 @@ export async function confirmSelectedSeries(args: ConfirmSeriesArgs) {
   }
 
   try {
-    if (hasIndexes) return await previewSeries(chosenIndexes, options);
-    return await confirmPreview(String(previewId));
+    if (hasIndexes) return await previewSeries(chosenIndexes, options, now);
+    return await confirmPreview(String(previewId), now);
   } catch (error: unknown) {
     // A confirmation has already used its preview up by the time Sonarr is read.
     const next = hasPreviewId ? ` That preview is used up. ${PREVIEW_AGAIN}` : "";
@@ -537,7 +544,7 @@ export async function confirmSelectedSeries(args: ConfirmSeriesArgs) {
   }
 }
 
-async function previewSeries(chosenIndexes: number[], options: GivenOptions) {
+async function previewSeries(chosenIndexes: number[], options: GivenOptions, now: number) {
   const find = db.prepare("SELECT * FROM series_selection_context WHERE selection_index = ?");
   const shows: ChosenShow[] = [];
   for (const index of [...new Set(chosenIndexes)]) {
@@ -552,18 +559,26 @@ async function previewSeries(chosenIndexes: number[], options: GivenOptions) {
   }
   const resolution = await resolveAdd(options, shows);
   if ("error" in resolution) return reply(`${resolution.error} Nothing was added.`, true);
-  return reply(storePreview({ ...options, chosenIndexes }, resolution));
+  return reply(storePreview({ ...options, chosenIndexes }, resolution, now));
 }
 
-async function confirmPreview(previewId: string) {
+async function confirmPreview(previewId: string, now: number) {
   // Taken and removed in one statement: an id can be used once, and only
   // while it is the current preview.
   const taken = db
-    .prepare("DELETE FROM series_add_preview WHERE id = ? RETURNING payload")
-    .get(previewId) as { payload: string } | undefined;
+    .prepare("DELETE FROM series_add_preview WHERE id = ? RETURNING payload, created_at")
+    .get(previewId) as { payload: string; created_at: unknown } | undefined;
   if (!taken) {
     return reply(
       `❌ That previewId is not the current preview: it is unknown, was replaced by a newer preview or search, or was already used. Nothing was added. ${PREVIEW_AGAIN}`,
+      true,
+    );
+  }
+  // An expired preview is removed like a used one, before Sonarr is asked anything.
+  const age = now - Number(taken.created_at);
+  if (!(age >= 0 && age <= PREVIEW_LIFE_MS)) {
+    return reply(
+      `❌ That preview has expired: a preview can be confirmed for ${PREVIEW_LIFE_MINUTES} minutes after it is made. Nothing was added. ${PREVIEW_AGAIN}`,
       true,
     );
   }
@@ -581,24 +596,24 @@ async function confirmPreview(previewId: string) {
   // Sonarr as they are now.
   const { chosenIndexes: _indexes, ...given } = stored.given;
   const shows = stored.shows.map(({ tvdbId, title, year }) => ({ tvdbId, title, year }));
-  const now = await resolveAdd(given, shows);
-  if ("error" in now) {
+  const fresh = await resolveAdd(given, shows);
+  if ("error" in fresh) {
     return reply(
-      `Nothing was added: what the preview showed can no longer be resolved. ${now.error} ${PREVIEW_AGAIN}`,
+      `Nothing was added: what the preview showed can no longer be resolved. ${fresh.error} ${PREVIEW_AGAIN}`,
       true,
     );
   }
-  const changed = differences(stored, now);
+  const changed = differences(stored, fresh);
   if (changed.length > 0) {
-    const preview = storePreview(stored.given, now);
+    const preview = storePreview(stored.given, fresh, now);
     return reply(
       `Nothing was added: what the preview showed has changed since it was made.\n${changed.map((c) => `- ${c}`).join("\n")}\n\nThis is a new preview with a new id; the old id no longer works.\n\n${preview}`,
     );
   }
 
-  const { resolved } = now;
+  const { resolved } = fresh;
   let report = `🚀 **Adding series to Sonarr** (profile: ${resolved.qualityProfile}, folder: ${resolved.rootFolder}, type: ${resolved.seriesType}, monitor: ${resolved.monitor}, ${resolved.searchForMissing ? "search for monitored episodes started" : "no search started"})\n`;
-  for (const show of now.shows) {
+  for (const show of fresh.shows) {
     if (show.decision === "exists") {
       report += `  ⏭️ ${showLabel(show)} - already in Sonarr; not added.\n`;
       continue;
@@ -639,7 +654,7 @@ export function registerSeriesAddTools() {
       description:
         "Adds TV series from the last search_and_select_series grid to Sonarr, in two calls. " +
         "First call it with chosenIndexes (and, if the user asked, qualityProfile, rootFolder, seriesType, monitor, searchForMissing): this is a preview that changes nothing. It says which shows would be added and which are already in Sonarr, with the quality profile, root folder, series type, monitor option and whether a search will start, and it returns a previewId. Show that preview to the user. " +
-        "Only after the user agrees, call it again with previewId alone (no other argument): this adds the shows as monitored series with season folders. It only goes through if that id is the current preview and nothing the preview showed has changed; otherwise nothing is added and you get a new preview that says what differs. " +
+        "Only after the user agrees, call it again with previewId alone (no other argument): this adds the shows as monitored series with season folders. It only goes through if that id is the current preview, at most 15 minutes old, and nothing the preview showed has changed; otherwise nothing is added and you get a new preview that says what differs (or, for an expired id, are asked for a new preview). " +
         "Defaults: the quality profile, root folder, series type and monitor option saved on the Settings page, else Sonarr's first profile and root folder, 'standard' and 'all'. searchForMissing defaults to true: Sonarr searches for the monitored episodes at once, which for a long-running show with monitor 'all' can be a large download.",
       inputSchema: {
         previewId: z

@@ -93,12 +93,14 @@ export interface SeriesSelectionRow {
 
 // The current preview of confirm_selected_series: at most one row. payload is
 // JSON (what the preview showed and how it was resolved); a confirmation only
-// goes through with this row's id, and removes the row.
+// goes through with this row's id, within 15 minutes of created_at, and
+// removes the row. created_at is written by the tool, in milliseconds since
+// 1970, so the tests can move the clock.
 db.exec(`
   CREATE TABLE IF NOT EXISTS series_add_preview (
     id TEXT PRIMARY KEY,
     payload TEXT NOT NULL,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at INTEGER NOT NULL
   );
 `);
 

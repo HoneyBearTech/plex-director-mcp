@@ -643,6 +643,31 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(posts().length, 1);
   });
 
+  it("C13: a preview can be confirmed for 15 minutes, and says so; after that its id adds nothing, sends nothing and is removed", async () => {
+    const LIFE = 15 * 60 * 1000;
+    const start = Date.parse("2026-11-15T12:00:00Z");
+    await search("quiet valley");
+    const fresh = await confirmSelectedSeries({ chosenIndexes: [1] }, start);
+    assert.match(text(fresh), /good for 15 minutes/);
+    const justBefore = await confirmSelectedSeries({ previewId: idOf(fresh) }, start + LIFE - 1);
+    assert.equal(justBefore.isError, undefined);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+
+    const old = await confirmSelectedSeries({ chosenIndexes: [2] }, start);
+    const before = sonarr.calls.length;
+    const justAfter = await confirmSelectedSeries({ previewId: idOf(old) }, start + LIFE + 1);
+    assert.equal(justAfter.isError, true);
+    assert.match(
+      text(justAfter),
+      /That preview has expired: a preview can be confirmed for 15 minutes/,
+    );
+    assert.match(text(justAfter), /Nothing was added/);
+    assert.match(text(justAfter), /Call confirm_selected_series with chosenIndexes/);
+    assert.equal(sonarr.calls.length, before, "nothing is sent to Sonarr");
+    assert.deepEqual(previews(), [], "the expired preview is removed");
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
   it("C13: a setting changed after the preview adds nothing and returns a new preview that says what differs", async () => {
     const preview = await previewOf("quiet valley", [1]);
     setSetting("SONARR_DEFAULT_QUALITY_PROFILE", "WEB-2160p");
@@ -846,9 +871,7 @@ describe("confirm_selected_series: the confirmation", () => {
       title: "Harbour Nights",
       titleSlug: "harbour-nights",
       year: 2008,
-      images: [
-        { coverType: "poster", remoteUrl: "https://artworks.example.org/posters/503.jpg" },
-      ],
+      images: [{ coverType: "poster", remoteUrl: "https://artworks.example.org/posters/503.jpg" }],
       seasons: [
         { seasonNumber: 0, monitored: false },
         { seasonNumber: 1, monitored: true },
