@@ -85,7 +85,19 @@ const seasonsText = (n: number | null) =>
 const yearText = (year: unknown) => (typeof year === "number" && year > 0 ? String(year) : "N/A");
 const tvdbIdOf = (series: SonarrSeries) =>
   typeof series.tvdbId === "number" && series.tvdbId > 0 ? series.tvdbId : null;
-const titleOf = (series: SonarrSeries) => String(series.title ?? "").slice(0, TEXT_LENGTH);
+// Lookup text as it is stored and shown: runs of whitespace (newlines too)
+// become one space, the ends are trimmed, and it is cut to TEXT_LENGTH whole
+// characters (code points, so never through a surrogate pair). Not escaped:
+// the title is also the term a show is looked up by again.
+const cleanText = (text: unknown) =>
+  Array.from(
+    String(text ?? "")
+      .replace(/\s+/g, " ")
+      .trim(),
+  )
+    .slice(0, TEXT_LENGTH)
+    .join("");
+const titleOf = (series: SonarrSeries) => cleanText(series.title);
 
 async function lookup(term: string): Promise<SonarrSeries[]> {
   const response = await sonarrClient.get<SonarrSeries[]>("/api/v3/series/lookup", {
@@ -165,9 +177,7 @@ export async function searchAndSelectSeries({ query }: { query: string }) {
           ? `${overviewClean.slice(0, OVERVIEW_LENGTH)}...`
           : overviewClean;
       const facts = [
-        series.network
-          ? escapeTableCell(String(series.network).slice(0, TEXT_LENGTH))
-          : "network unknown",
+        cleanText(series.network) ? escapeTableCell(cleanText(series.network)) : "network unknown",
         series.status ? escapeTableCell(String(series.status)) : "status unknown",
         seasonsText(seasonCount(series)),
         `TVDB ID: ${series.tvdbId}`,

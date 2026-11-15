@@ -86,8 +86,10 @@ function sonarrFake() {
   sonarr = fakeApi(sonarrClient, (req) => {
     if (sonarrDown) throw new Error("connect ECONNREFUSED");
     if (req.method === "get" && req.url === "/api/v3/series/lookup") {
-      const term = String(req.params.term ?? "").toLowerCase();
-      return { data: CATALOG.filter((s) => s.title.toLowerCase().includes(term)) };
+      // Like a search engine, it ignores case and differences in whitespace.
+      const words = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+      const term = words(String(req.params.term ?? ""));
+      return { data: CATALOG.filter((s) => words(s.title).includes(term)) };
     }
     if (req.method === "get" && req.url === "/api/v3/series") return { data: inSonarr };
     if (req.method === "get" && req.url === "/api/v3/qualityprofile") return { data: profiles };
@@ -327,6 +329,51 @@ describe("search_and_select_series", () => {
     const report = await confirmSelectedSeries({ previewId: idOf(preview) });
     assert.ok(text(report).includes(`**${cut} (2020)**`));
     assert.ok(!text(report).includes(longTitle.slice(0, 201)));
+  });
+
+  it("C4: the cut to 200 is made on whole characters, so an emoji at the edge is never broken, and such a show can be previewed and confirmed", async (t) => {
+    const original = CATALOG[6]!;
+    const title = `Quiet Valley ${"a".repeat(186)}😀 and more`;
+    CATALOG[6] = lookupSeries(601, title, 2020);
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    const result = await search("quiet valley");
+    const stored = grid()[0]!.title;
+    assert.equal(Array.from(stored).length, 200);
+    assert.ok(stored.endsWith("a😀"), "the emoji is kept whole");
+    assert.doesNotMatch(stored, loneSurrogate);
+    assert.doesNotMatch(text(result), loneSurrogate);
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.doesNotMatch(text(preview), loneSurrogate);
+    assert.ok(text(preview).includes(`**${stored} (2020)**`));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.doesNotMatch(text(report), loneSurrogate);
+    assert.match(text(report), /✅ .* - added/);
+  });
+
+  it("C4: whitespace in a title or network becomes one space, in the grid, the preview and the report", async (t) => {
+    const original = CATALOG[6]!;
+    CATALOG[6] = lookupSeries(601, "  Quiet\n\nValley\t <b>Now</b> ", 2020, {
+      network: "Network\r\nOne ",
+    });
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const result = await search("valley");
+    assert.equal(grid()[0]!.title, "Quiet Valley <b>Now</b>");
+    const row = text(result)
+      .split("\n")
+      .find((l) => l.includes("Choice 1"))!;
+    assert.ok(row.includes("**Quiet Valley <b>Now</b> (2020)** <br> *Network One · "), row);
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.ok(text(preview).includes("- **Quiet Valley <b>Now</b> (2020)** [TVDB: 601]"));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.match(
+      text(report),
+      /✅ \*\*Quiet Valley <b>Now<\/b> \(2020\)\*\* \[TVDB: 601\] - added/,
+    );
   });
 
   it("C5: it sends only GET requests", async () => {
