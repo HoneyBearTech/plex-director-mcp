@@ -38,8 +38,8 @@ a security problem.
   that was not the added series) or not attempted (Sonarr's address changed or a newer search replaced
   the grid). The preview holds the add to what was shown (the shows with their title, year and TVDB id,
   their seasons and the settings); the MCP client's approval prompt is what puts a person in between, so
-  don't set "always allow" for `confirm_selected_series` or `confirm_selected_choices`. **This is a tool that changes Sonarr.** Written
-  for Sonarr v4.
+  don't set "always allow" for `confirm_selected_series` or `confirm_selected_choices`. **This is a tool
+  that changes Sonarr.** Written for Sonarr v4.
 - **Four Sonarr settings for new series**, on the Sonarr tab of the Settings page and as environment
   variables that seed them: `SONARR_DEFAULT_QUALITY_PROFILE`, `SONARR_DEFAULT_ROOT_FOLDER`,
   `SONARR_DEFAULT_SERIES_TYPE` (`standard`, `daily` or `anime`) and `SONARR_DEFAULT_MONITOR` (`all`,

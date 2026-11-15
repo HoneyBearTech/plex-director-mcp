@@ -141,7 +141,8 @@ Adding is three steps, so that nothing is added by mistake:
    settings used and has one line per show:
    - **added**: Sonarr answered with the added series;
    - **already there**: it was in Sonarr already and was not sent;
-   - **failed**: Sonarr refused it, with Sonarr's reason;
+   - **failed**: Sonarr refused it, with Sonarr's reason, or the address answered with a redirect, which is
+     not followed (nothing is sent anywhere else; check the Sonarr URL on the Settings page);
    - **not known**: Sonarr didn't answer, answered with a server-side error (such as a 502 or 504 from a
      proxy in front of it), or answered with something that wasn't the added series. The show may have
      been added; a new search and preview will show it as already in Sonarr if it was. Nothing is retried;
