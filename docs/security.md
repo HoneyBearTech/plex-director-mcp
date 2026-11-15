@@ -60,10 +60,10 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   Sonarr's address, a show's state, title, year or seasons have changed since the preview; then nothing
   is added and a new preview says what differs. Only a fixed list of fields is posted to Sonarr. If
   Sonarr's address changes, or a newer search replaces the grid, during an add, the remaining shows are
-  not sent ("not attempted"). A show is reported "failed" only when Sonarr refused it (a 4xx answer) or
-  the address answered with a redirect (never followed, so the add goes nowhere else), and "added" only
-  when Sonarr answered with the added series; no answer, a server-side error or any other answer is
-  "not known", since the show may have been added. Replies never contain the Sonarr API key.
+  not sent ("not attempted"). A show is reported "failed" only when Sonarr refused it (a 4xx answer),
+  and "added" only when Sonarr answered with the added series; no answer, a redirect (never followed, so
+  the add goes nowhere else), a server-side error or any other answer is "not known", since the show may
+  have been added. Replies never contain the Sonarr API key.
 - The series type and monitor option defaults are checked when saved on the Settings page; a value that
   came from the environment at first start is not checked there, and a bad one is reported at preview
   time, where nothing is added.

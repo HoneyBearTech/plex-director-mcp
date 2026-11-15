@@ -1377,7 +1377,7 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(posts().length, 2, "nothing is retried");
   });
 
-  it("C14: a redirect from the Sonarr address is not followed: nothing reaches the host it names, and the show is reported as failed", async (t) => {
+  it("C14: a redirect from the Sonarr address is not followed: nothing reaches the host it names, and the outcome is not known", async (t) => {
     const elsewhere = await localServer(() => ({ status: 201, data: {} }));
     const atSonarr = await localServer((req) =>
       req.method === "post"
@@ -1402,12 +1402,12 @@ describe("confirm_selected_series: the confirmation", () => {
     const line = text(result).split("\n").slice(1).filter(Boolean)[0]!;
     assert.match(
       line,
-      /❌ .*Quiet Valley \(2020\).* - failed: the Sonarr address answered with a redirect \(HTTP 307\); it was not followed and nothing was sent anywhere else\. Check the Sonarr URL on the Settings page\./,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: the Sonarr address answered with a redirect \(HTTP 307\); it was not followed and nothing was sent anywhere else\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\. Check the Sonarr URL on the Settings page\./,
     );
     assert.ok(!text(result).includes(elsewhere.url), "the redirect's Location is not in the reply");
   });
 
-  it("C14: the POST is sent with maxRedirects 0, and the status rule's bounds: 299 is not a failure, 300 to 499 fail, 500 is not known", async () => {
+  it("C14: the POST is sent with maxRedirects 0, and the status rule's bounds: 299 to 399 are not known, 400 to 499 fail, 500 is not known", async () => {
     const preview = await previewOf("harbour", [1, 2, 3, 4, 5]);
     // The suite's fake rejects only statuses from 400; lower ones come back as
     // answers, which go through the same status rule.
@@ -1417,15 +1417,29 @@ describe("confirm_selected_series: the confirmation", () => {
     addAnswers[504] = { status: 499, data: [{ errorMessage: "No." }] };
     addAnswers[505] = { status: 500, data: { message: "Internal error" } };
     const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    // The grid holds five shows, so the lowest failing status gets its own add,
+    // of a sixth show.
+    addAnswers[506] = { status: 400, data: [{ errorMessage: "Bad." }] };
+    const lowest = await confirmSelectedSeries({
+      previewId: idOf(await previewOf("harbour six", [1])),
+    });
     for (const post of posts()) assert.equal(post.limits.maxRedirects, 0);
+    assert.equal(posts().length, 6);
+    assert.match(text(lowest), /❌ .*Harbour Six \(2023\).* - failed: Bad\./);
     const lines = text(result).split("\n").slice(1).filter(Boolean);
     assert.match(
       lines[0]!,
       /Harbour Lights \(2019\).* - outcome not known: Sonarr's answer was not the added series/,
     );
-    assert.match(lines[1]!, /- failed: the Sonarr address answered with a redirect \(HTTP 300\)/);
-    assert.match(lines[2]!, /- failed: the Sonarr address answered with a redirect \(HTTP 399\)/);
-    assert.match(lines[3]!, /- failed: No\./);
+    assert.match(
+      lines[1]!,
+      /❓ .* - outcome not known: the Sonarr address answered with a redirect \(HTTP 300\)/,
+    );
+    assert.match(
+      lines[2]!,
+      /❓ .* - outcome not known: the Sonarr address answered with a redirect \(HTTP 399\)/,
+    );
+    assert.match(lines[3]!, /❌ .* - failed: No\./);
     assert.match(lines[4]!, /- outcome not known: Sonarr answered HTTP 500 \(Internal error\)/);
   });
 

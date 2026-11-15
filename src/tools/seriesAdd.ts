@@ -756,15 +756,15 @@ async function confirmPreview(previewId: string, now: number, reply: Reply) {
     // Equal to what the preview stored: differences() found no change.
     const seasons = stored.shows.find((s) => s.tvdbId === show.tvdbId)?.seasons ?? [];
     // Only what is known is reported, and nothing is retried. Added: a 2xx
-    // answer that is the added series. Failed: a 3xx (a redirect, which is
-    // never followed) or a 4xx answer, Sonarr refusing it. Anything else (no
-    // answer, a 5xx from Sonarr or something in front of it, an answer that is
-    // not the series) may have added it.
+    // answer that is the added series. Failed: a 4xx answer, Sonarr refusing
+    // it. Anything else may have added it: no answer, a redirect (never
+    // followed; a 303 can come after a request that was carried out), a 5xx
+    // from Sonarr or something in front of it, an answer that is not the series.
     const notKnown = (why: string) =>
       `  ❓ ${showLabel(show)} - outcome not known: ${why}. The show may have been added; a new search and preview will show it as already in Sonarr if it was.\n`;
     const byStatus = (status: number, message: string) =>
       status >= 300 && status <= 399
-        ? `  ❌ ${showLabel(show)} - failed: the Sonarr address answered with a redirect (HTTP ${status}); it was not followed and nothing was sent anywhere else. Check the Sonarr URL on the Settings page.\n`
+        ? `  ❓ ${showLabel(show)} - outcome not known: the Sonarr address answered with a redirect (HTTP ${status}); it was not followed and nothing was sent anywhere else. The show may have been added; a new search and preview will show it as already in Sonarr if it was. Check the Sonarr URL on the Settings page.\n`
         : status >= 400 && status <= 499
           ? `  ❌ ${showLabel(show)} - failed: ${message}\n`
           : notKnown(`Sonarr answered HTTP ${status} (${message})`);
