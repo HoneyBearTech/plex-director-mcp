@@ -292,10 +292,11 @@ const definitions: ToolDefinition[] = [
   {
     name: "search_plex_library",
     description:
-      "Searches the movies and TV shows actually in the user's Plex library (across all movie and show libraries, including 4K) by genre, actor, title, release year, and/or library. Filters can be combined, e.g. genre 'Horror' with year 1982, or genre 'Horror' with library '4k'. " +
+      "Searches the movies and TV shows actually in the user's Plex library (across all movie and show libraries, including 4K) by genre, actor, director, title, release year, and/or library. Filters can be combined, e.g. genre 'Horror' with year 1982, or genre 'Horror' with library '4k'. " +
       "Pass mediaType 'movie' when the user asks about movies/films, 'show' for TV/series/shows, and leave it out (any) when the question is about titles in general, e.g. everything with an actor; a show in several libraries is one result, with its season and episode counts. Some libraries (such as Sports) may be left out unless named in the library filter. " +
       "Use this to answer what the user owns or can watch; use check_movie_status for Radarr/download status of one specific movie. " +
-      "Watch state: use watched 'unwatched' (never played), 'inProgress' (started but not finished - this is the complete list of unfinished titles, unlike get_on_deck's short recent list) or 'watched' (finished), and notWatchedInYears for 'haven't watched in N years' (a never-watched title counts from when it was added); they are for the Plex account the app is connected with. sort orders by recentlyAdded, lastWatched or leastRecentlyWatched instead of by title. Also filter by network (or movie studio), contentRating (TV-MA, R...), minRating (audience rating 0-10), yearFrom/yearTo (a decade is 1990 to 1999) and addedWithinDays ('what showed up this week?'). Plex does not know whether a show is continuing or ended; use Sonarr tools for that. " +
+      "Watch state: use watched 'unwatched' (never played), 'inProgress' (started but not finished - this is the complete list of unfinished titles, unlike get_on_deck's short recent list) or 'watched' (finished), and notWatchedInYears for 'haven't watched in N years' (a never-watched title counts from when it was added); they are for the Plex account the app is connected with. sort orders by recentlyAdded, lastWatched or leastRecentlyWatched instead of by title. Also filter by network (or movie studio), contentRating (TV-MA, R...), minRating (audience rating 0-10), yearFrom/yearTo (a decade is 1990 to 1999) and addedWithinDays ('what showed up this week?'). " +
+      "showStatus ('continuing', 'ended' or 'upcoming') keeps only the TV shows with that status in Sonarr, e.g. 'which of my shows are still running?' or 'which ended shows have I not finished?' (with watched 'inProgress'); it needs Sonarr, searches shows only, and shows Sonarr does not have are left out and counted in the reply. director (a full name) finds the movies a person directed; it is for movies only, because Plex keeps TV directors per episode, and it cannot be combined with showStatus. " +
       "Always express a narrowing the user asks for (4K, a genre, a year, unwatched...) as a filter here rather than filtering results yourself, because the results table shown to the user contains exactly the rows this returns. " +
       "The default limit is small: when the user wants everything ('all', 'every', 'list them'), pass limit 500; if the reply says more matches remain, call again with the offset it gives.",
     zodSchema: {
@@ -306,6 +307,16 @@ const definitions: ToolDefinition[] = [
         .describe("Search only movies, only TV shows, or both (default any)."),
       genre: z.string().optional().describe("Genre name, e.g. 'Horror' or 'Science Fiction'."),
       actor: z.string().optional().describe("Full actor name, e.g. 'Harrison Ford'."),
+      director: z
+        .string()
+        .optional()
+        .describe("Full director name, e.g. 'Kathryn Bigelow'. Movies only."),
+      showStatus: z
+        .enum(["continuing", "ended", "upcoming"])
+        .optional()
+        .describe(
+          "Only TV shows with this status in Sonarr: still running, ended, or not started yet. Needs Sonarr.",
+        ),
       year: z.number().int().optional().describe("Release year (a show's first air year)."),
       library: z
         .string()
@@ -375,6 +386,16 @@ const definitions: ToolDefinition[] = [
         },
         genre: { type: "string", description: "Genre name, e.g. 'Horror' or 'Science Fiction'." },
         actor: { type: "string", description: "Full actor name, e.g. 'Harrison Ford'." },
+        director: {
+          type: "string",
+          description: "Full director name, e.g. 'Kathryn Bigelow'. Movies only.",
+        },
+        showStatus: {
+          type: "string",
+          enum: ["continuing", "ended", "upcoming"],
+          description:
+            "Only TV shows with this status in Sonarr: still running, ended, or not started yet. Needs Sonarr.",
+        },
         year: { type: "integer", description: "Release year (a show's first air year)." },
         library: {
           type: "string",

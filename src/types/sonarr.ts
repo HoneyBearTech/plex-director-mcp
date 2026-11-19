@@ -10,6 +10,8 @@ export interface SonarrImage {
 
 export interface SonarrSeries {
   id: number;
+  // The show's id at TheTVDB, which Plex also records for a matched show.
+  tvdbId?: number;
   title?: string;
   year?: number;
   monitored?: boolean;

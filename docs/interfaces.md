@@ -27,7 +27,7 @@ can use. **Changes** marks tools that change something in your services.
 
 | Tool | Changes | What it does |
 | --- | :---: | --- |
-| ★ `search_plex_library` | | Search Plex movies and shows by title, genre, actor, year, library, watch state, network, rating and date added. |
+| ★ `search_plex_library` | | Search Plex movies and shows by title, genre, actor, year, library, watch state, network, rating and date added; movies by director; shows by their status in Sonarr (continuing, ended, upcoming). |
 | ★ `search_episodes` | | Find TV episodes by title (and, within a named show, plot), air date, premiere or finale. |
 | ★ `get_on_deck` | | Plex's On Deck: what to watch next, with progress. |
 | ★ `resolve_actor_filmography` | | An actor's TMDb movies and shows, each marked as in Plex or not. |

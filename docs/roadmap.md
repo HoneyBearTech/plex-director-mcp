@@ -17,8 +17,8 @@ What works today:
 
 - **Library search** across every Plex library, movies and TV shows together: genre, actor, title, year,
   library (for example only 4K), watch state, "not watched in N years", network or studio, content rating,
-  audience rating, decade and recently added; individual episodes by title, plot (within a show) and air
-  date; On Deck.
+  audience rating, decade and recently added; movies by director; shows by whether they are continuing,
+  ended or upcoming (from Sonarr); individual episodes by title, plot (within a show) and air date; On Deck.
 - **Owned versus missing** for an actor's movies and shows, from TMDb.
 - **TV completeness and status** from Sonarr: which aired episodes are missing and why, which shows have
   gaps, what airs this week, when a show returns, and shows by downloaded quality.
@@ -48,9 +48,10 @@ What works today:
   Sonarr defaults (quality profile, root folder, series type, which seasons to monitor) rather than
   anything hard-coded to one install.
 
-**Smaller search additions** (Planned)
-- Continuing, ended or upcoming status for shows (from Sonarr), and a director filter for cross-media
-  answers.
+**Smaller search additions**
+- **Done (November 2026):** `search_plex_library` filters shows by their continuing, ended or upcoming
+  status (from Sonarr) and movies by director. The director filter covers movies only, because Plex keeps
+  a show's directors per episode.
 
 **Working with other AI clients**
 - **Done (October 2026):** routing guidance for the tools written once (`src/guidance.ts`) and shared by
