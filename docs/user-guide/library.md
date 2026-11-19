@@ -44,8 +44,9 @@ aren't searched, unless you name one in the question ("in Sports").
 **Show status comes from Sonarr.** Plex doesn't know whether a show is still running, so the status filter
 reads it from Sonarr and needs Sonarr set up (the **Sonarr** tab of Settings). It searches shows only. A Plex
 show is matched to Sonarr by its TVDB id, or by title and year when Plex holds no TVDB id for it. Shows that
-Sonarr doesn't have are left out, and the reply says how many there were. If Sonarr can't be reached, the
-reply says so rather than "no shows match".
+Sonarr doesn't have, or that can't be matched to one Sonarr series (two series share a title and year, say), are
+left out, and the reply says how many there were. If Sonarr can't be reached or read, the reply says so rather
+than "no shows match".
 
 **Directors are for movies only.** Plex keeps a movie's directors on the movie, but a show's directors on each
 episode, so shows can't be searched by director. Asked for "everything by" a director, only the movie

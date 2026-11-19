@@ -327,10 +327,14 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
   let sonarrShows: SonarrShowIndex | null = null;
   if (showStatus) {
     try {
-      sonarrShows = indexSonarrSeries(await fetchAllSeries());
+      const all: unknown = await fetchAllSeries();
+      // A proxy can answer 200 with a sign-in page: not a list of series.
+      if (!Array.isArray(all) || !all.every((item) => typeof item === "object" && item !== null))
+        throw new Error("Sonarr did not answer with a list of series");
+      sonarrShows = indexSonarrSeries(all);
     } catch (error: unknown) {
       return textReply(
-        `Sonarr could not be read, so show status can't be checked: ${getErrorMessage(error)}. This is a failure to reach Sonarr, not a result of "no shows".`,
+        `Sonarr could not be read, so show status can't be checked: ${getErrorMessage(error)}. This is a failure to reach or read Sonarr, not a result of "no shows".`,
         true,
       );
     }
@@ -537,24 +541,24 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     });
 
     // Show status, from Sonarr. It runs last of the filters, so the count of
-    // shows Sonarr doesn't have is of shows that passed every other filter,
+    // shows that could not be matched to Sonarr is of shows that passed every other filter,
     // and before sorting and paging, so the total and the pages are of the
     // filtered set.
-    let notInSonarr = 0;
+    let notMatched = 0;
     if (sonarrShows && showStatus) {
       const index = sonarrShows;
       candidates = candidates.filter((g) => {
         const series = matchShowToSonarr(g.copies, index);
         if (!series) {
-          notInSonarr++;
+          notMatched++;
           return false;
         }
         return series.status === showStatus;
       });
     }
-    const notInSonarrNote =
-      notInSonarr > 0
-        ? ` ${notInSonarr} show${notInSonarr === 1 ? "" : "s"} that matched the other filters ${notInSonarr === 1 ? "is" : "are"} not in Sonarr, so ${notInSonarr === 1 ? "its status is" : "their status is"} unknown and ${notInSonarr === 1 ? "it was" : "they were"} left out.`
+    const notMatchedNote =
+      notMatched > 0
+        ? ` ${notMatched} show${notMatched === 1 ? "" : "s"} that matched the other filters could not be matched to a Sonarr series, so ${notMatched === 1 ? "its status is" : "their status is"} unknown and ${notMatched === 1 ? "it was" : "they were"} left out.`
         : "";
 
     const byTitle = (a: Group, b: Group) =>
@@ -602,8 +606,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     if (rows.length === 0) {
       return textReply(
         total > 0
-          ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.`
-          : `No ${noun} in Plex match ${heading}.${undatedNote}${notInSonarrNote}${directorNote}`,
+          ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.${notMatchedNote}`
+          : `No ${noun} in Plex match ${heading}.${undatedNote}${notMatchedNote}${directorNote}`,
       );
     }
 
@@ -633,7 +637,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       output += " Watch state is for the Plex account the app is connected with.";
     }
     output += undatedNote;
-    output += notInSonarrNote;
+    output += notMatchedNote;
     output += directorNote;
     output += "\n\n";
     for (const { kind, item, libraries, watch } of rows) {
