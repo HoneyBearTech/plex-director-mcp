@@ -137,6 +137,6 @@ export async function resetDb(): Promise<void> {
   assertIsolated();
   const { db } = await import("../src/db.js");
   db.exec(
-    "DELETE FROM system_jobs; DELETE FROM interaction_context; DELETE FROM settings; DELETE FROM ssh_host_keys; DELETE FROM sqlite_sequence WHERE name='system_jobs';",
+    "DELETE FROM system_jobs; DELETE FROM interaction_context; DELETE FROM series_selection_context; DELETE FROM series_add_preview; DELETE FROM settings; DELETE FROM ssh_host_keys; DELETE FROM sqlite_sequence WHERE name='system_jobs';",
   );
 }

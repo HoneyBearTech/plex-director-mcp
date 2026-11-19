@@ -9,7 +9,7 @@ built yet is marked **Planned**.
 
 ## Where it stands
 
-Plex Director is one Node.js process that is both an MCP server for Claude Desktop (27 tools) and a web
+Plex Director is one Node.js process that is both an MCP server for Claude Desktop (29 tools) and a web
 dashboard with a Claude-powered Query chat. **v1.0.0**, **v1.1.0** (September 2026), **v1.2.0**, **v1.3.0** and **v1.4.0** (October 2026) are released as
 signed multi-arch images on Docker Hub and GHCR.
 
@@ -26,6 +26,8 @@ What works today:
   years (from Plex, plus Tautulli's play history when it is configured). Reports only; nothing is deleted.
 - **Movies**: status, diagnosis of why one is missing, and adding movies to Radarr through a
   pick-then-confirm grid with a configurable default quality profile.
+- **Adding TV series** to Sonarr from an MCP client: search, a preview of exactly what would be added, then
+  a confirmation, with configurable defaults for quality profile, root folder, series type and monitoring.
 - **Downloads and indexers**: SABnzbd and qBittorrent queues, stalled-torrent clean-up, Prowlarr indexer
   health.
 - **Batch jobs**: planned movie upgrades run by a rate-limited job runner, one search per minute, with
@@ -44,11 +46,12 @@ What works today:
 - These are read-only reports. Any bulk TV action added later will be explicit, confirmed and
   rate-limited like the movie job system.
 
-**Adding TV series** (Planned, undecided)
-- Whether the assistant should add series to Sonarr, the way it adds movies to Radarr, or stay search-only
-  for TV, is still open. If it is built, it will use the same search-then-confirm flow, with configurable
-  Sonarr defaults (quality profile, root folder, series type, which seasons to monitor) rather than
-  anything hard-coded to one install.
+**Adding TV series**
+- **Done (November 2026):** `search_and_select_series` and `confirm_selected_series` add series to Sonarr
+  from an MCP client: a search, then a preview that says exactly what would be added and with which
+  settings, then a confirmation that only goes through while nothing the preview showed has changed. The
+  Sonarr defaults (quality profile, root folder, series type, which episodes to monitor) are settings,
+  not anything hard-coded to one install. Written for Sonarr v4. The Query chat stays read-only.
 
 **Smaller search additions**
 - **Done (November 2026):** `search_plex_library` filters shows by their continuing, ended or upcoming

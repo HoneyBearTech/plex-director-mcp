@@ -1,7 +1,9 @@
 # TV shows
 
-These tools read **Sonarr**: which episodes you have, which are missing and why, what quality you have them
-in, how much space they take, and what is coming up. They only read; none of them changes anything in Sonarr. All seven are available in
+Seven tools read **Sonarr**: which episodes you have, which are missing and why, what quality you have them
+in, how much space they take, and what is coming up. They only read; none of the seven changes anything in
+Sonarr. Two more [add shows to Sonarr](#adding-a-show-search_and_select_series-and-confirm_selected_series),
+from your MCP client only. The seven that read are available in
 Claude Desktop and in the [Query chat](query-chat.md).
 
 To search the shows in Plex, or find a particular episode by its plot, see [Your library](library.md).
@@ -122,7 +124,62 @@ From Sonarr's calendar:
 
 Shows Sonarr doesn't monitor are left out unless you ask for them, and the reply says how many were left out.
 
+## Adding a show: `search_and_select_series` and `confirm_selected_series`
+
+This part is written for **Sonarr v4**. Both tools are for your MCP client only; the Query chat cannot add
+anything.
+
+Adding is three steps, so that nothing is added by mistake:
+
+1. **Search.** "Add the show Severance." `search_and_select_series` asks Sonarr's own lookup and shows up to
+   five matches as a numbered grid: poster, title and year, network, status, number of seasons (specials not
+   counted), TVDB id and a short overview. A show that is already in Sonarr is marked. Nothing is added.
+2. **Preview.** "Add 1 and 3." `confirm_selected_series` is called with the numbers you chose and answers with
+   a preview: which of those shows would be added and which are already in Sonarr, and the quality profile,
+   root folder, series type, which episodes would be monitored and whether a search for them would start.
+   Still nothing is added; the preview only reads Sonarr.
+3. **Confirm.** When you agree, `confirm_selected_series` is called again with nothing but that preview's id.
+   Only then are the shows added to Sonarr, **monitored**, with season folders, and, unless you asked
+   otherwise, with a **search for the monitored episodes started** straight away. The reply opens with the
+   settings used and has one line per show: added, already there, or failed with Sonarr's reason. One show
+   failing doesn't stop the others.
+
+What each setting is, in the order it is looked for:
+
+| Setting | You say | Otherwise | Otherwise |
+| :--- | :--- | :--- | :--- |
+| Quality profile | "…in the WEB-1080p profile" | The default on the **Sonarr** tab of Settings | Sonarr's first profile (the preview says so) |
+| Root folder | "…in /media/tvshowskids" | The default on the **Sonarr** tab | Sonarr's first root folder |
+| Series type | "…as anime" (`standard`, `daily` or `anime`) | The default on the **Sonarr** tab | `standard` |
+| Monitor | "…only the first season" (see below) | The default on the **Sonarr** tab | `all` |
+| Search | "…but don't search yet" | | A search starts |
+
+The monitor options are Sonarr's: `all` (all episodes), `future` (episodes that haven't aired), `missing`
+(episodes without a file), `existing` (episodes that have one), `firstSeason`, `lastSeason`, `pilot` (the
+first episode only) and `none`.
+
+A quality profile or root folder that Sonarr doesn't have is refused with the list of the ones it does have,
+also when it is a saved default that has since been renamed or removed in Sonarr. A saved series type or
+monitor option that isn't one of the values above is refused the same way. The root folder must be one of
+Sonarr's own root folders.
+
+**The preview is what gets added, or nothing is.**
+
+- A preview's id works once, and only while it is the newest preview. A new search or a new preview makes
+  the earlier id useless; using it adds nothing and says to preview again.
+- When you confirm, everything is checked again. If a default on the Settings page, Sonarr's address, the
+  profile or folder in Sonarr, or a show's state (it has been added to Sonarr meanwhile, or removed from it)
+  no longer matches what the preview showed, **nothing is added**: you get a new preview that says what
+  differs, to agree to or not.
+- Only the most recent series grid counts, and it is separate from the movie grid: searching for a movie
+  doesn't disturb a series search, or the other way round.
+
+Starting a search for every monitored episode of a long-running show can be a large download. Say "don't
+search yet", or choose a narrower monitor option such as `future` or `firstSeason`, if that isn't what you
+want. Once a show is added, remove it in Sonarr itself if you change your mind.
+
 ## Not available
 
 Batch upgrades of TV shows aren't supported: `plan_media_upgrade` refuses TV and only plans movies
-([Batch jobs](jobs.md)). There is no tool to add a show to Sonarr.
+([Batch jobs](jobs.md)). Shows can be added but not removed, and a show's monitoring, profile or folder
+can't be changed once it is in Sonarr: do that in Sonarr itself.

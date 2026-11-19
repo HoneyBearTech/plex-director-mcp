@@ -46,7 +46,7 @@ The chat uses the thirteen read-only tools for your library, movies and TV, the 
 - [TV](tv.md): `check_series_completeness`, `find_series_gaps`, `find_series_by_quality`, `find_series_by_size`,
   `check_series_status`, `diagnose_missing_episodes`, `get_upcoming_episodes`.
 
-It **can't change anything**: it can't add movies, touch the download queues, run jobs or backups, or check
+It **can't change anything**: it can't add movies or shows, touch the download queues, run jobs or backups, or check
 indexers and hosts. Use Claude Desktop for those, or the dashboard's other pages to look at them.
 
 Each question may take up to four rounds of tool calls. If Claude still hasn't finished, it says it hit its

@@ -5,6 +5,7 @@ import { registerMonitoringTools } from "./tools/monitoring.js";
 import { registerJobTools } from "./tools/jobs.js";
 import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerInfrastructureTools } from "./tools/infrastructure.js";
+import { registerSeriesAddTools } from "./tools/seriesAdd.js";
 import { createWebApp } from "./web/app.js";
 import { prepareStoredSecrets, seedSettingsFromEnv } from "./settings.js";
 import { getErrorMessage } from "./util.js";
@@ -41,6 +42,7 @@ registerMovieTools();
 registerMonitoringTools();
 registerJobTools();
 registerDiscoveryTools();
+registerSeriesAddTools();
 registerInfrastructureTools();
 
 async function run() {

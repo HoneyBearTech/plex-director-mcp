@@ -261,9 +261,10 @@ export async function resolveActorFilmography(actorName: string, options: Filmog
   }
 }
 
-// Radarr validation failures come back as an array of { errorMessage }, which
-// getErrorMessage() (built for a single { message }) would flatten to "Bad Request".
-function radarrErrorMessage(error: unknown): string {
+// Radarr and Sonarr validation failures come back as an array of
+// { errorMessage }, which getErrorMessage() (built for a single { message })
+// would flatten to "Bad Request". Shared with the series flow (seriesAdd.ts).
+export function radarrErrorMessage(error: unknown): string {
   const data: unknown = isAxiosError(error) ? error.response?.data : undefined;
   if (Array.isArray(data) && data.length > 0) {
     return (data as RadarrValidationError[])
@@ -274,27 +275,31 @@ function radarrErrorMessage(error: unknown): string {
   return getErrorMessage(error);
 }
 
-type ProfileChoice =
+export type ProfileChoice =
   | { profile: { id: number; name: string }; source: "requested" | "setting" | "first" }
   | { error: string };
 
-// Which Radarr quality profile new movies get: the one the caller names, else
-// the default saved on the Settings page (RADARR_DEFAULT_QUALITY_PROFILE), else
-// Radarr's own first profile - which is also what Radarr's UI preselects, so a
+// Which quality profile new movies (or, for Sonarr, new series) get: the one
+// the caller names, else the default saved on the Settings page
+// (RADARR_DEFAULT_QUALITY_PROFILE, SONARR_DEFAULT_QUALITY_PROFILE), else the
+// service's own first profile - which is also what its UI preselects, so a
 // fresh install works without any setup.
-function chooseQualityProfile(
+export function chooseQualityProfile(
   profiles: Array<{ id: number; name: string }>,
   requested: string | undefined,
+  service: "Radarr" | "Sonarr" = "Radarr",
 ): ProfileChoice {
   const asked = requested?.trim() || "";
-  const saved = getSetting("RADARR_DEFAULT_QUALITY_PROFILE").trim();
+  const saved = getSetting(
+    service === "Sonarr" ? "SONARR_DEFAULT_QUALITY_PROFILE" : "RADARR_DEFAULT_QUALITY_PROFILE",
+  ).trim();
   const wanted = asked || saved;
 
   if (!wanted) {
     const first = profiles[0];
     return first
       ? { profile: first, source: "first" }
-      : { error: "❌ Radarr has no quality profiles configured." };
+      : { error: `❌ ${service} has no quality profiles configured.` };
   }
 
   const match = profiles.find((p) => p.name.toLowerCase() === wanted.toLowerCase());
@@ -302,7 +307,7 @@ function chooseQualityProfile(
 
   const origin = asked ? "" : " (that is the default set on the Settings page)";
   return {
-    error: `❌ No Radarr quality profile named "${wanted}"${origin}. Available: ${profiles.map((p) => p.name).join(", ")}.`,
+    error: `❌ No ${service} quality profile named "${wanted}"${origin}. Available: ${profiles.map((p) => p.name).join(", ")}.`,
   };
 }
 
