@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { getSetting, SECRET_SETTINGS_KEYS, setSetting, type SettingsKey } from "../../settings.js";
 import { refreshClients } from "../../clients.js";
+import { MONITOR_OPTIONS, matchOption, SERIES_TYPES } from "../../seriesAddOptions.js";
 
 interface FieldDef {
   field: string;
@@ -59,6 +60,15 @@ const SERVICES: Record<string, FieldDef[]> = {
   ],
 };
 
+// Fields whose value, when not empty, must be one of a fixed list: the same
+// lists confirm_selected_series accepts (matched without regard to case, as
+// there). An empty value clears the default.
+const ALLOWED_VALUES: Partial<Record<SettingsKey, { label: string; allowed: readonly string[] }>> =
+  {
+    SONARR_DEFAULT_SERIES_TYPE: { label: "default series type", allowed: SERIES_TYPES },
+    SONARR_DEFAULT_MONITOR: { label: "default monitor option", allowed: MONITOR_OPTIONS },
+  };
+
 // How each secret field is named in messages shown to the user.
 const SECRET_LABELS: Record<string, string> = {
   apiKey: "API key",
@@ -112,6 +122,18 @@ settingsRouter.put("/:service", (req, res) => {
     if (missing.length > 0) {
       res.status(400).json({
         error: `Changing the URL needs the ${missing.map((f) => SECRET_LABELS[f.field] ?? f.field).join(" and ")} entered again, so the saved one is never sent to a different server. Nothing was saved.`,
+      });
+      return;
+    }
+  }
+
+  for (const f of fields) {
+    const raw = body[f.field];
+    const rule = ALLOWED_VALUES[f.key];
+    if (!rule || typeof raw !== "string" || raw.trim() === "") continue;
+    if (!matchOption(rule.allowed, raw.trim())) {
+      res.status(400).json({
+        error: `"${raw.trim()}" is not an allowed ${rule.label}. Allowed: ${rule.allowed.join(", ")}. Nothing was saved.`,
       });
       return;
     }

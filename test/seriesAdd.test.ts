@@ -1,6 +1,8 @@
 import "./setup.js";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
+import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { after, afterEach, before, beforeEach, describe, it } from "node:test";
 import { radarrClient, sonarrClient, tmdbClient } from "../src/clients.js";
@@ -50,7 +52,11 @@ const lookupSeries = (
   images: [
     { coverType: "poster", remoteUrl: `https://artworks.example.org/posters/${tvdbId}.jpg` },
   ],
-  seasons: [{ seasonNumber: 0 }, { seasonNumber: 1 }, { seasonNumber: 2 }],
+  seasons: [
+    { seasonNumber: 0, monitored: false },
+    { seasonNumber: 1, monitored: true },
+    { seasonNumber: 2, monitored: true },
+  ],
   titleSlug: title.toLowerCase().replace(/[^a-z0-9]+/g, "-"),
   ...extra,
 });
@@ -58,7 +64,9 @@ const lookupSeries = (
 // What Sonarr's lookup knows.
 const CATALOG = [
   lookupSeries(501, "Harbour Lights", 2019),
-  lookupSeries(502, "Harbour Lights: Origins", 2021, { seasons: [{ seasonNumber: 1 }] }),
+  lookupSeries(502, "Harbour Lights: Origins", 2021, {
+    seasons: [{ seasonNumber: 1, monitored: true }],
+  }),
   lookupSeries(503, "Harbour Nights", 2008, { status: "ended", network: "Network Two" }),
   lookupSeries(504, "The Harbour", 1999),
   lookupSeries(505, "Harbour Patrol", 2015),
@@ -74,27 +82,80 @@ let profiles: typeof PROFILES;
 let roots: typeof ROOTS;
 // TVDB id -> what POST /series answers for that show instead of adding it.
 let addErrors: Record<number, FakeReply>;
+// TVDB id -> what POST /series answers for that show after adding it.
+let addAnswers: Record<number, FakeReply>;
 let sonarrDown: boolean;
 
+// What the fake Sonarr answers to one request.
+function sonarrAnswer(req: RecordedRequest): FakeReply {
+  if (sonarrDown) throw new Error("connect ECONNREFUSED");
+  if (req.method === "get" && req.url === "/api/v3/series/lookup") {
+    // Like a search engine, it ignores case and differences in whitespace.
+    const words = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+    const term = words(String(req.params.term ?? ""));
+    return { data: CATALOG.filter((s) => words(s.title).includes(term)) };
+  }
+  if (req.method === "get" && req.url === "/api/v3/series") return { data: inSonarr };
+  if (req.method === "get" && req.url === "/api/v3/qualityprofile") return { data: profiles };
+  if (req.method === "get" && req.url === "/api/v3/rootfolder") return { data: roots };
+  if (req.method === "post" && req.url === "/api/v3/series") {
+    const body = req.body as { tvdbId: number; title: string };
+    const failure = addErrors[body.tvdbId];
+    if (failure) return failure;
+    // As Sonarr does: the added series, with its id.
+    const series = { id: 1000 + inSonarr.length, ...body };
+    inSonarr.push(series);
+    return addAnswers[body.tvdbId] ?? { status: 201, data: series };
+  }
+  return { status: 404 };
+}
+
 function sonarrFake() {
-  sonarr = fakeApi(sonarrClient, (req) => {
-    if (sonarrDown) throw new Error("connect ECONNREFUSED");
-    if (req.method === "get" && req.url === "/api/v3/series/lookup") {
-      const term = String(req.params.term ?? "").toLowerCase();
-      return { data: CATALOG.filter((s) => s.title.toLowerCase().includes(term)) };
-    }
-    if (req.method === "get" && req.url === "/api/v3/series") return { data: inSonarr };
-    if (req.method === "get" && req.url === "/api/v3/qualityprofile") return { data: profiles };
-    if (req.method === "get" && req.url === "/api/v3/rootfolder") return { data: roots };
-    if (req.method === "post" && req.url === "/api/v3/series") {
-      const body = req.body as { tvdbId: number; title: string };
-      const failure = addErrors[body.tvdbId];
-      if (failure) return failure;
-      inSonarr.push({ id: 1000 + inSonarr.length, ...body });
-      return { status: 201, data: body };
-    }
-    return { status: 404 };
+  sonarr = fakeApi(sonarrClient, sonarrAnswer);
+}
+
+// A real HTTP server on 127.0.0.1, for the one test that needs axios's own
+// transport (redirects). Every request it gets is kept.
+async function localServer(answer: (req: RecordedRequest) => FakeReply) {
+  const requests: RecordedRequest[] = [];
+  const httpServer = http.createServer((incoming, outgoing) => {
+    let raw = "";
+    incoming.on("data", (chunk) => {
+      raw += chunk;
+    });
+    incoming.on("end", () => {
+      const url = new URL(String(incoming.url), "http://127.0.0.1");
+      let body: unknown = raw;
+      try {
+        body = raw ? JSON.parse(raw) : undefined;
+      } catch {
+        /* not JSON - keep the string */
+      }
+      const req: RecordedRequest = {
+        method: String(incoming.method).toLowerCase(),
+        url: url.pathname,
+        params: Object.fromEntries(url.searchParams),
+        body,
+        headers: incoming.headers as Record<string, string>,
+        limits: {},
+      };
+      requests.push(req);
+      const reply = answer(req);
+      outgoing.writeHead(reply.status ?? 200, {
+        "Content-Type": "application/json",
+        ...(reply.headers ?? {}),
+      });
+      outgoing.end(JSON.stringify(reply.data ?? {}));
+    });
   });
+  httpServer.listen(0, "127.0.0.1");
+  await new Promise<void>((resolve) => httpServer.once("listening", () => resolve()));
+  const { port } = httpServer.address() as AddressInfo;
+  return {
+    url: `http://127.0.0.1:${port}`,
+    requests,
+    close: () => new Promise<void>((resolve) => httpServer.close(() => resolve())),
+  };
 }
 
 beforeEach(async () => {
@@ -105,6 +166,7 @@ beforeEach(async () => {
   profiles = [...PROFILES];
   roots = [...ROOTS];
   addErrors = {};
+  addAnswers = {};
   sonarrDown = false;
   sonarrFake();
 });
@@ -122,9 +184,41 @@ const idOf = (r: { content: Array<{ text: string }> }) => {
 const grid = () =>
   db
     .prepare(
-      "SELECT selection_index, tvdb_id, title, year FROM series_selection_context ORDER BY selection_index",
+      "SELECT selection_index, tvdb_id, title, year, generation FROM series_selection_context ORDER BY selection_index",
     )
-    .all() as Array<{ selection_index: number; tvdb_id: number; title: string; year: string }>;
+    .all() as Array<{
+    selection_index: number;
+    tvdb_id: number;
+    title: string;
+    year: string;
+    generation: string;
+  }>;
+// Holds the next request to Sonarr that matches until release() is called;
+// reached resolves once that request has arrived and is being held.
+function holdNext(match: (config: any) => boolean): {
+  release: () => void;
+  reached: Promise<void>;
+} {
+  let release!: () => void;
+  let arrive!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const reached = new Promise<void>((resolve) => {
+    arrive = resolve;
+  });
+  const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+  let held = false;
+  sonarrClient.defaults.adapter = async (config: any) => {
+    if (!held && match(config)) {
+      held = true;
+      arrive();
+      await gate;
+    }
+    return fake(config);
+  };
+  return { release, reached };
+}
 const previews = () =>
   db.prepare("SELECT id, payload FROM series_add_preview").all() as Array<{
     id: string;
@@ -252,6 +346,99 @@ describe("search_and_select_series", () => {
     for (const i of [0, 1, 3, 4]) assert.doesNotMatch(rows[i]!, /Already in Sonarr/);
   });
 
+  it("C3: a TVDB id the lookup returns twice is one row of the grid, the first", async (t) => {
+    CATALOG.splice(7, 0, lookupSeries(601, "Quiet Valley Again", 2020));
+    t.after(() => {
+      CATALOG.splice(7, 1);
+    });
+    const result = await search("quiet valley");
+    assert.deepEqual(
+      grid().map((g) => [g.selection_index, g.tvdb_id, g.title]),
+      [
+        [1, 601, "Quiet Valley"],
+        [2, 602, "Quiet Valley Stories"],
+      ],
+    );
+    assert.doesNotMatch(text(result), /Quiet Valley Again/);
+    assert.equal((text(result).match(/TVDB ID: 601/g) ?? []).length, 1);
+  });
+
+  it("C4: title and network are cut to 200 characters where they are stored and shown, and status is escaped", async (t) => {
+    const original = CATALOG[6]!;
+    const longTitle = `Quiet Valley ${"t".repeat(300)}`;
+    CATALOG[6] = lookupSeries(601, longTitle, 2020, {
+      network: `Network ${"n".repeat(300)}`,
+      status: "continuing | ended",
+    });
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const cut = longTitle.slice(0, 200);
+    const result = await search("quiet valley");
+    assert.equal(grid()[0]!.title, cut);
+    const row = text(result)
+      .split("\n")
+      .find((l) => l.includes("Choice 1"))!;
+    assert.ok(row.includes(`**${cut} (2020)**`), row);
+    assert.ok(!row.includes(longTitle.slice(0, 201)), "the title is not longer than 200");
+    assert.ok(row.includes(`*Network ${"n".repeat(192)} · `), "the network is cut to 200");
+    assert.ok(!row.includes(`Network ${"n".repeat(193)}`));
+    assert.ok(row.includes("continuing \\| ended"), "status is escaped");
+    assert.equal(row.replace(/\\\\/g, "").replace(/\\\|/g, "").split("|").length, 5);
+
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.ok(text(preview).includes(`**${cut} (2020)**`));
+    assert.ok(!text(preview).includes(longTitle.slice(0, 201)));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.ok(text(report).includes(`**${cut} (2020)**`));
+    assert.ok(!text(report).includes(longTitle.slice(0, 201)));
+  });
+
+  it("C4: the cut to 200 is made on whole characters, so an emoji at the edge is never broken, and such a show can be previewed and confirmed", async (t) => {
+    const original = CATALOG[6]!;
+    const title = `Quiet Valley ${"a".repeat(186)}😀 and more`;
+    CATALOG[6] = lookupSeries(601, title, 2020);
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const loneSurrogate = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/;
+    const result = await search("quiet valley");
+    const stored = grid()[0]!.title;
+    assert.equal(Array.from(stored).length, 200);
+    assert.ok(stored.endsWith("a😀"), "the emoji is kept whole");
+    assert.doesNotMatch(stored, loneSurrogate);
+    assert.doesNotMatch(text(result), loneSurrogate);
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.doesNotMatch(text(preview), loneSurrogate);
+    assert.ok(text(preview).includes(`**${stored} (2020)**`));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.doesNotMatch(text(report), loneSurrogate);
+    assert.match(text(report), /✅ .* - added/);
+  });
+
+  it("C4: whitespace in a title or network becomes one space, in the grid, the preview and the report", async (t) => {
+    const original = CATALOG[6]!;
+    CATALOG[6] = lookupSeries(601, "  Quiet\n\nValley\t <b>Now</b> ", 2020, {
+      network: "Network\r\nOne ",
+    });
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const result = await search("valley");
+    assert.equal(grid()[0]!.title, "Quiet Valley <b>Now</b>");
+    const row = text(result)
+      .split("\n")
+      .find((l) => l.includes("Choice 1"))!;
+    assert.ok(row.includes("**Quiet Valley <b>Now</b> (2020)** <br> *Network One · "), row);
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1] });
+    assert.ok(text(preview).includes("- **Quiet Valley <b>Now</b> (2020)** [TVDB: 601]"));
+    const report = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.match(
+      text(report),
+      /✅ \*\*Quiet Valley <b>Now<\/b> \(2020\)\*\* \[TVDB: 601\] - added/,
+    );
+  });
+
   it("C5: it sends only GET requests", async () => {
     await search("harbour");
     await search("nothing matches this");
@@ -259,13 +446,55 @@ describe("search_and_select_series", () => {
     assert.deepEqual(nonGets(), []);
   });
 
-  it("C1: Sonarr unreachable is an error reply, and nothing stays to confirm", async () => {
-    await search("quiet valley");
+  it("C1: Sonarr unreachable is an error reply, and the grid and the current preview stay as they were", async () => {
+    const preview = await previewOf("quiet valley", [1]);
+    const gridBefore = grid();
+    const previewBefore = previews();
     sonarrDown = true;
     const result = await search("harbour");
     assert.equal(result.isError, true);
     assert.match(text(result), /Failed to search Sonarr for series: connect ECONNREFUSED/);
-    assert.deepEqual(grid(), []);
+    assert.deepEqual(grid(), gridBefore);
+    assert.deepEqual(previews(), previewBefore);
+
+    // Also when the lookup answers and the library read that follows fails.
+    sonarrDown = false;
+    sonarr.restore();
+    sonarr = fakeApi(sonarrClient, (req) => {
+      if (req.url === "/api/v3/series/lookup") return { data: CATALOG.slice(0, 5) };
+      throw new Error("connect ECONNRESET");
+    });
+    assert.equal((await search("harbour")).isError, true);
+    assert.deepEqual(grid(), gridBefore);
+    assert.deepEqual(previews(), previewBefore);
+
+    // The preview can still be confirmed.
+    sonarr.restore();
+    sonarrFake();
+    await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C3: two searches at the same moment leave one whole grid, of the search that answered last", async () => {
+    const { release } = holdNext((config) => config.params?.term === "harbour");
+    const first = search("harbour");
+    await search("quiet valley");
+    release();
+    await first;
+    const rows = db
+      .prepare("SELECT selection_index, tvdb_id, generation FROM series_selection_context")
+      .all() as Array<{ selection_index: number; tvdb_id: number; generation: string }>;
+    assert.deepEqual(
+      rows.map((r) => [r.selection_index, r.tvdb_id]),
+      [
+        [1, 501],
+        [2, 502],
+        [3, 503],
+        [4, 504],
+        [5, 505],
+      ],
+    );
+    assert.equal(new Set(rows.map((r) => r.generation)).size, 1, "one generation");
   });
 });
 
@@ -445,6 +674,19 @@ describe("confirm_selected_series: the preview", () => {
     assert.equal((posts()[1]!.body as any).addOptions.searchForMissingEpisodes, false);
   });
 
+  it("C12: grid numbers that point to the same TVDB id are one show in the preview, and it is posted once", async () => {
+    await search("quiet valley");
+    db.prepare(
+      "UPDATE series_selection_context SET tvdb_id = 601, title = 'Quiet Valley', year = '2020' WHERE selection_index = 2",
+    ).run();
+    const preview = await confirmSelectedSeries({ chosenIndexes: [1, 2] });
+    assert.equal((text(preview).match(/\[TVDB: 601\]/g) ?? []).length, 1);
+    assert.match(text(preview), /Confirming adds 1 show as monitored/);
+    assert.equal(JSON.parse(previews()[0]!.payload).shows.length, 1);
+    await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
   it("C12: a preview sends only GET requests, no POST", async () => {
     await previewOf("harbour", [1, 3, 5], { monitor: "future", qualityProfile: "Anime" });
     assert.ok(sonarr.calls.length > 4);
@@ -482,7 +724,11 @@ describe("confirm_selected_series: the preview", () => {
     const stored = previews();
     assert.equal(stored.length, 1);
     assert.equal(stored[0]!.id, idOf(result));
-    assert.deepEqual(JSON.parse(stored[0]!.payload), {
+    const { generation, ...payload } = JSON.parse(stored[0]!.payload);
+    // The generation of the grid it was worked out from.
+    assert.equal(generation, grid()[0]!.generation);
+    assert.match(generation, /^[0-9a-f-]{36}$/);
+    assert.deepEqual(payload, {
       given: { monitor: "pilot", searchForMissing: false, chosenIndexes: [1, 3] },
       sonarrUrl: "http://sonarr:8989",
       resolved: {
@@ -495,9 +741,20 @@ describe("confirm_selected_series: the preview", () => {
         searchForMissing: false,
       },
       // By TVDB id and title, not by grid number.
+      // A show to add carries its seasons as they would be posted.
       shows: [
-        { tvdbId: 501, title: "Harbour Lights", year: "2019", decision: "add" },
-        { tvdbId: 503, title: "Harbour Nights", year: "2008", decision: "exists" },
+        {
+          tvdbId: 501,
+          title: "Harbour Lights",
+          year: "2019",
+          decision: "add",
+          seasons: [
+            { seasonNumber: 0, monitored: false },
+            { seasonNumber: 1, monitored: true },
+            { seasonNumber: 2, monitored: true },
+          ],
+        },
+        { tvdbId: 503, title: "Harbour Nights", year: "2008", decision: "exists", seasons: null },
       ],
     });
   });
@@ -514,6 +771,62 @@ describe("confirm_selected_series: the preview", () => {
       previews().map((p) => p.id),
       [idOf(second)],
     );
+  });
+
+  it("C12: Sonarr unreachable at preview stores nothing, and an earlier preview stays as it was", async () => {
+    const earlier = await previewOf("quiet valley", [1]);
+    const before = previews();
+    sonarrDown = true;
+    const result = await confirmSelectedSeries({ chosenIndexes: [2] });
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /Sonarr could not be read, so nothing was added: connect ECONNREFUSED/,
+    );
+    assert.doesNotMatch(text(result), /previewId "|used up/);
+    assert.deepEqual(previews(), before);
+    sonarrDown = false;
+    await confirmSelectedSeries({ previewId: idOf(earlier) });
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C12: a preview that finishes after a newer search is not stored, does not replace the newer preview, and adds nothing", async () => {
+    await search("quiet valley");
+    const { release } = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const late = confirmSelectedSeries({ chosenIndexes: [1] });
+    await search("harbour");
+    const newer = await confirmSelectedSeries({ chosenIndexes: [2] });
+    release();
+    const result = await late;
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /The series grid was replaced by a newer search_and_select_series while this was being worked out, so no preview was stored\. Nothing was added\./,
+    );
+    assert.doesNotMatch(text(result), /previewId "/);
+    assert.deepEqual(
+      previews().map((p) => p.id),
+      [idOf(newer)],
+    );
+    assert.deepEqual(posts(), []);
+    await confirmSelectedSeries({ previewId: idOf(newer) });
+    assert.deepEqual(added(), ["Harbour Lights: Origins"]);
+  });
+
+  it("C13: a changed preview whose grid a newer search replaced meanwhile stores no new preview", async () => {
+    const preview = await previewOf("quiet valley", [1]);
+    setSetting("SONARR_DEFAULT_MONITOR", "pilot");
+    const { release } = holdNext((config) => config.url === "/api/v3/qualityprofile");
+    const confirming = confirmSelectedSeries({ previewId: idOf(preview) });
+    await search("harbour");
+    release();
+    const result = await confirming;
+    assert.equal(result.isError, true);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.match(text(result), /no preview was stored/);
+    assert.doesNotMatch(text(result), /previewId "/);
+    assert.deepEqual(previews(), []);
+    assert.deepEqual(posts(), []);
   });
 
   it("C12: a new search_and_select_series clears the current preview", async () => {
@@ -626,6 +939,65 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.equal(posts().length, 1);
   });
 
+  it("C13: a preview can be confirmed for 15 minutes, and says so; after that its id adds nothing, sends nothing and is removed", async () => {
+    const LIFE = 15 * 60 * 1000;
+    const start = Date.parse("2026-11-15T12:00:00Z");
+    await search("quiet valley");
+    const fresh = await confirmSelectedSeries({ chosenIndexes: [1] }, start);
+    assert.match(text(fresh), /good for 15 minutes/);
+    const justBefore = await confirmSelectedSeries({ previewId: idOf(fresh) }, start + LIFE - 1);
+    assert.equal(justBefore.isError, undefined);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+
+    const old = await confirmSelectedSeries({ chosenIndexes: [2] }, start);
+    const before = sonarr.calls.length;
+    const justAfter = await confirmSelectedSeries({ previewId: idOf(old) }, start + LIFE + 1);
+    assert.equal(justAfter.isError, true);
+    assert.match(
+      text(justAfter),
+      /That preview has expired: a preview can be confirmed for 15 minutes/,
+    );
+    assert.match(text(justAfter), /Nothing was added/);
+    assert.match(text(justAfter), /Call confirm_selected_series with chosenIndexes/);
+    assert.equal(sonarr.calls.length, before, "nothing is sent to Sonarr");
+    assert.deepEqual(previews(), [], "the expired preview is removed");
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C13: the expiry boundary: exactly 15 minutes adds; a clock before the preview was made adds nothing", async () => {
+    const LIFE = 15 * 60 * 1000;
+    const start = Date.parse("2026-11-15T12:00:00Z");
+    await search("quiet valley");
+    const atLimit = await confirmSelectedSeries({ chosenIndexes: [1] }, start);
+    const exactly = await confirmSelectedSeries({ previewId: idOf(atLimit) }, start + LIFE);
+    assert.equal(exactly.isError, undefined);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+
+    const early = await confirmSelectedSeries({ chosenIndexes: [2] }, start);
+    const before = sonarr.calls.length;
+    const result = await confirmSelectedSeries({ previewId: idOf(early) }, start - 1);
+    assert.equal(result.isError, true);
+    assert.match(text(result), /That preview has expired/);
+    assert.equal(sonarr.calls.length, before, "nothing is sent to Sonarr");
+    assert.deepEqual(previews(), []);
+    assert.deepEqual(added(), ["Quiet Valley"]);
+  });
+
+  it("C13: two confirmations of the same id started at the same moment add once", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    const id = idOf(preview);
+    const results = await Promise.all([
+      confirmSelectedSeries({ previewId: id }),
+      confirmSelectedSeries({ previewId: id }),
+    ]);
+    assert.deepEqual(added(), ["Quiet Valley", "Quiet Valley Stories"]);
+    assert.deepEqual(
+      results.map((r) => r.isError === true),
+      [false, true],
+    );
+    assert.match(text(results[1]!), /not the current preview/);
+  });
+
   it("C13: a setting changed after the preview adds nothing and returns a new preview that says what differs", async () => {
     const preview = await previewOf("quiet valley", [1]);
     setSetting("SONARR_DEFAULT_QUALITY_PROFILE", "WEB-2160p");
@@ -730,6 +1102,97 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.notEqual(idOf(result), idOf(preview));
   });
 
+  it("C13: a show's year changed in Sonarr's lookup between preview and confirmation adds nothing and returns a new preview with the new year", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2030);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.ok(
+      text(result).includes(
+        "Quiet Valley is now listed as Quiet Valley (2030) (the preview showed Quiet Valley (2020))",
+      ),
+      text(result),
+    );
+    assert.match(
+      text(result),
+      /- \*\*Quiet Valley \(2030\)\*\* \[TVDB: 601\], 2 seasons: will be added/,
+    );
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.equal((posts()[0]!.body as any).year, 2030);
+  });
+
+  it("C13: a show's title changed in Sonarr's lookup between preview and confirmation adds nothing and returns a new preview with the new title", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley: Reborn", 2020);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.ok(
+      text(result).includes(
+        "Quiet Valley is now listed as Quiet Valley: Reborn (2020) (the preview showed Quiet Valley (2020))",
+      ),
+      text(result),
+    );
+    assert.match(text(result), /- \*\*Quiet Valley: Reborn \(2020\)\*\* \[TVDB: 601\]/);
+    assert.equal(JSON.parse(previews()[0]!.payload).shows[0].title, "Quiet Valley: Reborn");
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.deepEqual(added(), ["Quiet Valley: Reborn"]);
+  });
+
+  it("C13: a season added to the show between preview and confirmation adds nothing and returns a new preview", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    assert.match(text(preview), /\[TVDB: 601\], 2 seasons: will be added/);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2020, {
+      seasons: [...original.seasons, { seasonNumber: 3, monitored: true }],
+    });
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(text(result), /Nothing was added: what the preview showed has changed/);
+    assert.match(text(result), /Quiet Valley now has 3 seasons \(the preview showed 2\)/);
+    assert.match(text(result), /\[TVDB: 601\], 3 seasons: will be added/);
+
+    // The new preview adds the seasons it showed.
+    await confirmSelectedSeries({ previewId: idOf(result) });
+    assert.deepEqual(
+      (posts()[0]!.body as any).seasons.map((s: any) => s.seasonNumber),
+      [0, 1, 2, 3],
+    );
+  });
+
+  it("C13: a season's monitored flag changed between preview and confirmation adds nothing and returns a new preview", async (t) => {
+    const original = CATALOG[6]!;
+    t.after(() => {
+      CATALOG[6] = original;
+    });
+    const preview = await previewOf("quiet valley", [1]);
+    CATALOG[6] = lookupSeries(601, "Quiet Valley", 2020, {
+      seasons: [
+        { seasonNumber: 0, monitored: false },
+        { seasonNumber: 1, monitored: false },
+        { seasonNumber: 2, monitored: true },
+      ],
+    });
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(posts(), []);
+    assert.match(
+      text(result),
+      /season 1 of Quiet Valley is now not monitored in Sonarr's lookup \(the preview showed it monitored\)/,
+    );
+    assert.notEqual(idOf(result), idOf(preview));
+  });
+
   it("C13: when what the preview showed can no longer be resolved, nothing is added", async () => {
     const preview = await previewOf("quiet valley", [1], { qualityProfile: "Anime" });
     profiles = PROFILES.slice(0, 2);
@@ -744,20 +1207,87 @@ describe("confirm_selected_series: the confirmation", () => {
     assert.deepEqual(previews(), []);
   });
 
-  it("C14: on a match, Sonarr's own lookup record for the TVDB id is posted with the resolved settings", async () => {
+  it("C14: on a match, a fixed list of fields from Sonarr's lookup record is posted with the resolved settings, nothing else", async (t) => {
+    const original = CATALOG[2]!;
+    // A lookup record carrying fields that must not go back to Sonarr, and a
+    // raw title with a newline and double spaces.
+    CATALOG[2] = lookupSeries(503, "Harbour\n  Nights", 2008, {
+      status: "ended",
+      network: "Network Two",
+      path: "/somewhere/else/Harbour Nights",
+      id: 77,
+      tags: [3, 4],
+      languageProfileId: 1,
+      qualityProfileId: 99,
+      rootFolderPath: "/elsewhere",
+      monitored: false,
+      added: "2020-01-01T00:00:00Z",
+      statistics: { seasonCount: 2 },
+      images: [
+        {
+          coverType: "poster",
+          url: "/MediaCover/503/poster.jpg",
+          remoteUrl: "https://artworks.example.org/posters/503.jpg",
+          extension: ".jpg",
+          path: "/config/MediaCover/503/poster.jpg",
+        },
+        { coverType: "fanart", remoteUrl: 42, url: null },
+        { url: "/MediaCover/503/banner.jpg", remoteUrl: "https://artworks.example.org/b.jpg" },
+        { coverType: 7, remoteUrl: "https://artworks.example.org/c.jpg" },
+        "not-an-image",
+        null,
+      ],
+      seasons: [
+        { seasonNumber: 0, monitored: false, statistics: { episodeCount: 3 } },
+        { seasonNumber: 1, monitored: true, images: [], path: "/x" },
+        { seasonNumber: 2, monitored: "yes" },
+        { seasonNumber: "3", monitored: true },
+        { seasonNumber: 4.5, monitored: true },
+        "season five",
+      ],
+    });
+    t.after(() => {
+      CATALOG[2] = original;
+    });
     const preview = await previewOf("harbour", [3], {
       qualityProfile: "WEB-2160p",
       rootFolder: "/media/tvshowskids",
       seriesType: "anime",
       monitor: "firstSeason",
     });
+    // What the preview stored is the same reduced list.
+    assert.deepEqual(JSON.parse(previews()[0]!.payload).shows[0].seasons, [
+      { seasonNumber: 0, monitored: false },
+      { seasonNumber: 1, monitored: true },
+      { seasonNumber: 2 },
+    ]);
+    assert.match(text(preview), /\[TVDB: 503\], 2 seasons: will be added/);
     const result = await confirmSelectedSeries({ previewId: idOf(preview) });
     assert.equal(result.isError, undefined);
     assert.equal(posts().length, 1);
     assert.equal(posts()[0]!.url, "/api/v3/series");
     assert.deepEqual(posts()[0]!.body, {
-      // The lookup record, whole.
-      ...CATALOG[2],
+      tvdbId: 503,
+      // The title as shown: folded, as the preview stored and compared it.
+      title: "Harbour Nights",
+      titleSlug: "harbour-nights",
+      year: 2008,
+      // Each image reduced to coverType, url and remoteUrl when they are strings;
+      // an image without a string coverType is dropped.
+      images: [
+        {
+          coverType: "poster",
+          url: "/MediaCover/503/poster.jpg",
+          remoteUrl: "https://artworks.example.org/posters/503.jpg",
+        },
+        { coverType: "fanart" },
+      ],
+      // Only seasons with an integer number; monitored only when a boolean.
+      seasons: [
+        { seasonNumber: 0, monitored: false },
+        { seasonNumber: 1, monitored: true },
+        { seasonNumber: 2 },
+      ],
       qualityProfileId: 6,
       rootFolderPath: "/media/tvshowskids/",
       monitored: true,
@@ -806,6 +1336,154 @@ describe("confirm_selected_series: the confirmation", () => {
     );
   });
 
+  it("C14: when Sonarr accepts a show and the connection then fails, the outcome is reported as not known, not as failed, and nothing is retried", async () => {
+    // The fake adds the show, then the answer never arrives.
+    const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+    sonarrClient.defaults.adapter = async (config: any) => {
+      const response = await fake(config);
+      if (config.method === "post") throw new Error("socket hang up");
+      return response;
+    };
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addErrors[602] = { status: 400, data: [{ errorMessage: "Series already exists" }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: Sonarr did not answer \(socket hang up\)\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+    );
+    assert.doesNotMatch(lines[0]!, /failed/);
+    // An HTTP error from Sonarr is still a failure, with Sonarr's message.
+    assert.match(lines[1]!, /❌ .*Quiet Valley Stories.* - failed: Series already exists/);
+    // Sonarr did add the first show, and nothing was posted twice.
+    assert.deepEqual(
+      inSonarr.map((s) => s.tvdbId),
+      [601],
+    );
+    assert.equal(posts().length, 2);
+  });
+
+  it("C14: a 5xx answer after Sonarr took the show is reported as not known; a 4xx stays failed", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addAnswers[601] = { status: 504, data: "Gateway Time-out" };
+    addErrors[602] = { status: 400, data: [{ errorMessage: "Series already exists" }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: Sonarr answered HTTP 504 \(.+\)\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+    );
+    assert.match(lines[1]!, /❌ .*Quiet Valley Stories.* - failed: Series already exists/);
+    assert.equal(posts().length, 2, "nothing is retried");
+  });
+
+  it("C14: a redirect from the Sonarr address is not followed: nothing reaches the host it names, and the outcome is not known", async (t) => {
+    const elsewhere = await localServer(() => ({ status: 201, data: {} }));
+    const atSonarr = await localServer((req) =>
+      req.method === "post"
+        ? { status: 307, headers: { Location: `${elsewhere.url}/api/v3/series` } }
+        : sonarrAnswer(req),
+    );
+    const baseURL = sonarrClient.defaults.baseURL ?? "";
+    t.after(async () => {
+      sonarrClient.defaults.baseURL = baseURL;
+      await atSonarr.close();
+      await elsewhere.close();
+    });
+    // axios's own HTTP transport, to the two local servers only.
+    setSetting("SONARR_URL", atSonarr.url);
+    sonarrClient.defaults.baseURL = atSonarr.url;
+    sonarrClient.defaults.adapter = "http";
+
+    const preview = await previewOf("quiet valley", [1]);
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.equal(elsewhere.requests.length, 0, "the redirect's host gets no request");
+    assert.equal(atSonarr.requests.filter((r) => r.method === "post").length, 1);
+    const line = text(result).split("\n").slice(1).filter(Boolean)[0]!;
+    assert.match(
+      line,
+      /❓ .*Quiet Valley \(2020\).* - outcome not known: the Sonarr address answered with a redirect \(HTTP 307\); it was not followed and nothing was sent anywhere else\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\. Check the Sonarr URL on the Settings page\./,
+    );
+    assert.ok(!text(result).includes(elsewhere.url), "the redirect's Location is not in the reply");
+  });
+
+  it("C14: the POST is sent with maxRedirects 0, and the status rule's bounds: 299 to 399 are not known, 400 to 499 fail, 500 is not known", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3, 4, 5]);
+    // The suite's fake rejects only statuses from 400; lower ones come back as
+    // answers, which go through the same status rule.
+    addAnswers[501] = { status: 299, data: {} };
+    addAnswers[502] = { status: 300, data: {} };
+    addAnswers[503] = { status: 399, data: {} };
+    addAnswers[504] = { status: 499, data: [{ errorMessage: "No." }] };
+    addAnswers[505] = { status: 500, data: { message: "Internal error" } };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    // The grid holds five shows, so the lowest failing status gets its own add,
+    // of a sixth show.
+    addAnswers[506] = { status: 400, data: [{ errorMessage: "Bad." }] };
+    const lowest = await confirmSelectedSeries({
+      previewId: idOf(await previewOf("harbour six", [1])),
+    });
+    for (const post of posts()) assert.equal(post.limits.maxRedirects, 0);
+    assert.equal(posts().length, 6);
+    assert.match(text(lowest), /❌ .*Harbour Six \(2023\).* - failed: Bad\./);
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(
+      lines[0]!,
+      /Harbour Lights \(2019\).* - outcome not known: Sonarr's answer was not the added series/,
+    );
+    assert.match(
+      lines[1]!,
+      /❓ .* - outcome not known: the Sonarr address answered with a redirect \(HTTP 300\)/,
+    );
+    assert.match(
+      lines[2]!,
+      /❓ .* - outcome not known: the Sonarr address answered with a redirect \(HTTP 399\)/,
+    );
+    assert.match(lines[3]!, /❌ .* - failed: No\./);
+    assert.match(lines[4]!, /- outcome not known: Sonarr answered HTTP 500 \(Internal error\)/);
+  });
+
+  it("C14: Sonarr's or a proxy's error text is one line of at most 300 characters in the report, and a cut never leaves part of the key", async () => {
+    const long = `Upstream failed:\n${"line of proxy text\n".repeat(280)}`;
+    assert.ok(long.length > 5000);
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    addAnswers[501] = { status: 502, data: { message: long } };
+    addErrors[502] = { status: 400, data: [{ errorMessage: long }] };
+    // The key straddles the 300th character.
+    addErrors[503] = { status: 400, data: [{ errorMessage: `${"x".repeat(290)}${API_KEY} more` }] };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3, "one line per show");
+    const notKnown = /Sonarr answered HTTP 502 \((.*)\)\. The show may have been added/.exec(
+      lines[0]!,
+    );
+    assert.ok(notKnown, lines[0]!);
+    assert.ok(notKnown[1]!.startsWith("Upstream failed: line of proxy text line of proxy text"));
+    assert.equal(Array.from(notKnown[1]!).length, 300);
+    const failed = / - failed: (.*)$/.exec(lines[1]!);
+    assert.ok(failed, lines[1]!);
+    assert.equal(Array.from(failed[1]!).length, 300);
+    assert.ok(lines[2]!.endsWith(`${"x".repeat(290)}[redacted]`), lines[2]!);
+    assert.ok(!text(result).includes(API_KEY.slice(0, 8)), "no part of the key is shown");
+  });
+
+  it("C14: a 2xx answer that is not the added series is reported as not known", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    addAnswers[501] = { status: 200, data: {} };
+    addAnswers[502] = { status: 200, data: "<html>Sign in</html>" };
+    addAnswers[503] = { status: 201, data: { id: 9, tvdbId: 999, title: "Something Else" } };
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3);
+    for (const line of lines) {
+      assert.match(
+        line,
+        /❓ .* - outcome not known: Sonarr's answer was not the added series\. The show may have been added; a new search and preview will show it as already in Sonarr if it was\./,
+      );
+    }
+    assert.equal(posts().length, 3);
+  });
+
   it("C14: Sonarr unreachable at confirmation is an error reply, and nothing is added", async () => {
     const preview = await previewOf("quiet valley", [1]);
     sonarrDown = true;
@@ -822,6 +1500,79 @@ describe("confirm_selected_series: the confirmation", () => {
     );
     assert.deepEqual(previews(), []);
     assert.deepEqual(posts(), []);
+  });
+
+  // Runs change() once the first POST has been answered.
+  function afterFirstPost(change: () => void) {
+    const fake = sonarrClient.defaults.adapter as (config: any) => Promise<any>;
+    let done = false;
+    sonarrClient.defaults.adapter = async (config: any) => {
+      const response = await fake(config);
+      if (config.method === "post" && !done) {
+        done = true;
+        change();
+      }
+      return response;
+    };
+  }
+
+  it("C14: when the Sonarr URL is changed between two POSTs, the remaining shows are not attempted and the report says so for each", async () => {
+    const preview = await previewOf("harbour", [1, 2, 3]);
+    afterFirstPost(() => setSetting("SONARR_URL", "http://another-sonarr:8989"));
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(added(), ["Harbour Lights"]);
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.equal(lines.length, 3);
+    assert.match(lines[0]!, /✅ .*Harbour Lights \(2019\).* - added/);
+    for (const line of lines.slice(1)) {
+      assert.match(
+        line,
+        /⛔ .* - not attempted: the Sonarr URL on the Settings page changed while the shows were being added, so nothing more was sent\./,
+      );
+    }
+    assert.match(lines[1]!, /Harbour Lights: Origins/);
+    assert.match(lines[2]!, /Harbour Nights/);
+  });
+
+  it("C14: when a newer search replaces the grid while a confirmation runs, the remaining shows are not attempted and the newer preview stays current", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    // The first POST is held while a new search and a preview from it complete.
+    const { release, reached } = holdNext((config) => config.method === "post");
+    const confirming = confirmSelectedSeries({ previewId: idOf(preview) });
+    await reached;
+    await search("harbour");
+    const newer = await confirmSelectedSeries({ chosenIndexes: [1] });
+    release();
+    const result = await confirming;
+    const lines = text(result).split("\n").slice(1).filter(Boolean);
+    assert.match(lines[0]!, /✅ .*Quiet Valley \(2020\).* - added/);
+    assert.match(
+      lines[1]!,
+      /⛔ .*Quiet Valley Stories.* - not attempted: the series grid was replaced by a newer search_and_select_series while the shows were being added, so nothing more was sent\. Run search_and_select_series again to add it\./,
+    );
+    assert.deepEqual(added(), ["Quiet Valley"], "nothing is posted for the remaining show");
+    assert.deepEqual(
+      previews().map((p) => p.id),
+      [idOf(newer)],
+    );
+    await confirmSelectedSeries({ previewId: idOf(newer) });
+    assert.deepEqual(added(), ["Quiet Valley", "Harbour Lights"]);
+  });
+
+  it("C15: a key changed between two POSTs is still removed when Sonarr echoes the old one", async () => {
+    const preview = await previewOf("quiet valley", [1, 2]);
+    addErrors[602] = {
+      status: 401,
+      data: [{ errorMessage: `Key ${API_KEY} is no longer valid` }],
+    };
+    afterFirstPost(() => setSetting("SONARR_API_KEY", "a-new-sonarr-key"));
+    const result = await confirmSelectedSeries({ previewId: idOf(preview) });
+    assert.deepEqual(
+      inSonarr.map((show) => show.tvdbId),
+      [601],
+    );
+    assert.ok(!text(result).includes(API_KEY), text(result));
+    assert.match(text(result), /failed: Key \[redacted\] is no longer valid/);
   });
 
   it("C15: no reply or error contains the API key, even when Sonarr's own messages do", async () => {
@@ -943,6 +1694,50 @@ describe("adding series: settings, registration and independence from the movie 
     await putSonarr({ defaultMonitor: "none", defaultSeriesType: "daily" });
     const preview = await previewOf("quiet valley", [1]);
     assert.match(text(preview), /Series type: daily\n- Monitor: no episodes \(`none`\)/);
+  });
+
+  it("C16: a series type or monitor option outside the allowed values is refused with HTTP 400 that lists them, and nothing is saved", async () => {
+    delete process.env.WEB_PASSWORD;
+    await putSonarr({ defaultSeriesType: "anime", defaultMonitor: "pilot" });
+
+    const badType = await putSonarr({
+      defaultQualityProfile: "WEB-2160p",
+      defaultSeriesType: " miniseries ",
+    });
+    assert.equal(badType.status, 400);
+    assert.equal(
+      ((await badType.json()) as { error: string }).error,
+      '"miniseries" is not an allowed default series type. Allowed: standard, daily, anime. Nothing was saved.',
+    );
+    const badMonitor = await putSonarr({ defaultMonitor: "latestSeason" });
+    assert.equal(badMonitor.status, 400);
+    assert.equal(
+      ((await badMonitor.json()) as { error: string }).error,
+      '"latestSeason" is not an allowed default monitor option. Allowed: all, future, missing, existing, firstSeason, lastSeason, pilot, none. Nothing was saved.',
+    );
+    // Nothing from a refused request was saved, not even its valid fields.
+    assert.equal(getSetting("SONARR_DEFAULT_QUALITY_PROFILE"), "");
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "anime");
+    assert.equal(getSetting("SONARR_DEFAULT_MONITOR"), "pilot");
+
+    // Matched without regard to case, as the tool does; an empty value still clears.
+    assert.equal((await putSonarr({ defaultSeriesType: "Daily" })).status, 200);
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "Daily");
+    assert.equal((await putSonarr({ defaultSeriesType: " ", defaultMonitor: "" })).status, 200);
+    assert.equal(getSetting("SONARR_DEFAULT_SERIES_TYPE"), "");
+    assert.equal(getSetting("SONARR_DEFAULT_MONITOR"), "");
+  });
+
+  it("C16: the settings API checks against the lists the tool uses, imported, not copied", () => {
+    const route = fs.readFileSync(path.join(repo, "src/web/routes/settings.ts"), "utf8");
+    assert.match(
+      route,
+      /import \{[^}]*MONITOR_OPTIONS[^}]*SERIES_TYPES[^}]*\} from "..\/..\/seriesAddOptions.js"/,
+    );
+    assert.doesNotMatch(route, /"firstSeason"|"anime"/);
+    const tool = fs.readFileSync(path.join(repo, "src/tools/seriesAdd.ts"), "utf8");
+    assert.match(tool, /from "..\/seriesAddOptions.js"/);
+    assert.doesNotMatch(tool, /"firstSeason",|"daily",/);
   });
 
   it("C16: the Settings page's Sonarr tab, the dashboard's API type, the OpenAPI document and .env.example carry the four settings", () => {
