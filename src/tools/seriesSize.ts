@@ -42,9 +42,13 @@ const DEFAULT_LIMIT = 15;
 const MAX_LIMIT = 200;
 const DAY_MS = 86_400_000;
 const GB = 1e9;
-// Plex and Tautulli are each asked for a whole library in one go; libraries
-// here are well under this.
+// Plex is read a page of this many at a time; Tautulli is asked for a whole
+// library in one page of at least this length.
 const FETCH_ALL = 5000;
+// Pages read from one Plex library at most: 100,000 shows. A library that
+// says it holds more is reported as not read, before any further page.
+const MAX_PLEX_PAGES = 20;
+const MAX_PLEX_SHOWS = MAX_PLEX_PAGES * FETCH_ALL;
 // Tautulli builds this list from its own cache and can be slow on a big
 // library, so this one call may take longer than the clients' usual 10 seconds.
 const TAUTULLI_MEDIA_INFO_TIMEOUT_MS = 30_000;
@@ -86,11 +90,79 @@ interface Candidate {
   lastWatched: number | null;
   // Set when Tautulli is configured but added nothing for this show.
   plexOnly: "noRowOrNoPlays" | "libraryUnusable" | null;
+  // Set when Tautulli gave plays for it, but its answer for another of the
+  // show's libraries could not be used: part of its history is unread.
+  tautulliIncomplete: boolean;
 }
 
 type LibraryAnswer =
   | { usable: true; rows: Map<string, TautulliMediaInfoRow> }
   | { usable: false; why: string };
+
+// Plex answered, but not with the whole of a library.
+class PlexIncomplete extends Error {}
+
+// Every show of one library, page by page, until it has as many different
+// shows (by ratingKey) as the largest totalSize any page announced, or, when
+// no page gives a total, until a page comes back short. Every page must be a
+// proper answer: a MediaContainer whose Metadata, if any, is a list of items
+// with a ratingKey. Plex gives every library item one, so an item without it
+// means the answer is not what it seems, and the read fails rather than guess.
+// A list built from part of a library is never returned.
+async function readPlexLibrary(section: PlexSection): Promise<PlexMetadata[]> {
+  const items: PlexMetadata[] = [];
+  const seen = new Set<string>();
+  let received = 0;
+  let announced: number | null = null;
+  const incomplete = (why: string) => new PlexIncomplete(`the library "${section.title}" ${why}`);
+  for (let page = 1; page <= MAX_PLEX_PAGES; page++) {
+    const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
+      params: {
+        includeGuids: 1,
+        "X-Plex-Container-Start": received,
+        "X-Plex-Container-Size": FETCH_ALL,
+      },
+    });
+    const container: unknown = response.data?.MediaContainer;
+    if (typeof container !== "object" || container === null || Array.isArray(container))
+      throw incomplete(`gave page ${page} without a list of shows`);
+    const { Metadata: got = [], totalSize } = container as NonNullable<
+      PlexContainer["MediaContainer"]
+    >;
+    if (!Array.isArray(got)) throw incomplete(`gave page ${page} without a list of shows`);
+    // A server that ignores the page size asked for is not read any further.
+    if (got.length > FETCH_ALL)
+      throw incomplete(`gave page ${page} with more than the ${FETCH_ALL} shows asked for`);
+    let fresh = 0;
+    for (const item of got as unknown[]) {
+      if (typeof item !== "object" || item === null || Array.isArray(item))
+        throw incomplete(`gave page ${page} with an entry that is not a show`);
+      const key = (item as PlexMetadata).ratingKey;
+      if (key === undefined || key === null)
+        throw incomplete(`gave page ${page} with a show that has no ratingKey`);
+      if (seen.has(String(key))) continue;
+      seen.add(String(key));
+      items.push(item as PlexMetadata);
+      fresh++;
+    }
+    received += got.length;
+    // A later page with a smaller total, or none, does not end the read early.
+    if (typeof totalSize === "number" && Number.isFinite(totalSize))
+      announced = Math.max(announced ?? 0, totalSize);
+    if (announced !== null && announced > MAX_PLEX_SHOWS)
+      throw incomplete(
+        `holds ${announced} shows, more than the ${MAX_PLEX_SHOWS} this report reads`,
+      );
+    if (announced === null) {
+      if (got.length < FETCH_ALL) return items;
+      if (fresh === 0) throw incomplete(`gave page ${page} again with no new shows`);
+      continue;
+    }
+    if (seen.size >= announced) return items;
+    if (fresh === 0) throw incomplete(`gave ${seen.size} of the ${announced} shows it holds`);
+  }
+  throw incomplete(`was not read to its end within ${MAX_PLEX_PAGES} pages`);
+}
 
 // Every show in every Plex show library, the ones left out of searches by the
 // "libraries to skip" setting included: a clean-up report is about all of them.
@@ -102,16 +174,7 @@ async function readPlexShows(): Promise<{
 }> {
   const sections = await getSections(["show"]);
   const perSection = await Promise.all(
-    sections.map(async (section) => {
-      const response = await plexClient.get<PlexContainer>(`/library/sections/${section.key}/all`, {
-        params: {
-          includeGuids: 1,
-          "X-Plex-Container-Start": 0,
-          "X-Plex-Container-Size": FETCH_ALL,
-        },
-      });
-      return { section, items: response.data?.MediaContainer?.Metadata ?? [] };
-    }),
+    sections.map(async (section) => ({ section, items: await readPlexLibrary(section) })),
   );
   // One entry per show, however many libraries hold it (as search_plex_library groups them).
   const byKey = new Map<string, PlexShow>();
@@ -202,6 +265,9 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
   } catch (error: unknown) {
     return textReply(`Failed to check Sonarr: ${getErrorMessage(error)}`, true);
   }
+  // A sign-in page answered with HTTP 200, say, is not a list of series.
+  if (!Array.isArray(all) || all.some((s) => typeof s !== "object" || s === null))
+    return textReply("Failed to check Sonarr: Sonarr did not answer with a list of series", true);
 
   const withFiles = all.filter((s) => filesOf(s) > 0 || sizeOf(s) > 0);
   const totalSize = (list: SonarrSeries[]) => list.reduce((sum, s) => sum + sizeOf(s), 0);
@@ -266,6 +332,12 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
   try {
     ({ sections, shows: plexShows, counts: plexCounts } = await readPlexShows());
   } catch (error: unknown) {
+    if (error instanceof PlexIncomplete) {
+      return textReply(
+        `Plex could not be read completely, so what has been watched can't be checked: ${error.message}. No list is built from part of a library.`,
+        true,
+      );
+    }
     return textReply(
       `Plex could not be read, so what has been watched can't be checked: ${getErrorMessage(error)}. This is a failure to reach Plex, not a result of "no shows".`,
       true,
@@ -307,19 +379,33 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       continue;
     }
     // The latest watching over its copies; never watched counts from when it
-    // was first added; watched with no date anywhere can't be judged.
+    // was first added. Watched recently on any copy: not a candidate. Otherwise
+    // a copy watched with no date can't be judged, whatever older date another
+    // copy has.
+    const lastViewed = plex.watch.lastViewed;
+    if (lastViewed !== null && lastViewed * 1000 >= cutoff) continue;
+    const undatedCopy = plex.copies.some((copy) => {
+      const watch = watchOf(copy.item, "show");
+      return watch.seen > 0 && watch.lastViewed === null;
+    });
     const activity = lastActivity("show", plex.watch);
-    if (activity === null) {
+    if (undatedCopy || activity === null) {
       cannotJudge++;
       continue;
     }
     if (activity * 1000 < cutoff)
-      candidates.push({ series, plex, lastWatched: plex.watch.lastViewed, plexOnly: null });
+      candidates.push({
+        series,
+        plex,
+        lastWatched: lastViewed,
+        plexOnly: null,
+        tautulliIncomplete: false,
+      });
   }
 
   // --- Then Tautulli, for the candidates only ---------------------------------
   const withTautulli = isConfigured("TAUTULLI");
-  const unusable: { title: string; why: string }[] = [];
+  const unusable: { key: string; title: string; why: string }[] = [];
   let removedByTautulli = 0;
   if (withTautulli && candidates.length > 0) {
     // Once per show library that holds a candidate.
@@ -337,39 +423,49 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
     );
     for (const section of wanted) {
       const answer = answers.get(section.key);
-      if (answer && !answer.usable) unusable.push({ title: section.title, why: answer.why });
+      if (answer && !answer.usable)
+        unusable.push({ key: section.key, title: section.title, why: answer.why });
     }
 
+    // A play time is used only if it can be a time in epoch seconds: one later
+    // than a day from now (a time in milliseconds, say) is no usable time.
+    const latestUsable = now / 1000 + DAY_MS / 1000;
     candidates = candidates.filter((candidate) => {
-      let anyUsable = false;
+      let anyUnusable = false;
       let played = false;
+      let undatedPlay = false;
       let lastPlayed: number | null = null;
       for (const copy of candidate.plex.copies) {
         const answer = answers.get(copy.section.key);
-        if (!answer?.usable) continue;
-        anyUsable = true;
+        if (!answer?.usable) {
+          anyUnusable = true;
+          continue;
+        }
         const row = answer.rows.get(String(copy.item.ratingKey));
         if (!row || !(Number(row.play_count) > 0)) continue;
         played = true;
         const at = Number(row.last_played);
-        if (Number.isFinite(at) && at > 0) lastPlayed = latest(lastPlayed, at);
+        if (Number.isFinite(at) && at > 0 && at <= latestUsable)
+          lastPlayed = latest(lastPlayed, at);
+        else undatedPlay = true;
       }
       if (!played) {
         // No plays, no row, or no usable answer: Tautulli adds nothing.
-        candidate.plexOnly = anyUsable ? "noRowOrNoPlays" : "libraryUnusable";
+        candidate.plexOnly = anyUnusable ? "libraryUnusable" : "noRowOrNoPlays";
         return true;
       }
-      const watchedAt = latest(candidate.lastWatched, lastPlayed);
-      if (watchedAt === null) {
-        // Played according to Tautulli, but no date anywhere.
-        cannotJudge++;
-        return false;
-      }
-      if (watchedAt * 1000 >= cutoff) {
+      if (lastPlayed !== null && lastPlayed * 1000 >= cutoff) {
         removedByTautulli++;
         return false;
       }
-      candidate.lastWatched = watchedAt;
+      if (undatedPlay) {
+        // Played according to Tautulli at a time that is not known: an older
+        // date elsewhere can't outweigh it.
+        cannotJudge++;
+        return false;
+      }
+      candidate.lastWatched = latest(candidate.lastWatched, lastPlayed);
+      candidate.tautulliIncomplete = anyUnusable;
       return true;
     });
   }
@@ -380,13 +476,17 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
     : "Watch data: only the one Plex account the app is connected with, so a show someone else watched can still be listed (Tautulli is not set up). ";
   output += `Not watched in ${notWatchedInYears} year${notWatchedInYears === 1 ? "" : "s"}: ${plural(candidates.length, "show")}, ${formatSize(totalSize(candidates.map((c) => c.series)))}.`;
   if (notInPlex > 0)
-    output += ` ${plural(notInPlex, "show")} Sonarr has ${notInPlex === 1 ? "was" : "were"} not found in Plex and left out.`;
+    output += ` ${plural(notInPlex, "show")} Sonarr has could not be matched to a Plex show and ${notInPlex === 1 ? "was" : "were"} left out.`;
   if (cannotJudge > 0)
     output += ` ${plural(cannotJudge, "show has", "shows have")} been watched but with no date recorded, so ${cannotJudge === 1 ? "it was" : "they were"} left out because that can't be judged.`;
   if (removedByTautulli > 0)
     output += ` Tautulli's history took ${plural(removedByTautulli, "show")} off the list (played more recently there).`;
-  for (const { title, why } of unusable)
-    output += ` Tautulli's answer for the library "${title}" could not be used: ${why}; shows there were judged from the Plex account alone (marked "Plex account only").`;
+  for (const { key, title, why } of unusable) {
+    const partly = candidates.some(
+      (c) => c.tautulliIncomplete && c.plex.copies.some((copy) => copy.section.key === key),
+    );
+    output += ` Tautulli's answer for the library "${title}" could not be used: ${why}; shows there were judged from the Plex account alone (marked "Plex account only")${partly ? ', except those another library\'s answer had plays for, which keep that date and are marked "Tautulli history incomplete"' : ""}.`;
+  }
   output += "\n";
   if (candidates.length === 0) return textReply(output.trimEnd());
 
@@ -403,7 +503,12 @@ export async function findSeriesBySize(options: SeriesSizeOptions = {}, now: num
       c.lastWatched !== null
         ? `last watched ${isoDay(c.lastWatched)}`
         : `never watched, added ${isoDay(c.plex.watch.addedFirst)}`;
-    return `${sizeLine(c.series)} - ${dated}${c.plexOnly ? " (Plex account only)" : ""}`;
+    const mark = c.plexOnly
+      ? " (Plex account only)"
+      : c.tautulliIncomplete
+        ? " (Tautulli history incomplete)"
+        : "";
+    return `${sizeLine(c.series)} - ${dated}${mark}`;
   };
   for (const c of shown) output += `- ${label(c.series)} - ${watchLine(c)}\n`;
   const media = shown.map((c) => {

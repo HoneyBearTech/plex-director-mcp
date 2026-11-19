@@ -22,8 +22,11 @@ a security problem.
   minimum size. With `notWatchedInYears` it keeps only the shows last watched longer ago than that (a
   never-watched show counts from the day it was added), from every Plex show library. Watch history is the
   Plex account the app is connected with; with Tautulli set up, the plays in its history can take a show
-  off the list or correct its date, but never put one on it, and the reply says what it knew and marks the
-  shows judged from the Plex account alone. It reports only: nothing is deleted.
+  off the list or correct its date, but never put one on it. The reply names each library whose Tautulli
+  answer could not be used, and why. It marks a listed show "Plex account only" when Tautulli gave no plays
+  for it, and "Tautulli history incomplete" when it kept a Tautulli date while another of its libraries'
+  answers could not be used. A Plex library that cannot be read completely is an error, never a partial
+  list. It reports only: nothing is deleted.
 
 ### Security
 

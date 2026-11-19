@@ -106,8 +106,15 @@ beforeEach(async () => {
       return { data: { MediaContainer: { Directory: SECTIONS } } };
     const m = req.url.match(/^\/library\/sections\/(\d+)\/all$/);
     if (m) {
+      // Honours the page asked for, as Plex does, and says how many the library holds.
       const items = library[m[1]!] ?? [];
-      return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
+      const start = Number(req.params["X-Plex-Container-Start"] ?? 0);
+      const size = Number(req.params["X-Plex-Container-Size"] ?? items.length);
+      return {
+        data: {
+          MediaContainer: { totalSize: items.length, Metadata: items.slice(start, start + size) },
+        },
+      };
     }
     return { status: 404 };
   });
@@ -132,6 +139,14 @@ const lines = (r: any) =>
     .split("\n")
     .filter((l) => l.startsWith("- "));
 const allCalls = () => [...sonarr.calls, ...plex.calls, ...tautulli.calls];
+const fillers = (count: number) =>
+  Array.from({ length: count }, (_, i) =>
+    plexShow(String(1000 + i), `Filler ${i}`, 9000 + i, yearsAgo(1), yearsAgo(2)),
+  );
+const pageStarts = (section: string) =>
+  plex.calls
+    .filter((c) => c.url === `/library/sections/${section}/all`)
+    .map((c) => c.params["X-Plex-Container-Start"]);
 const useTautulli = () => setSetting("TAUTULLI_URL", "http://tautulli:8181");
 
 function sizeStock() {
@@ -264,6 +279,43 @@ describe("find_series_by_size: the biggest shows", () => {
     assert.match(text(result), /Failed to check Sonarr: database is locked/);
   });
 
+  it("B2: a Sonarr answer that is not a list of series is an error reply", async () => {
+    for (const answer of [
+      "<html><body>Sign in</body></html>",
+      [series(1, "Huge", 101, 400), null],
+    ]) {
+      sonarr.restore();
+      sonarr = fakeApi(sonarrClient, () => ({ status: 200, data: answer }));
+      for (const options of [{}, { notWatchedInYears: 3 }]) {
+        const result = await run(options);
+        assert.equal(result.isError, true, JSON.stringify(answer));
+        assert.equal(
+          text(result),
+          "Failed to check Sonarr: Sonarr did not answer with a list of series",
+        );
+        assert.equal(rows(result).length, 0);
+      }
+    }
+    assert.equal(plex.calls.length, 0);
+  });
+
+  it("B2: a show with episode files and a size of 0 is listed; a show with no statistics is not", async () => {
+    sizeStock();
+    allSeries.push(
+      series(6, "Zero Size", 106, 0, { statistics: { episodeFileCount: 3, sizeOnDisk: 0 } }),
+      series(7, "No Statistics", 107, 0, { statistics: undefined }),
+    );
+    const result = await run();
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(titles(result), ["Huge", "Middle A", "Middle B", "Small", "Zero Size"]);
+    assert.match(text(result), /5 shows have files, 505\.0 GB in all\./);
+    assert.equal(
+      lines(result)[4],
+      "- Zero Size (2010) - 0 MB - 3 episode files - ended - not monitored",
+    );
+    assert.doesNotMatch(text(result), /No Statistics/);
+  });
+
   it("B10: the rows are attached as structuredContent (media, append false)", async () => {
     sizeStock();
     const result: any = await run({ limit: 1 });
@@ -337,6 +389,243 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
     assert.ok(!titles(await run({ notWatchedInYears: 3 })).includes("Both Libraries"));
   });
 
+  it("B4, B8: a copy watched with no date is not outweighed by another copy's old date: left out and counted", async () => {
+    watchStock();
+    // "TV Shows": watched 7 years ago. "4k TV Shows": watched, with no date.
+    library["4"] = [plexShow("25", "Both Libraries", 105, "undated", yearsAgo(5))];
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Both Libraries"));
+    assert.match(text(result), /1 show has been watched but with no date recorded/);
+  });
+
+  it("B4, B8: a copy watched with no date, and another watched recently: not listed, and not counted as can't be judged", async () => {
+    watchStock();
+    library["3"]![4] = plexShow("15", "Both Libraries", 105, yearsAgo(1), yearsAgo(8));
+    library["4"] = [plexShow("25", "Both Libraries", 105, "undated", yearsAgo(5))];
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Both Libraries"));
+    assert.doesNotMatch(text(result), /no date recorded/);
+  });
+
+  it("B4: two Plex shows matched to one Sonarr series are one show: the more recent watching wins", async () => {
+    allSeries = [series(1, "Old Favourite", 101, 300)];
+    // One copy carries the TVDB id, the other none (matched by title and year).
+    library["3"] = [plexShow("11", "Old Favourite", 101, yearsAgo(6), yearsAgo(9))];
+    library["4"] = [plexShow("21", "Old Favourite", null, yearsAgo(4), yearsAgo(5))];
+    const old = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(old), ["Old Favourite"]);
+    assert.match(lines(old)[0]!, new RegExp(`last watched ${day(yearsAgo(4))}$`));
+    assert.deepEqual(rows(old)[0].libraries, ["TV Shows", "4k TV Shows"]);
+
+    library["4"] = [plexShow("21", "Old Favourite", null, yearsAgo(1), yearsAgo(5))];
+    const recent = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(recent), []);
+    assert.doesNotMatch(text(recent), /could not be matched/);
+  });
+
+  it("B4: a library of more than one page is read page by page, to the last show", async () => {
+    watchStock();
+    // The recently watched copy of Both Libraries is beyond the first page;
+    // its 4K copy was watched 4 years ago.
+    library["3"] = [...fillers(5200), ...library["3"]!];
+    library["3"][5204] = plexShow("15", "Both Libraries", 105, yearsAgo(1), yearsAgo(8));
+    const result = await run({ notWatchedInYears: 3 });
+    assert.equal(result.isError, undefined);
+    assert.deepEqual(titles(result), ["Old Favourite", "Never Started", "Forgotten"]);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+    assert.deepEqual(pageStarts("4"), [0]);
+    for (const call of plex.calls.filter((c) => /\/all$/.test(c.url)))
+      assert.equal(call.params["X-Plex-Container-Size"], 5000);
+
+    // With no totalSize, the read stops at the first page shorter than asked for.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      return { data: { MediaContainer: { Metadata: items.slice(start, start + 5000) } } };
+    };
+    plex.calls.length = 0;
+    const noTotal = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(noTotal), ["Old Favourite", "Never Started", "Forgotten"]);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+  });
+
+  it("B4: a library that can't be read to its end is an error reply, never a list from part of it", async () => {
+    watchStock();
+    library["3"] = [...fillers(5200), ...library["3"]!];
+    // Plex says 5205 shows, but its second page is empty.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      const page = start >= 5000 ? [] : items.slice(start, start + 5000);
+      return { data: { MediaContainer: { totalSize: items.length, Metadata: page } } };
+    };
+    const result = await run({ notWatchedInYears: 3 });
+    assert.equal(result.isError, true);
+    assert.match(
+      text(result),
+      /Plex could not be read completely.*the library "TV Shows" gave 5000 of the 5205 shows it holds/,
+    );
+    assert.equal(rows(result).length, 0);
+
+    // A total that is never reached is given up on after 20 pages.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const start = Number(req.params["X-Plex-Container-Start"]);
+      return {
+        data: {
+          MediaContainer: {
+            totalSize: 100_000,
+            Metadata: [plexShow(String(start), `Show ${start}`, null, null, yearsAgo(9))],
+          },
+        },
+      };
+    };
+    plex.calls.length = 0;
+    const endless = await run({ notWatchedInYears: 3 });
+    assert.equal(endless.isError, true);
+    assert.match(
+      text(endless),
+      /Plex could not be read completely.*was not read to its end within 20 pages/,
+    );
+    assert.equal(pageStarts("3").length, 20);
+  });
+
+  it("B4: a page that is not a proper answer, a smaller total, a repeated page or a total beyond the bound is never taken as the end", async () => {
+    watchStock();
+    // 5,001 shows: Old Favourite, the one show beyond the first page, has a
+    // copy in no other library and was watched 6 years ago.
+    library["3"] = [...fillers(5000), library["3"]![0]!];
+    library["4"] = [];
+    // The second page of "TV Shows" is what `second` answers; the first is
+    // right, with totalSize 5001.
+    const withSecondPage = (second: (items: any[]) => FakeReply) => {
+      plexReply = (req) => {
+        if (req.url === "/library/sections")
+          return { data: { MediaContainer: { Directory: SECTIONS } } };
+        const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+        const start = Number(req.params["X-Plex-Container-Start"]);
+        if (start === 0)
+          return {
+            data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(0, 5000) } },
+          };
+        return second(items);
+      };
+      plex.calls.length = 0;
+    };
+    const fails = async (why: RegExp) => {
+      const result = await run({ notWatchedInYears: 3 });
+      assert.equal(result.isError, true, text(result));
+      assert.match(text(result), /^Plex could not be read completely/);
+      assert.match(text(result), why);
+      assert.equal(rows(result).length, 0);
+    };
+
+    // Read whole, the show beyond the first page is listed.
+    withSecondPage((items) => ({
+      data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(5000) } },
+    }));
+    assert.deepEqual(titles(await run({ notWatchedInYears: 3 })), ["Old Favourite"]);
+
+    // HTTP 200 with a sign-in page: no MediaContainer.
+    withSecondPage(() => ({ data: "<html><body>Sign in</body></html>" }));
+    await fails(/the library "TV Shows" gave page 2 without a list of shows/);
+    // A MediaContainer whose Metadata is not a list.
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: "none" } } }));
+    await fails(/gave page 2 without a list of shows/);
+    // A show with no ratingKey.
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: [{ title: "No Key" }] } } }));
+    await fails(/gave page 2 with a show that has no ratingKey/);
+
+    // A smaller total, or none, on the second page does not end the read: 5001 still stands.
+    withSecondPage(() => ({ data: { MediaContainer: { totalSize: 5000, Metadata: [] } } }));
+    await fails(/the library "TV Shows" gave 5000 of the 5001 shows it holds/);
+    withSecondPage(() => ({ data: { MediaContainer: { Metadata: [] } } }));
+    await fails(/gave 5000 of the 5001 shows it holds/);
+
+    // The first page again: 10,000 items received, but only 5,000 different shows.
+    withSecondPage((items) => ({
+      data: { MediaContainer: { totalSize: items.length, Metadata: items.slice(0, 5000) } },
+    }));
+    await fails(/gave 5000 of the 5001 shows it holds/);
+    assert.deepEqual(pageStarts("3"), [0, 5000]);
+
+    // A total beyond 100,000 is given up on at once: no further page is asked for.
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return { data: { MediaContainer: { Directory: SECTIONS } } };
+      const items = req.url.endsWith("/3/all") ? library["3"]! : library["4"]!;
+      return {
+        data: { MediaContainer: { totalSize: 100_001, Metadata: items.slice(0, 5000) } },
+      };
+    };
+    plex.calls.length = 0;
+    await fails(
+      /the library "TV Shows" holds 100001 shows, more than the 100000 this report reads/,
+    );
+    assert.deepEqual(pageStarts("3"), [0]);
+  });
+
+  it("B4: a first page that is not a proper answer, a bad entry, an endless library or an oversized page is an error reply", async () => {
+    watchStock();
+    // "TV Shows" answers with whatever `answer` gives for the page starting at `start`.
+    const tvShowsAnswers = (answer: (start: number) => FakeReply) => {
+      plexReply = (req) => {
+        if (req.url === "/library/sections")
+          return { data: { MediaContainer: { Directory: SECTIONS } } };
+        if (req.url.endsWith("/4/all"))
+          return { data: { MediaContainer: { totalSize: 1, Metadata: library["4"] } } };
+        return answer(Number(req.params["X-Plex-Container-Start"]));
+      };
+      plex.calls.length = 0;
+    };
+    const fails = async (why: RegExp) => {
+      const result = await run({ notWatchedInYears: 3 });
+      assert.equal(result.isError, true, text(result));
+      assert.match(text(result), /^Plex could not be read completely/);
+      assert.match(text(result), why);
+      assert.equal(rows(result).length, 0);
+    };
+
+    // HTTP 200 with a sign-in page, on the first page.
+    tvShowsAnswers(() => ({ data: "<html><body>Sign in</body></html>" }));
+    await fails(/the library "TV Shows" gave page 1 without a list of shows/);
+    // A MediaContainer that is a list.
+    tvShowsAnswers(() => ({ data: { MediaContainer: [] } }));
+    await fails(/the library "TV Shows" gave page 1 without a list of shows/);
+    // A null entry among the shows.
+    tvShowsAnswers(() => ({
+      data: { MediaContainer: { totalSize: 2, Metadata: [library["3"]![0], null] } },
+    }));
+    await fails(/the library "TV Shows" gave page 1 with an entry that is not a show/);
+
+    // No total on any page, and every page full of new shows: given up after 20 pages.
+    tvShowsAnswers((start) => ({
+      data: {
+        MediaContainer: {
+          Metadata: Array.from({ length: 5000 }, (_, i) =>
+            plexShow(String(start + i), `Show ${start + i}`, null, null, yearsAgo(9)),
+          ),
+        },
+      },
+    }));
+    await fails(/the library "TV Shows" was not read to its end within 20 pages/);
+    assert.equal(pageStarts("3").length, 20);
+    assert.equal(pageStarts("3")[19], 95_000);
+
+    // A page longer than the 5,000 asked for, as from a server that ignores the page size.
+    library["3"] = [...fillers(5000), ...library["3"]!];
+    tvShowsAnswers(() => ({
+      data: { MediaContainer: { totalSize: library["3"]!.length, Metadata: library["3"] } },
+    }));
+    await fails(/the library "TV Shows" gave page 1 with more than the 5000 shows asked for/);
+    assert.deepEqual(pageStarts("3"), [0]);
+  });
+
   it("B4, B8: a show watched with no date anywhere can't be judged: left out and counted", async () => {
     watchStock();
     library["3"]![3] = plexShow("14", "Forgotten", 104, "undated", yearsAgo(8));
@@ -358,14 +647,42 @@ describe("find_series_by_size: big shows nobody has watched (Plex)", () => {
       "Both Libraries",
     ]);
     assert.match(text(result), /Not watched in 3 years: 4 shows, 680\.0 GB\./);
-    assert.match(text(result), /1 show Sonarr has was not found in Plex and left out\./);
+    assert.match(
+      text(result),
+      /1 show Sonarr has could not be matched to a Plex show and was left out\./,
+    );
     assert.doesNotMatch(text(result), /Only In Sonarr/);
+    assert.doesNotMatch(text(result), /not found in Plex/);
+
+    // In Plex, but with another TVDB id than Sonarr's: not matched either.
+    allSeries.push(series(7, "Other Id", 107, 400));
+    library["3"]!.push(plexShow("17", "Other Id", 777, yearsAgo(6), yearsAgo(9)));
+    assert.match(
+      text(await run({ notWatchedInYears: 3 })),
+      /2 shows Sonarr has could not be matched to a Plex show and were left out\./,
+    );
 
     // A longer period keeps fewer.
     assert.deepEqual(titles(await run({ notWatchedInYears: 5.5 })), [
       "Old Favourite",
       "Never Started",
     ]);
+  });
+
+  it("B8: a fractional period counts too: half a year", async () => {
+    watchStock();
+    library["3"]![2] = plexShow("13", "Recent Hit", 103, yearsAgo(0.6), yearsAgo(8));
+    const result = await run({ notWatchedInYears: 0.5 });
+    assert.match(text(result), /^## Big shows not watched in 0\.5 years/);
+    assert.deepEqual(titles(result), [
+      "Old Favourite",
+      "Never Started",
+      "Recent Hit",
+      "Forgotten",
+      "Both Libraries",
+    ]);
+    library["3"]![2] = plexShow("13", "Recent Hit", 103, yearsAgo(0.4), yearsAgo(8));
+    assert.ok(!titles(await run({ notWatchedInYears: 0.5 })).includes("Recent Hit"));
   });
 
   it("B8: each line and row detail carries the watch date, and the row's lastWatched and added are set", async () => {
@@ -604,6 +921,101 @@ describe("find_series_by_size: big shows nobody has watched (Plex and Tautulli)"
     const result = await run({ notWatchedInYears: 3 });
     assert.ok(!titles(result).includes("Never Started"));
     assert.match(text(result), /1 show has been watched but with no date recorded/);
+  });
+
+  it("B6: plays in Tautulli with no date are not outweighed by Plex's old date: left out and counted", async () => {
+    // Plex: watched 6 years ago. Tautulli: played, at a time it does not give.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, null)]);
+    const result = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(result).includes("Old Favourite"));
+    assert.match(text(result), /1 show has been watched but with no date recorded/);
+    assert.doesNotMatch(text(result), /off the list/);
+  });
+
+  it("B6: a play time in milliseconds is no usable time: left out as can't be judged, not as played recently", async () => {
+    tautulliLibrary["3"] = tautulliOk([
+      row("11", 3, yearsAgo(5) * 1000),
+      row("14", 1, yearsAgo(0.1) * 1000),
+    ]);
+    const result = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(result), ["Never Started", "Both Libraries"]);
+    assert.match(text(result), /2 shows have been watched but with no date recorded/);
+    assert.doesNotMatch(text(result), /played more recently/);
+
+    // Up to a day ahead of now (a clock a little off) still counts as a time.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, Math.round(NOW / 1000) + 3600)]);
+    const ahead = await run({ notWatchedInYears: 3 });
+    assert.ok(!titles(ahead).includes("Old Favourite"));
+    assert.match(text(ahead), /Tautulli's history took 1 show off the list/);
+    assert.doesNotMatch(text(ahead), /no date recorded/);
+  });
+
+  it("B7: a show whose libraries include one with an unusable answer is marked for that, not for 'no row or no plays'", async () => {
+    // "TV Shows" answers, with no row for Both Libraries; "4k TV Shows" fails.
+    tautulliLibrary["3"] = tautulliOk([row("11", 3, yearsAgo(5))]);
+    tautulliLibrary["4"] = { status: 500 };
+    const result = await run({ notWatchedInYears: 3 });
+    assert.deepEqual(titles(result), [
+      "Old Favourite",
+      "Never Started",
+      "Forgotten",
+      "Both Libraries",
+    ]);
+    // Never Started and Forgotten only: Both Libraries is under the library that could not be used.
+    assert.match(
+      text(result),
+      /2 listed shows were judged from the Plex account alone because Tautulli had no row or no plays for them/,
+    );
+    assert.match(
+      text(result),
+      /Tautulli's answer for the library "4k TV Shows" could not be used: the call failed .*; shows there were judged from the Plex account alone/,
+    );
+    assert.match(lines(result)[3]!, /^- Both Libraries .*\(Plex account only\)$/);
+  });
+
+  it("B7: a show Tautulli gave an old play for, with another of its libraries' answers unusable, keeps the date and is marked", async () => {
+    // Three copies: "TV Shows" has an old play, "4k TV Shows" no row, "Kids TV" failed.
+    library["5"] = [plexShow("35", "Both Libraries", 105, null, yearsAgo(6))];
+    plexReply = (req) => {
+      if (req.url === "/library/sections")
+        return {
+          data: {
+            MediaContainer: {
+              Directory: [...SECTIONS, { key: "5", type: "show", title: "Kids TV" }],
+            },
+          },
+        };
+      const items = library[req.url.match(/^\/library\/sections\/(\d+)\/all$/)![1]!] ?? [];
+      return { data: { MediaContainer: { totalSize: items.length, Metadata: items } } };
+    };
+    tautulliLibrary["3"] = tautulliOk([row("15", 2, yearsAgo(3.5))]);
+    tautulliLibrary["4"] = tautulliOk([]);
+    tautulliLibrary["5"] = { status: 500 };
+    const result = await run({ notWatchedInYears: 3 });
+    const line = lines(result).find((l) => l.includes("Both Libraries"))!;
+    assert.match(
+      line,
+      new RegExp(`last watched ${day(yearsAgo(3.5))} \\(Tautulli history incomplete\\)$`),
+    );
+    assert.doesNotMatch(line, /Plex account only/);
+    assert.equal(
+      rows(result).find((r) => r.title === "Both Libraries").lastWatched,
+      day(yearsAgo(3.5)),
+    );
+    assert.match(
+      text(result),
+      /Tautulli's answer for the library "Kids TV" could not be used: the call failed .*; shows there were judged from the Plex account alone \(marked "Plex account only"\), except those another library's answer had plays for, which keep that date and are marked "Tautulli history incomplete"\./,
+    );
+    // The other three, in "TV Shows" only, had no row: the count is theirs alone.
+    assert.match(
+      text(result),
+      /3 listed shows were judged from the Plex account alone because Tautulli had no row or no plays for them/,
+    );
+
+    // With no library unusable, no such mark and no such clause.
+    tautulliLibrary["5"] = tautulliOk([]);
+    const whole = await run({ notWatchedInYears: 3 });
+    assert.doesNotMatch(text(whole), /Tautulli history incomplete/);
   });
 
   it("B6: on the same data, the list with Tautulli is a subset of the list without it", async () => {
