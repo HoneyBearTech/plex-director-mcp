@@ -2,7 +2,7 @@
 
 All notable changes to Plex Director are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/). Dependency updates from Dependabot are left out unless they fix
+[Semantic Versioning](https://semver.org/). Dependency updates from Renovate are left out unless they fix
 a security problem.
 
 ## [Unreleased]
