@@ -103,7 +103,7 @@ const MAX_LIMIT = 500;
 // well under this, so it is effectively "all".
 const FETCH_ALL = 5000;
 
-interface PlexSection {
+export interface PlexSection {
   key: string;
   title: string;
   kind: MediaKind;
@@ -203,7 +203,7 @@ function tmdbIdOf(item: PlexMetadata): string | null {
 // The ids that identify one title, best first. TMDb and TVDB numbers overlap
 // each other and movies overlap shows, so each is namespaced. Shows fall back
 // to TVDB when Plex has no TMDb match for them.
-function identityKeys(item: PlexMetadata, kind: MediaKind): string[] {
+export function identityKeys(item: PlexMetadata, kind: MediaKind): string[] {
   const keys: string[] = [];
   const tmdb = tmdbIdOf(item);
   if (tmdb) keys.push(`${kind}:tmdb:${tmdb}`);
@@ -692,7 +692,7 @@ export function numberOrNull(value: unknown): number | null {
 // What Plex records about watching one title, merged across the libraries that
 // hold it. Watch state is per library item, so an HD and a 4K copy can differ:
 // the title counts as far as its furthest-watched copy got.
-interface Watch {
+export interface Watch {
   viewCount: number;
   viewOffset: number;
   duration: number | null;
@@ -711,7 +711,7 @@ const latest = (a: number | null, b: number | null) =>
 const earliest = (a: number | null, b: number | null) =>
   a === null ? b : b === null ? a : Math.min(a, b);
 
-function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
+export function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
   return {
     viewCount: count(item.viewCount),
     viewOffset: count(item.viewOffset),
@@ -724,7 +724,7 @@ function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
   };
 }
 
-function mergeWatch(a: Watch, b: Watch): Watch {
+export function mergeWatch(a: Watch, b: Watch): Watch {
   const furthest = b.seen > a.seen || (b.seen === a.seen && (b.leaf ?? 0) > (a.leaf ?? 0)) ? b : a;
   return {
     viewCount: Math.max(a.viewCount, b.viewCount),
@@ -757,7 +757,7 @@ const everWatched = (kind: MediaKind, w: Watch) =>
 // When someone last did something with the title, in epoch seconds: the last
 // time it was watched, or for a never-watched title when it was added. Null
 // when Plex says it was watched but not when.
-function lastActivity(kind: MediaKind, w: Watch): number | null {
+export function lastActivity(kind: MediaKind, w: Watch): number | null {
   if (w.lastViewed !== null) return w.lastViewed;
   return everWatched(kind, w) ? null : w.addedFirst;
 }

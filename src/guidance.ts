@@ -67,6 +67,10 @@ export const ROUTES: Route[] = [
     tools: ["find_series_by_quality"],
   },
   {
+    question: "Which shows take the most disk space? Which big shows has nobody watched in years?",
+    tools: ["find_series_by_size"],
+  },
+  {
     question: "What's on this week? When does <show> come back?",
     tools: ["get_upcoming_episodes"],
   },

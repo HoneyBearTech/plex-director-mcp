@@ -519,7 +519,7 @@
         "tags": ["chat"],
         "operationId": "askQueryChat",
         "summary": "Ask the Query chat a question",
-        "description": "Sends the question and recent history to the Anthropic API with the 12 read-only library tools, runs the tools the model asks for (at most 4 rounds), and returns the answer. History is untrusted input: only well-formed turns are kept, at most the last 12, each cut to 4,000 characters. Needs ANTHROPIC_API_KEY on the server.",
+        "description": "Sends the question and recent history to the Anthropic API with the 13 read-only library tools, runs the tools the model asks for (at most 4 rounds), and returns the answer. History is untrusted input: only well-formed turns are kept, at most the last 12, each cut to 4,000 characters. Needs ANTHROPIC_API_KEY on the server.",
         "requestBody": {
           "required": true,
           "content": {

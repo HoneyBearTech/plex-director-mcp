@@ -9,7 +9,7 @@ built yet is marked **Planned**.
 
 ## Where it stands
 
-Plex Director is one Node.js process that is both an MCP server for Claude Desktop (26 tools) and a web
+Plex Director is one Node.js process that is both an MCP server for Claude Desktop (27 tools) and a web
 dashboard with a Claude-powered Query chat. **v1.0.0**, **v1.1.0** (September 2026), **v1.2.0**, **v1.3.0** and **v1.4.0** (October 2026) are released as
 signed multi-arch images on Docker Hub and GHCR.
 
@@ -22,6 +22,8 @@ What works today:
 - **Owned versus missing** for an actor's movies and shows, from TMDb.
 - **TV completeness and status** from Sonarr: which aired episodes are missing and why, which shows have
   gaps, what airs this week, when a show returns, and shows by downloaded quality.
+- **Storage reports for TV**: the biggest shows by disk space in Sonarr, and the big shows not watched in
+  years (from Plex, plus Tautulli's play history when it is configured). Reports only; nothing is deleted.
 - **Movies**: status, diagnosis of why one is missing, and adding movies to Radarr through a
   pick-then-confirm grid with a configurable default quality profile.
 - **Downloads and indexers**: SABnzbd and qBittorrent queues, stalled-torrent clean-up, Prowlarr indexer
@@ -35,11 +37,11 @@ What works today:
 
 ## Over the following year
 
-**Storage clean-up for TV** (Planned)
-- **Biggest shows:** rank shows by how much disk they use in Sonarr.
-- **Big shows nobody watches:** shows not watched in years that take a lot of space, as clean-up
-  candidates (Sonarr size combined with Plex or Tautulli watch history).
-- These start as read-only reports. Any bulk TV action added later will be explicit, confirmed and
+**Storage clean-up for TV**
+- **Done (November 2026):** `find_series_by_size` ranks shows by how much disk they use in Sonarr, and
+  lists the big shows not watched in years as clean-up candidates (Sonarr size combined with the watch
+  history of the connected Plex account and, when it is configured, Tautulli's play history).
+- These are read-only reports. Any bulk TV action added later will be explicit, confirmed and
   rate-limited like the movie job system.
 
 **Adding TV series** (Planned, undecided)

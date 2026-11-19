@@ -15,6 +15,7 @@ import {
 import { getUpcomingEpisodes, type UpcomingOptions } from "./upcoming.js";
 import { searchEpisodes, type EpisodeSearchArgs } from "./plexEpisodes.js";
 import { findSeriesByQuality, type QualityOptions } from "./seriesQuality.js";
+import { findSeriesBySize, type SeriesSizeOptions } from "./seriesSize.js";
 import type { RadarrHistoryRecord, RadarrLibraryMovie, RadarrMovie } from "../types/radarr.js";
 import type { SabnzbdQueueResponse } from "../types/sabnzbd.js";
 
@@ -633,6 +634,85 @@ const definitions: ToolDefinition[] = [
       required: [] as string[],
     },
     handler: async (options: QualityOptions) => findSeriesByQuality(options),
+  },
+  {
+    name: "find_series_by_size",
+    description:
+      "Ranks TV shows by the disk space Sonarr reports for them: 'which shows take the most space?'. Largest first, each with its size, number of episode files, status and whether it is monitored; opens with how many shows have files and their total size. Narrow with status, monitored, folder ('kids', 'anime') and minSizeGb. " +
+      "With notWatchedInYears it answers 'which big shows has nobody watched in N years?', as clean-up candidates: each show is looked up in every Plex show library and kept only when its last watching (or, for a never-watched show, the day it was added) is older than that. Shows not found in Plex, or watched with no date recorded, are left out and counted. The watch data is the one Plex account the app is connected with, plus the plays in Tautulli's history when Tautulli is set up, which can only take a show off the list; the reply says which it had and marks shows judged from the Plex account alone, so pass that on rather than saying nobody watched them. " +
+      "It only reports: it deletes nothing and changes nothing. Read-only.",
+    zodSchema: {
+      notWatchedInYears: z
+        .number()
+        .positive()
+        .optional()
+        .describe(
+          "Only shows with no watching in this many years, e.g. 3 (a never-watched show counts from when it was added to Plex). Needs Plex.",
+        ),
+      status: z
+        .enum(["continuing", "ended", "upcoming"])
+        .optional()
+        .describe(
+          "Only shows with this status in Sonarr: still running, ended, or not started yet.",
+        ),
+      monitored: z
+        .enum(["any", "monitored", "unmonitored"])
+        .optional()
+        .describe("Only shows Sonarr monitors, only ones it does not, or both (default any)."),
+      folder: z
+        .string()
+        .optional()
+        .describe(
+          "Only shows in a Sonarr folder whose path contains this text, e.g. 'kids', 'anime', 'sports'.",
+        ),
+      minSizeGb: z
+        .number()
+        .positive()
+        .optional()
+        .describe("Only shows that take at least this many GB on disk (a GB is 10^9 bytes)."),
+      limit: z
+        .number()
+        .int()
+        .min(1)
+        .max(200)
+        .optional()
+        .describe("How many shows to list (default 15, max 200)."),
+    },
+    inputSchema: {
+      type: "object" as const,
+      properties: {
+        notWatchedInYears: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description:
+            "Only shows with no watching in this many years, e.g. 3 (a never-watched show counts from when it was added to Plex). Needs Plex.",
+        },
+        status: {
+          type: "string",
+          enum: ["continuing", "ended", "upcoming"],
+          description:
+            "Only shows with this status in Sonarr: still running, ended, or not started yet.",
+        },
+        monitored: {
+          type: "string",
+          enum: ["any", "monitored", "unmonitored"],
+          description: "Only shows Sonarr monitors, only ones it does not, or both (default any).",
+        },
+        folder: {
+          type: "string",
+          description:
+            "Only shows in a Sonarr folder whose path contains this text, e.g. 'kids', 'anime', 'sports'.",
+        },
+        minSizeGb: {
+          type: "number",
+          exclusiveMinimum: 0,
+          description: "Only shows that take at least this many GB on disk (a GB is 10^9 bytes).",
+        },
+        limit: { type: "integer", description: "How many shows to list (default 15, max 200)." },
+      },
+      required: [] as string[],
+    },
+    handler: async (options: SeriesSizeOptions) => findSeriesBySize(options),
   },
   {
     name: "resolve_actor_filmography",

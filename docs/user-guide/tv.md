@@ -1,7 +1,7 @@
 # TV shows
 
 These tools read **Sonarr**: which episodes you have, which are missing and why, what quality you have them
-in, and what is coming up. They only read; none of them changes anything in Sonarr. All six are available in
+in, how much space they take, and what is coming up. They only read; none of them changes anything in Sonarr. All seven are available in
 Claude Desktop and in the [Query chat](query-chat.md).
 
 To search the shows in Plex, or find a particular episode by its plot, see [Your library](library.md).
@@ -63,6 +63,43 @@ with the lowest best quality first, with how many files are at each resolution.
 
 It only sees what Sonarr downloaded. A 4K copy kept in a separate Plex 4K library that Sonarr doesn't manage isn't
 counted; to find those, search the library with `4k` ([Your library](library.md)).
+
+## Which shows take the most space? `find_series_by_size`
+
+"Which shows take the most disk space?" Ranks the shows that have files by the size Sonarr reports for them,
+largest first, each with its size, number of episode files, status and whether it is monitored. The reply opens
+with how many shows have files and how much space they take in all.
+
+| Option | Example |
+| :--- | :--- |
+| Status | Continuing, ended or upcoming (Sonarr's status). |
+| Monitoring | Monitored, unmonitored, or any. |
+| Folder | Only shows in a Sonarr folder whose path contains the text, such as `kids` or `anime`. |
+| At least this big | "over 50 GB". A GB is 10^9 bytes, as the sizes are shown. |
+| Not watched in N years | See below. |
+| Limit | 15 by default, 200 at most. |
+
+**Big shows nobody has watched in years.** "Which big shows haven't been watched in three years?" lists
+clean-up candidates, still largest first. Each show is looked up in every Plex show library (also the ones
+the "libraries to skip" setting leaves out of searches) and kept only when it was last watched longer ago than
+that; a show that was never watched counts from the day it was added to Plex. Each line says "last watched"
+with the date, or "never watched, added" with the date. This part needs Plex.
+
+What "watched" can know is limited, and the reply says which of these it had:
+
+- **Without Tautulli**, the watch history is that of the one Plex account Plex Director is connected with.
+  A show someone else in the house watched can still be listed.
+- **With Tautulli set up**, the plays in Tautulli's history count too. That history starts when Tautulli was
+  installed and may leave out users archived there. Tautulli can only take a show off the list (someone played
+  it more recently) or correct the date on its line; "no plays in Tautulli" is never read as "nobody watched
+  it". Shows that Tautulli had no row or no plays for are judged from the Plex account alone and marked
+  "Plex account only". If Tautulli's answer for a library fails or is incomplete, the reply names the library
+  and judges its shows from the Plex account alone. Tautulli is never asked to rebuild its lists.
+
+Left out, and counted in the reply: shows Sonarr has that were not found in Plex (they are matched by TVDB id,
+or by title and year when Plex has none), and shows Plex marks as watched without a date.
+
+It is a report: it deletes nothing and changes nothing.
 
 ## What does Sonarr know about a show? `check_series_status`
 

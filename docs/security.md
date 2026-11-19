@@ -45,7 +45,7 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 
 - The dashboard is read-only for anything that touches your services, apart from saving settings and
   approving a changed SSH host key: it cannot add movies, delete downloads, or start, pause or cancel jobs.
-- The Query chat can only use the 12 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
+- The Query chat can only use the 13 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
   tool that adds, deletes or starts anything.
 - Batch jobs are created `PENDING` and never start on their own; the job runner sends at most one Radarr
   search per interval (60 seconds by default) and pauses a job after three failures in a row.

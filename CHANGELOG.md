@@ -16,6 +16,14 @@ a security problem.
   shows that could not be matched to a Sonarr series are left out and counted in the reply. `director` finds the movies a person
   directed. It covers movies only: Plex keeps a show's directors per episode, so the reply says that TV
   shows were not searched.
+- **`find_series_by_size`: which shows take the most disk space, and which big shows nobody has watched in
+  years.** A new read-only tool, for MCP clients and the Query chat (27 tools, 13 in the chat). It ranks
+  the shows that have files by the size Sonarr reports, with filters for status, monitoring, folder and a
+  minimum size. With `notWatchedInYears` it keeps only the shows last watched longer ago than that (a
+  never-watched show counts from the day it was added), from every Plex show library. Watch history is the
+  Plex account the app is connected with; with Tautulli set up, the plays in its history can take a show
+  off the list or correct its date, but never put one on it, and the reply says what it knew and marks the
+  shows judged from the Plex account alone. It reports only: nothing is deleted.
 
 ### Security
 
