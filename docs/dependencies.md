@@ -65,7 +65,9 @@ which has no package manager.
   doesn't name itself (dependencies of dependencies), which the regular update pull requests don't follow
   but the audit in CI still checks. It is a weekly proposal, not a promise that an advisory is cleared: it
   helps only when a fixed version exists inside those ranges and the required checks pass. Otherwise the fix
-  is made by hand (`npm audit fix`), within the thresholds below.
+  is made by hand (`npm audit fix`), within the thresholds below. The refresh merges automatically once the
+  required checks pass, without the 3-day wait: it only re-resolves versions within the existing ranges and has
+  no release date to count from.
 - **Renovate merges updates itself.** Every update (patch, minor and major, the lock file refreshes and image
   rebuilds included) is squash-merged by GitHub once all required checks on `main` have passed
   (`"automerge": true`, `"platformAutomerge": true`). A new version waits three days after its release before
