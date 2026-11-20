@@ -30,7 +30,7 @@ Update these as work lands: tick roadmap checkboxes, add a Pass-Map row, add a d
 - Tests must never touch the real DB, `.env` or services (see `test/isolation.test.ts`). Never print secret values; Sonarr history and Prowlarr payloads carry API keys.
 - Anything that changes a real system (adds media, starts jobs, deletes) must be explicit and confirmed. `plan_media_upgrade` deliberately rejects TV.
 - No secrets, keys, tokens or `.env` files committed, ever. Extend `.gitignore` rather than working around it.
-- One branch and PR per change; commits signed off (`git commit -s`, DCO). The owner merges.
+- One branch and PR per change; commits signed off (`git commit -s`, DCO). The owner merges, except Renovate's dependency updates, which Renovate merges once every required check passes.
 - Keep the repo on track for OpenSSF Baseline L1/L2 and Best Practices Passing/Silver (project 15521). Say so before a change that would break a met criterion.
 
 ## Commands

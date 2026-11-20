@@ -4,7 +4,12 @@
   "timezone": "America/Chicago",
   "schedule": ["before 6am on monday"],
   "labels": ["dependencies"],
-  "automerge": false,
+  "automerge": true,
+  "automergeType": "pr",
+  "automergeStrategy": "squash",
+  "platformAutomerge": true,
+  "minimumReleaseAge": "3 days",
+  "minimumReleaseAgeBehaviour": "timestamp-optional",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
     "addLabels": ["security"]
@@ -14,6 +19,12 @@
     "schedule": ["before 6am on monday"]
   },
   "packageRules": [
+    {
+      "description": "An image rebuild (a new digest under the same tag) doesn't wait: Docker Hub dates it by the tag's last push, so a tag rebuilt about weekly would restart the 3-day clock each time and never get through the Monday-only schedule. Only images: a moved tag on a GitHub Action is also a digest update and keeps the wait. Vulnerability fixes skip the wait by Renovate's default.",
+      "matchDatasources": ["docker"],
+      "matchUpdateTypes": ["digest"],
+      "minimumReleaseAge": null
+    },
     {
       "description": "Backend npm project: one pull request for all minor and patch updates",
       "matchManagers": ["npm"],

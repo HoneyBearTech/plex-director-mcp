@@ -64,16 +64,24 @@ which has no package manager.
   lockfiles to the newest versions the declared ranges allow. It is there for the packages the project
   doesn't name itself (dependencies of dependencies), which the regular update pull requests don't follow
   but the audit in CI still checks. It is a weekly proposal, not a promise that an advisory is cleared: it
-  helps only when a fixed version exists inside those ranges, the required checks pass and the maintainer
-  merges it. Otherwise the fix is made by hand (`npm audit fix`), within the thresholds below.
-- **The maintainer merges every update.** Renovate's automerge is off (`"automerge": false`), so each of its
-  pull requests waits for review and for all required checks on `main`.
+  helps only when a fixed version exists inside those ranges and the required checks pass. Otherwise the fix
+  is made by hand (`npm audit fix`), within the thresholds below. The refresh merges automatically once the
+  required checks pass, without the 3-day wait: it only re-resolves versions within the existing ranges and has
+  no release date to count from.
+- **Renovate merges updates itself.** Every update (patch, minor and major, the lock file refreshes and image
+  rebuilds included) is squash-merged by GitHub once all required checks on `main` have passed
+  (`"automerge": true`, `"platformAutomerge": true`). A new version waits three days after its release before
+  Renovate proposes it (`minimumReleaseAge`; a registry that reports no release date doesn't hold an update
+  back). Security fixes and image rebuilds (a new digest under the same tag) skip that wait. Only the
+  exceptions in the guard rails above stay with the maintainer: Node.js majors are never proposed, and
+  `docker/scout-action` stays below 1.25. Each merge to `main` publishes the `latest` image; tagged releases
+  are unaffected.
 - **What is left of Dependabot.** "Dependabot security updates" is a repository setting, which the move to
   Renovate does not touch. While it is on, Dependabot still opens a pull request for a vulnerable package,
   and `.github/workflows/dependabot-auto-merge.yml` merges it once the required checks pass, unless it is a
   major update or an update of a GitHub Action: those wait for the maintainer. Renovate may open a pull
-  request for the same advisory. The workflow acts only on pull requests from `dependabot[bot]`, never on
-  Renovate's.
+  request for the same advisory, which it merges itself. The workflow acts only on pull requests from
+  `dependabot[bot]`, never on Renovate's.
 - **Every push and pull request** runs `npm audit --audit-level=high` on both npm projects in the `check`
   job of `.github/workflows/ci.yml`. A high or critical advisory anywhere in either locked dependency tree
   fails CI, which blocks merging (including Renovate's own pull requests).
