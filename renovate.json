@@ -12,7 +12,7 @@
   "minimumReleaseAgeBehaviour": "timestamp-optional",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
-    "addLabels": ["security"]
+    "addLabels": ["security", "openssf"]
   },
   "lockFileMaintenance": {
     "enabled": true,
