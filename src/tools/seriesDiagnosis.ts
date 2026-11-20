@@ -42,7 +42,8 @@ const day = (iso: unknown) =>
   typeof iso === "string" && iso ? iso.slice(0, 10) : "an unknown date";
 const code = (season: number, episode: number) => `S${season}E${String(episode).padStart(2, "0")}`;
 
-function formatSize(bytes: number): string {
+// Decimal units, as disks are sold: a GB is 10^9 bytes.
+export function formatSize(bytes: number): string {
   if (bytes >= 1e12) return `${(bytes / 1e12).toFixed(1)} TB`;
   if (bytes >= 1e9) return `${(bytes / 1e9).toFixed(1)} GB`;
   return `${Math.max(0, Math.round(bytes / 1e6))} MB`;

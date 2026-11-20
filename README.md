@@ -13,13 +13,13 @@
 
 **Plex Director** is a self-hosted assistant for a Plex + Servarr media stack. It connects to Plex, Radarr, Sonarr, Prowlarr, SABnzbd, qBittorrent, Tautulli and TMDb (and, optionally, your Linux hosts over SSH), and gives you two ways to work with them:
 
-- **An MCP server for Claude Desktop** — ask Claude to find what you own, work out why a movie is missing, add movies, check your indexers and download queues, or run batch jobs.
+- **An MCP server for Claude Desktop** — ask Claude to find what you own, work out why a movie is missing, add movies and TV series, check your indexers and download queues, or run batch jobs.
 - **A web dashboard** — a browser UI with a chat box ("Which of Harrison Ford's movies do I have in 4K?"), server status, host utilization, download queues, indexer health, and background jobs.
 
 It is built for a home-run setup: run it on your LAN, next to the apps it talks to.
 
 > [!WARNING]
-> Plex Director holds the API keys for every service you connect and can change them, not just read them: it adds movies to Radarr and starts download searches, removes stalled torrents from qBittorrent, runs batch upgrade jobs, and triggers Servarr backups. Adding movies goes through a pick-then-confirm step and batch jobs are planned before they run, but purging stalled torrents and starting backups happen as soon as they are asked for, and the chat and Claude Desktop act with your keys. Set `WEB_PASSWORD`, keep the dashboard off the public internet, and see [Security requirements](docs/security.md).
+> Plex Director holds the API keys for every service you connect and can change them, not just read them: it adds movies to Radarr and TV series to Sonarr and starts download searches, removes stalled torrents from qBittorrent, runs batch upgrade jobs, and triggers Servarr backups. Adding movies and series goes through a pick-then-confirm step and batch jobs are planned before they run, but purging stalled torrents and starting backups happen as soon as they are asked for, and the chat and Claude Desktop act with your keys. Set `WEB_PASSWORD`, keep the dashboard off the public internet, and see [Security requirements](docs/security.md).
 
 ## Documentation
 
@@ -65,6 +65,7 @@ It is built for a home-run setup: run it on your LAN, next to the apps it talks 
 - **What have I watched, and what have I let go stale?** Ask for unwatched shows, ones you started but never finished, movies you have not watched in years, or the newest additions, alone or combined with genre, library and the rest. Titles Plex says were watched but holds no date for are set aside and counted, not guessed at.
 - **Owned versus missing.** Look up an actor's TMDb filmography, movies and TV shows, and see which of those titles are in Plex and which are not, optionally narrowed to movies or shows, by year range, or by "in 4K". Talk-show and "Self" appearances are left out, and a title appears once even when the actor played several roles in it.
 - **Diagnose and add movies.** Trace a movie through Radarr metadata, history and the download queues to see why it is missing, or search TMDb, pick from a grid, and add the choices to Radarr with a download search.
+- **Add TV series.** Search Sonarr's lookup, pick from a grid, read a preview of exactly what would be added (quality profile, root folder, series type, which episodes are monitored), and confirm it. Nothing is added unless the preview you agreed to still holds.
 - **Watch your downloads and indexers.** See SABnzbd and qBittorrent queues, clean up stalled torrents, and check every Prowlarr indexer's health (including ones that are backing off).
 - **Run batch jobs safely.** Plan a movie-upgrade batch and let a rate-limited runner search one movie a minute, with pause, resume, cancel, and automatic pausing if Radarr stops responding.
 - **Keep an eye on your hosts.** CPU, memory, disk, uptime and Docker container health for your Linux hosts over SSH, plus Radarr, Sonarr and Prowlarr built-in backups on demand. Each host's SSH key is remembered the first time it connects, and a changed key is refused until you approve it.
@@ -229,7 +230,7 @@ The same image is also the MCP server, which speaks over stdio. Tell Claude Desk
 }
 ```
 
-Restart Claude Desktop and the `plex-director` server appears as a tool provider (26 tools, listed [below](#mcp-tools)). Notes:
+Restart Claude Desktop and the `plex-director` server appears as a tool provider (29 tools, listed [below](#mcp-tools)). Notes:
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The web dashboard also starts inside this container, but you only need to publish its port if you want to open it from this container instead of from the Compose one.
@@ -259,7 +260,11 @@ Nothing is required to start the container: it boots with no configuration and l
 | :--- | :--- |
 | `RADARR_URL`, `RADARR_API_KEY` | Radarr. Used for movie status, diagnosis, adding movies, and batch jobs. |
 | `RADARR_DEFAULT_QUALITY_PROFILE` | *Optional.* The name of the quality profile new movies get when you add them. Leave it blank to use Radarr's first profile. Also on the Radarr tab of the Settings page. |
-| `SONARR_URL`, `SONARR_API_KEY` | Sonarr. Optional; used for TV episode completeness and backups. |
+| `SONARR_URL`, `SONARR_API_KEY` | Sonarr. Optional; used for TV episode completeness, adding series and backups. |
+| `SONARR_DEFAULT_QUALITY_PROFILE` | *Optional.* The name of the quality profile new series get when you add them. Leave it blank to use Sonarr's first profile. This and the next three are also on the Sonarr tab of the Settings page. |
+| `SONARR_DEFAULT_ROOT_FOLDER` | *Optional.* The root folder new series go to; it must be one of Sonarr's root folders. Leave it blank to use Sonarr's first root folder. |
+| `SONARR_DEFAULT_SERIES_TYPE` | *Optional.* The series type new series get: `standard`, `daily` or `anime`. Blank means `standard`. |
+| `SONARR_DEFAULT_MONITOR` | *Optional.* Which episodes Sonarr monitors for a new series: `all`, `future`, `missing`, `existing`, `firstSeason`, `lastSeason`, `pilot` or `none`. Blank means `all`. |
 | `PROWLARR_URL`, `PROWLARR_API_KEY` | Prowlarr, for indexer health and backups. |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | SABnzbd, for the queue and for diagnosing missing media. |
 | `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` | qBittorrent Web UI. |
@@ -369,6 +374,10 @@ RADARR_API_KEY=your_radarr_api_key
 RADARR_DEFAULT_QUALITY_PROFILE=Your Profile Name
 SONARR_URL=http://sonarr:8989
 SONARR_API_KEY=your_sonarr_api_key
+SONARR_DEFAULT_QUALITY_PROFILE=Your Profile Name
+SONARR_DEFAULT_ROOT_FOLDER=/media/tvshows
+SONARR_DEFAULT_SERIES_TYPE=standard
+SONARR_DEFAULT_MONITOR=all
 PROWLARR_URL=http://prowlarr:9696
 PROWLARR_API_KEY=your_prowlarr_api_key
 SABNZBD_URL=http://sabnzbd:8080
@@ -432,7 +441,7 @@ The health check is `GET /healthz`, which returns `{"ok":true}` and needs no log
 
 ## MCP tools
 
-Twenty-six tools are available to Claude Desktop. The twelve marked ★ are also what the dashboard's Query chat uses.
+Twenty-nine tools are available to Claude Desktop. The thirteen marked ★ are also what the dashboard's Query chat uses.
 
 The server also sends MCP clients short usage instructions: which tool answers which kind of question, and to confirm before anything that changes your services. The same guidance is in an [Agent Skill](skills/plex-director/SKILL.md) for agents that load skills (such as Claude Code), and in the Query chat's prompt. It is written once in [`src/guidance.ts`](src/guidance.ts).
 
@@ -440,12 +449,13 @@ The server also sends MCP clients short usage instructions: which tool answers w
 
 | Tool | What it does |
 | :--- | :--- |
-| ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Filter by watch state (unwatched, in progress, watched) or "not watched in N years" (a never-watched title counts from when it was added), and sort by recently added or last watched. Narrow by network or studio, content rating (TV-MA, R…), audience rating, release years (a decade) or "added in the last N days". Watch state is for the Plex account the app is connected with. Paged for large results. |
+| ★ `search_plex_library` | Searches the movies and TV shows in your Plex library by genre, actor, director (movies only), title, year and/or library (e.g. `4k`), across all libraries, or only movies or only shows. Shows report seasons, episodes and watch progress. Filter by watch state (unwatched, in progress, watched) or "not watched in N years" (a never-watched title counts from when it was added), and sort by recently added or last watched. Narrow by network or studio, content rating (TV-MA, R…), audience rating, release years (a decade) or "added in the last N days". With Sonarr set up, `showStatus` keeps only the shows that are continuing, ended or upcoming there; shows that could not be matched to a Sonarr series are left out and counted. Watch state is for the Plex account the app is connected with. Paged for large results. |
 | ★ `search_episodes` | Finds individual TV episodes: "the episode of Entourage where…", an episode by title, episodes that aired in a date range, a show's season premieres or finales. With a show named it searches the episode titles **and plots**; without one only titles and air dates, because Plex cannot search plots across the whole library. Shows the season and episode numbers, air date and watch state. |
 | ★ `get_on_deck` | "What should I watch next?" from Plex's On Deck (Continue Watching): the movies you have partly played and, for each show you are following, the episode to watch next (or the one you are part way through), most recently active first, with how far through each is. A movie held in HD and 4K is one entry. Can be limited to movies or shows, or to a library such as `kids`. Plex reports at most 50 items; the watch state is for the Plex account the app is connected with. |
 | ★ `resolve_actor_filmography` | An actor's TMDb filmography, movies and TV shows (or only one), with each title marked as in Plex or not, filterable by year range, owned/missing, and library. Shows are matched to Plex by TMDb id, so a Plex show with no TMDb match is not recognised as owned. |
 | ★ `check_series_completeness` | "Do I have every episode of this show?" From Sonarr's episode list: how many aired episodes are downloaded, which seasons and episodes are missing, what has not aired yet, and whether Sonarr is monitoring the show (so will fetch the rest). Counts the episodes themselves rather than Sonarr's statistics, which treat a partly downloaded, unmonitored show as complete. It does not check what Plex has scanned. |
 | ★ `find_series_gaps` | Which TV shows are missing aired episodes, most missing first, with how many are downloaded and whether Sonarr is looking for the rest. Filter by monitored, not monitored or actively being searched for, by how many are missing (for "nearly complete" shows) and hide shows with nothing downloaded. |
+| ★ `find_series_by_size` | Ranks TV shows by the disk space Sonarr reports for them: "which shows take the most space?", largest first, with size, number of episode files, status and monitoring, and filters for status, monitoring, folder and a minimum size. With "not watched in N years" it lists the big shows nobody has watched for that long, as clean-up candidates, from every Plex show library (a never-watched show counts from when it was added). Watch history is the Plex account the app is connected with, plus the plays in Tautulli's history when Tautulli is set up, which can only take a show off the list; the reply says what it knew and marks shows judged from the Plex account alone. A report only: it deletes nothing. |
 | ★ `find_series_by_quality` | Finds TV shows by the video quality Sonarr downloaded: "which shows do I only have in 720p?", "which have 1080p or better?", "which mix qualities?" (upgrade candidates). Shows the lowest best quality first with how many files are at each resolution. It sees only what Sonarr downloaded, so a 4K copy in a separate Plex 4K library is not counted (use the Plex search with the `4k` library). Read-only. |
 | ★ `check_series_status` | What Sonarr knows about one show: monitored or not, its quality profile and location, when the next episode airs, when something was last downloaded, what is in the download queue, and how many aired episodes are downloaded. |
 | ★ `diagnose_missing_episodes` | *Why* aired episodes of a show have no file, from Sonarr's history and download queue: never grabbed, grabbed but never imported, a download that failed (with Sonarr's reason), a file that was removed, stuck in the queue, or simply not monitored so Sonarr never looks for it. Can be limited to a season or one episode. Read-only. |
@@ -454,6 +464,8 @@ The server also sends MCP clients short usage instructions: which tool answers w
 | ★ `diagnose_missing_media` | Traces a movie through Radarr metadata, history and the download queues to find why it is missing. |
 | `search_and_select_movies` | Searches TMDb and shows a numbered grid of matches. |
 | `confirm_selected_choices` | Adds the chosen numbers from that grid to Radarr as monitored movies and starts a download search. Already-present movies are reported, not added twice. Uses the quality profile you name, otherwise the default set on the Radarr tab of the Settings page, otherwise Radarr's first profile; and Radarr's first root folder unless you name another. |
+| `search_and_select_series` | Searches Sonarr's lookup for TV series to add and shows up to five matches as a numbered grid: poster, title and year, network, status, number of seasons, TVDB id and a short overview, with shows already in Sonarr marked. It adds nothing. |
+| `confirm_selected_series` | Adds series from that grid to Sonarr, in two calls. With the chosen numbers it returns a **preview** and changes nothing: which shows would be added and which are already in Sonarr, the quality profile, root folder, series type, which episodes are monitored and whether a search starts. Each comes from what you name, otherwise from the defaults on the Sonarr tab of the Settings page, otherwise Sonarr's first profile and root folder, `standard` and all episodes. Called again with only that preview's `previewId`, once you agree, it adds the shows as monitored series and, unless you turned it off, starts a search for their episodes. A preview is good for 15 minutes. If anything the preview showed has changed in between, nothing is added and you get a new preview. Written for Sonarr v4. |
 
 **Downloads and indexers**
 
@@ -490,7 +502,7 @@ The server also sends MCP clients short usage instructions: which tool answers w
 - **Set `WEB_PASSWORD`.** Without it, anyone who can reach the port can use the dashboard and change its settings.
 - **Secrets stay on the server.** The Settings page never returns a saved key or token, and Plex artwork is fetched through a server-side proxy so the Plex token never reaches your browser.
 - **SSH host monitoring uses key authentication, and remembers each host's key on first use.** The first time a host connects, its key fingerprint is saved; from then on a different key is refused before any command is sent, and the Node Utilization page shows the host as offline with a **Trust new key** button for when you have legitimately rebuilt it (that button needs `WEB_PASSWORD`; without one, ask Claude Desktop to use `trust_new_host_key`). Without a password anyone on your network could use that button to trust an impostor, so it is only offered with one. That protects against a host being swapped for an impostor *after* first contact, so if you want certainty about the first connection, compare the fingerprint with `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged user, and keep it on a network you trust.
-- **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, `manage_stalled_downloads` with `PURGE_STALLED` deletes the torrents you agreed to after an `AUDIT`, with their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes.
+- **Some tools change things.** `confirm_selected_choices` adds movies and starts downloads, adding TV series to Sonarr does the same once you confirm its preview, `manage_stalled_downloads` with `PURGE_STALLED` deletes the torrents you agreed to after an `AUDIT`, with their files, and the job runner triggers searches. Claude Desktop asks for your permission before it uses a tool, so review what it proposes, and don't set "always allow" for `confirm_selected_series` or `confirm_selected_choices`: that prompt, not the preview, is what makes sure a person agreed. The preview makes sure that what is added is what was shown: the shows (title, year and TVDB id), their seasons and the settings.
 - The image runs as a non-root user (UID 65532); see [read-only and non-root operation](#read-only-and-non-root-operation) to lock it down further.
 
 ## Development
@@ -528,7 +540,7 @@ npm run build       # static assets the backend serves; the Dockerfile does this
 - **Build, smoke test, and publish** (`publish`) runs on every push to `main`, every `v*.*.*` tag push and every pull request, once `check` passes. Every run builds the image and boots it with dummy configuration to confirm it starts. Pushes then publish to both registries (branch pushes tag `latest` and the commit SHA; tag pushes also get the version, e.g. `1.2.3` and `1.2`), run a [Docker Scout](https://docs.docker.com/scout/) vulnerability scan (reported in the job summary, non-blocking for now), and sign both images with cosign.
 - **Create GitHub Release** (`release`) runs only on `v*.*.*` tag pushes, after `publish` succeeds, and creates a release with generated notes.
 
-Alongside it: [CodeQL](https://codeql.github.com/) analyses the TypeScript on every push and pull request and weekly, [OpenSSF Scorecard](https://scorecard.dev/) scores the repo's supply-chain practices weekly (see the badge above), and Dependabot opens weekly PRs for npm, Docker base image and GitHub Actions updates, which auto-merge once CI passes unless they are a major version bump.
+Alongside it: [CodeQL](https://codeql.github.com/) analyses the TypeScript on every push and pull request and weekly, [OpenSSF Scorecard](https://scorecard.dev/) scores the repo's supply-chain practices weekly (see the badge above), and [Renovate](https://docs.renovatebot.com/) opens weekly PRs for npm, Docker base image and GitHub Actions updates, which the maintainer reviews and merges once CI passes ([dependencies.md](docs/dependencies.md)).
 
 ## License
 

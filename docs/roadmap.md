@@ -9,7 +9,7 @@ built yet is marked **Planned**.
 
 ## Where it stands
 
-Plex Director is one Node.js process that is both an MCP server for Claude Desktop (26 tools) and a web
+Plex Director is one Node.js process that is both an MCP server for Claude Desktop (29 tools) and a web
 dashboard with a Claude-powered Query chat. **v1.0.0**, **v1.1.0** (September 2026), **v1.2.0**, **v1.3.0** and **v1.4.0** (October 2026) are released as
 signed multi-arch images on Docker Hub and GHCR.
 
@@ -17,13 +17,17 @@ What works today:
 
 - **Library search** across every Plex library, movies and TV shows together: genre, actor, title, year,
   library (for example only 4K), watch state, "not watched in N years", network or studio, content rating,
-  audience rating, decade and recently added; individual episodes by title, plot (within a show) and air
-  date; On Deck.
+  audience rating, decade and recently added; movies by director; shows by whether they are continuing,
+  ended or upcoming (from Sonarr); individual episodes by title, plot (within a show) and air date; On Deck.
 - **Owned versus missing** for an actor's movies and shows, from TMDb.
 - **TV completeness and status** from Sonarr: which aired episodes are missing and why, which shows have
   gaps, what airs this week, when a show returns, and shows by downloaded quality.
+- **Storage reports for TV**: the biggest shows by disk space in Sonarr, and the big shows not watched in
+  years (from Plex, plus Tautulli's play history when it is configured). Reports only; nothing is deleted.
 - **Movies**: status, diagnosis of why one is missing, and adding movies to Radarr through a
   pick-then-confirm grid with a configurable default quality profile.
+- **Adding TV series** to Sonarr from an MCP client: search, a preview of exactly what would be added, then
+  a confirmation, with configurable defaults for quality profile, root folder, series type and monitoring.
 - **Downloads and indexers**: SABnzbd and qBittorrent queues, stalled-torrent clean-up, Prowlarr indexer
   health.
 - **Batch jobs**: planned movie upgrades run by a rate-limited job runner, one search per minute, with
@@ -35,22 +39,24 @@ What works today:
 
 ## Over the following year
 
-**Storage clean-up for TV** (Planned)
-- **Biggest shows:** rank shows by how much disk they use in Sonarr.
-- **Big shows nobody watches:** shows not watched in years that take a lot of space, as clean-up
-  candidates (Sonarr size combined with Plex or Tautulli watch history).
-- These start as read-only reports. Any bulk TV action added later will be explicit, confirmed and
+**Storage clean-up for TV**
+- **Done (November 2026):** `find_series_by_size` ranks shows by how much disk they use in Sonarr, and
+  lists the big shows not watched in years as clean-up candidates (Sonarr size combined with the watch
+  history of the connected Plex account and, when it is configured, Tautulli's play history).
+- These are read-only reports. Any bulk TV action added later will be explicit, confirmed and
   rate-limited like the movie job system.
 
-**Adding TV series** (Planned, undecided)
-- Whether the assistant should add series to Sonarr, the way it adds movies to Radarr, or stay search-only
-  for TV, is still open. If it is built, it will use the same search-then-confirm flow, with configurable
-  Sonarr defaults (quality profile, root folder, series type, which seasons to monitor) rather than
-  anything hard-coded to one install.
+**Adding TV series**
+- **Done (November 2026):** `search_and_select_series` and `confirm_selected_series` add series to Sonarr
+  from an MCP client: a search, then a preview that says exactly what would be added and with which
+  settings, then a confirmation that only goes through while nothing the preview showed has changed. The
+  Sonarr defaults (quality profile, root folder, series type, which episodes to monitor) are settings,
+  not anything hard-coded to one install. Written for Sonarr v4. The Query chat stays read-only.
 
-**Smaller search additions** (Planned)
-- Continuing, ended or upcoming status for shows (from Sonarr), and a director filter for cross-media
-  answers.
+**Smaller search additions**
+- **Done (November 2026):** `search_plex_library` filters shows by their continuing, ended or upcoming
+  status (from Sonarr) and movies by director. The director filter covers movies only, because Plex keeps
+  a show's directors per episode.
 
 **Working with other AI clients**
 - **Done (October 2026):** routing guidance for the tools written once (`src/guidance.ts`) and shared by
@@ -73,11 +79,19 @@ What works today:
 - **Done (October 2026):** browser hardening headers on the dashboard (framing forbidden,
   `X-Content-Type-Options: nosniff`, no `X-Powered-By`), a `Host` header check against DNS rebinding, and
   saved service secrets no longer follow a changed URL.
-- **Planned:** a full Content-Security-Policy for scripts and styles.
+- **Done (October 2026):** a Content-Security-Policy: scripts and styles only from the app itself, none inline.
 - **Planned:** make the image vulnerability scan block publishing on fixable critical and high findings
   (today it reports only).
 - **Planned:** an accessibility check of every dashboard page (automated and keyboard-only), see
   [accessibility.md](accessibility.md).
+- **Planned (found in the review of the combined merge, November 2026):** in the series-add tools,
+  treat a Sonarr answer that is not a list (lookup or library read) as an error, as the other tools already
+  do; remove the Sonarr key from lookup text before it is cut to length, and cut the series status like the
+  other lookup text; keep a late confirmation from replacing a newer preview of the same grid.
+- **Planned:** the Sonarr, Radarr and Prowlarr clients follow no redirect on read requests either (today
+  only a series add refuses one), so a redirect can never carry the API key to another host.
+- **Planned:** bring the remaining docs in line: the tool count in `docs/user-guide/README.md` and
+  `CONTRIBUTING.md` (29), and the places that still name Dependabot now that Renovate proposes updates.
 - Ongoing: keep OpenSSF Baseline Level 1 and 2 met, earn the OpenSSF Best Practices Passing and then
   Silver badges, and keep the Scorecard score up.
 

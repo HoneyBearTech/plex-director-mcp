@@ -22,18 +22,19 @@ reports itself as `plex-director` with the version from `package.json`. Its `ini
 `instructions`: usage guidance from `src/guidance.ts`, also published as the Agent Skill in
 `skills/plex-director/SKILL.md`. Arguments are validated against
 each tool's zod schema. Replies are Markdown text, sometimes with images (posters), and search tools also
-attach `structuredContent` rows. The 12 tools marked ★ are also the only tools the dashboard's Query chat
+attach `structuredContent` rows. The 13 tools marked ★ are also the only tools the dashboard's Query chat
 can use. **Changes** marks tools that change something in your services.
 
 | Tool | Changes | What it does |
 | --- | :---: | --- |
-| ★ `search_plex_library` | | Search Plex movies and shows by title, genre, actor, year, library, watch state, network, rating and date added. |
+| ★ `search_plex_library` | | Search Plex movies and shows by title, genre, actor, year, library, watch state, network, rating and date added; movies by director; shows by their status in Sonarr (continuing, ended, upcoming; shows that can't be matched to a Sonarr series are left out and counted). |
 | ★ `search_episodes` | | Find TV episodes by title (and, within a named show, plot), air date, premiere or finale. |
 | ★ `get_on_deck` | | Plex's On Deck: what to watch next, with progress. |
 | ★ `resolve_actor_filmography` | | An actor's TMDb movies and shows, each marked as in Plex or not. |
 | ★ `check_series_completeness` | | Which aired episodes of one show are downloaded or missing, from Sonarr. |
 | ★ `find_series_gaps` | | Shows missing aired episodes, most missing first. |
 | ★ `find_series_by_quality` | | Shows by the video resolution Sonarr downloaded. |
+| ★ `find_series_by_size` | | The biggest shows by disk space in Sonarr, and the big shows not watched in N years (Plex, plus Tautulli's history when configured). Reports only. |
 | ★ `check_series_status` | | What Sonarr knows about one show: monitoring, profile, next airing, queue. |
 | ★ `diagnose_missing_episodes` | | Why aired episodes have no file, from Sonarr history and queue. |
 | ★ `get_upcoming_episodes` | | What airs in the next days, or when one show returns, from Sonarr's calendar. |
@@ -41,6 +42,8 @@ can use. **Changes** marks tools that change something in your services.
 | ★ `diagnose_missing_media` | | Why a movie is missing, from Radarr metadata, history and the SABnzbd queue. |
 | `search_and_select_movies` | | Search TMDb and show a numbered grid of matches (remembers the grid for the next tool). |
 | `confirm_selected_choices` | yes | Add the chosen grid entries to Radarr as monitored movies and start a download search. |
+| `search_and_select_series` | | Search Sonarr's lookup for TV series and show a numbered grid of up to five matches (remembers the grid for the next tool). |
+| `confirm_selected_series` | yes (with a `previewId`) | With chosen grid numbers: a preview of what would be added to Sonarr and with which settings, changing nothing. With that preview's `previewId` alone, within 15 minutes: add those series to Sonarr as monitored, and by default start a search for their episodes. |
 | `manage_stalled_downloads` | yes (`PURGE_STALLED`) | `AUDIT` lists stalled or slow qBittorrent downloads with their hashes; `PURGE_STALLED` deletes only the ones named by hash, with their files. |
 | `check_indexer_health` | | Failing, backing-off and disabled Prowlarr indexers, and Prowlarr's warnings. |
 | `plan_media_upgrade` | yes (creates a job) | Schedule a `PENDING` batch of movies with no file or below 1080p (TV is refused). |
@@ -88,7 +91,8 @@ Conventions:
 Every variable is described in the README's
 [environment variable reference](../README.md#environment-variable-reference). Two kinds:
 
-- **Service connections** (`RADARR_URL`, `RADARR_API_KEY`, `RADARR_DEFAULT_QUALITY_PROFILE`, `SONARR_*`,
+- **Service connections** (`RADARR_URL`, `RADARR_API_KEY`, `RADARR_DEFAULT_QUALITY_PROFILE`, `SONARR_*`
+  (the URL, the API key and the four `SONARR_DEFAULT_*` values for new series),
   `PROWLARR_*`, `SABNZBD_*`, `QBITTORRENT_URL`/`_USER`/`_PASS`, `TAUTULLI_*`, `PLEX_URL`, `PLEX_TOKEN`,
   `PLEX_SKIP_LIBRARIES`, `TMDB_API_KEY`, `UBUNTU_HOSTS`, `SSH_USER`): copied into the database on first
   start; from then on the value saved in the database (edited on the Settings page) wins.
@@ -119,16 +123,18 @@ Outside Docker, a `.env` file in the repository root is read at start-up (`src/e
 
 All of these are outgoing: none of these services connect to Plex Director. URLs and credentials come from
 the settings store, except TMDb's and Anthropic's fixed addresses. Each axios client has a 10-second
-timeout.
+timeout. The one exception is the Tautulli library list (`get_library_media_info`) read by
+`find_series_by_size`, which may take 30 seconds, at most one such request per show library per call. That
+report reads each Plex show library in pages of 5,000, at most 20 pages a library.
 
 | Service | Used for | Protocol and authentication | Endpoints called |
 | --- | --- | --- | --- |
 | Radarr | movie status and diagnosis, adding movies, batch-job searches, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/movie`, `/movie/lookup`, `/movie/lookup/tmdb`, `/history`, `/qualityprofile`, `/rootfolder`, `/system/backup`, `/command/{id}`; `POST /api/v3/movie` (add), `POST /api/v3/command` (`MoviesSearch`, `Backup`) |
-| Sonarr | TV completeness, status, diagnosis, calendar, quality, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/series`, `/episode`, `/episodefile`, `/history/series`, `/queue`, `/calendar`, `/qualityprofile`, `/system/backup`, `/command/{id}`; `POST /api/v3/command` (`Backup`) |
+| Sonarr | TV completeness, status, diagnosis, calendar, quality, disk size, adding series, backups | HTTP(S) REST v3, `X-Api-Key` header | `GET /api/v3/series`, `/series/lookup`, `/episode`, `/episodefile`, `/history/series`, `/queue`, `/calendar`, `/qualityprofile`, `/rootfolder`, `/system/backup`, `/command/{id}`; `POST /api/v3/series` (add), `POST /api/v3/command` (`Backup`) |
 | Prowlarr | indexer health, backups | HTTP(S) REST v1, `X-Api-Key` header | `GET /api/v1/indexer`, `/indexerstatus`, `/health`, `/system/backup`, `/command/{id}`; `POST /api/v1/command` (`Backup`) |
 | SABnzbd | download queue, missing-media diagnosis | HTTP(S) API, `apikey` query parameter | `GET` the configured URL with `mode=queue&output=json` |
 | qBittorrent | download queue, stalled-download clean-up | HTTP(S) Web API v2 (qBittorrent 4.x and 5.x), username/password login then the session cookie (`SID`, or `QBT_SID_<port>` from 5.2); none when qBittorrent's auth bypass lets Plex Director in without one | `POST /api/v2/auth/login`, `GET /api/v2/torrents/info`, `POST /api/v2/torrents/delete` |
-| Tautulli | streams, watch statistics, artwork for those | HTTP(S) API v2, `apikey` query parameter | `cmd=get_activity`, `get_home_stats`, `pms_image_proxy` |
+| Tautulli | streams, watch statistics, artwork for those, per-show play history | HTTP(S) API v2, `apikey` query parameter | `cmd=get_activity`, `get_home_stats`, `pms_image_proxy`, `get_library_media_info` |
 | Plex Media Server | library, episode and On Deck search; artwork | HTTP(S), `X-Plex-Token` header, JSON | `GET /library/sections`, `/library/sections/{id}/all`, `/library/sections/{id}/genre`, `/library/metadata/{id}/allLeaves`, `/library/onDeck`, `/hubs/search`, `/photo/:/transcode` |
 | TMDb | actor filmographies, movie search, posters | HTTPS `https://api.themoviedb.org/3`, Bearer read-access token | `GET /search/person`, `/person/{id}/movie_credits`, `/person/{id}/tv_credits`, `/search/movie`, `/movie/{id}` |
 | Anthropic API | the dashboard's Query chat | HTTPS via `@anthropic-ai/sdk`, `ANTHROPIC_API_KEY` | Messages API, with tool use |

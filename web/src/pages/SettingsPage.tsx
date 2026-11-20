@@ -28,6 +28,27 @@ const SERVICE_TABS: Array<{ value: SettingsService; label: string; fields: Field
     fields: [
       { name: "url", label: "URL", placeholder: "http://sonarr:8989" },
       { name: "apiKey", label: "API Key", secret: true },
+      {
+        name: "defaultQualityProfile",
+        label: "Default quality profile for new series",
+        placeholder: "Leave blank to use Sonarr's first profile",
+      },
+      {
+        name: "defaultRootFolder",
+        label: "Default root folder for new series",
+        placeholder: "Leave blank to use Sonarr's first root folder",
+      },
+      {
+        name: "defaultSeriesType",
+        label: "Default series type for new series",
+        placeholder: "standard, daily or anime (blank: standard)",
+      },
+      {
+        name: "defaultMonitor",
+        label: "Default episodes to monitor for new series",
+        placeholder:
+          "all, future, missing, existing, firstSeason, lastSeason, pilot or none (blank: all)",
+      },
     ],
   },
   {

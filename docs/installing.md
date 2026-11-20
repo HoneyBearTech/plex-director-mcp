@@ -10,7 +10,7 @@ internet: see [Running it securely](#running-it-securely) below and [security.md
 
 One Node.js process does three things at once:
 
-- an **MCP server** that talks to Claude Desktop over stdin/stdout (26 tools);
+- an **MCP server** that talks to Claude Desktop over stdin/stdout (29 tools);
 - a **web dashboard** and its HTTP API on port `3000` (`WEB_PORT`), with a health check at `GET /healthz`;
 - a **job runner** that advances started batch jobs, one Radarr search per minute.
 
@@ -155,7 +155,7 @@ stdout. Open **Settings → Developer → Edit Config** (`claude_desktop_config.
 }
 ```
 
-Restart Claude Desktop, and the `plex-director` server appears with its 26 tools.
+Restart Claude Desktop, and the `plex-director` server appears with its 29 tools.
 
 - `-i` is required, since MCP talks over stdin/stdout. Don't add `-t`.
 - No `-p` is needed. The dashboard also starts inside this container, but it stays unreachable unless you
@@ -248,7 +248,11 @@ the value on the Settings page instead.
 | :--- | :--- | :--- |
 | `RADARR_URL`, `RADARR_API_KEY` | Radarr | Movie status, diagnosis, adding movies, batch jobs, backups. |
 | `RADARR_DEFAULT_QUALITY_PROFILE` | Radarr | *Optional.* The quality profile new movies get. Blank uses Radarr's first profile. |
-| `SONARR_URL`, `SONARR_API_KEY` | Sonarr | TV completeness, gaps, quality, status, calendar, backups. |
+| `SONARR_URL`, `SONARR_API_KEY` | Sonarr | TV completeness, gaps, quality, disk space, status, calendar, adding series, backups. |
+| `SONARR_DEFAULT_QUALITY_PROFILE` | Sonarr | *Optional.* The quality profile new series get. Blank uses Sonarr's first profile. |
+| `SONARR_DEFAULT_ROOT_FOLDER` | Sonarr | *Optional.* The root folder new series go to, one of Sonarr's own. Blank uses Sonarr's first root folder. |
+| `SONARR_DEFAULT_SERIES_TYPE` | Sonarr | *Optional.* `standard`, `daily` or `anime`. Blank means `standard`. |
+| `SONARR_DEFAULT_MONITOR` | Sonarr | *Optional.* Which episodes of a new series Sonarr monitors: `all`, `future`, `missing`, `existing`, `firstSeason`, `lastSeason`, `pilot` or `none`. Blank means `all`. |
 | `PROWLARR_URL`, `PROWLARR_API_KEY` | Prowlarr | Indexer health and backups. |
 | `SABNZBD_URL`, `SABNZBD_API_KEY` | SABnzbd | The Usenet queue, and diagnosing missing movies. |
 | `QBITTORRENT_URL`, `QBITTORRENT_USER`, `QBITTORRENT_PASS` | qBittorrent | The torrent queue and stalled-download cleanup. |
@@ -373,7 +377,7 @@ openssl rand -base64 32        # put the result in plex-director.env as SETTINGS
 ### Review what Claude does
 
 The Query chat and Claude Desktop act with your keys. The chat only uses the read-only library, movie and TV
-tools. Claude Desktop has all 26, including the ones that add movies, delete stalled torrents, change jobs and
+tools. Claude Desktop has all 29, including the ones that add movies and TV series, delete stalled torrents, change jobs and
 start backups, and it asks before each use. The Query chat sends your questions and the tools' results to the
 Anthropic API, and is billed to your key.
 

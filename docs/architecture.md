@@ -12,9 +12,9 @@ flowchart TB
     browser["Browser<br/>(React dashboard)"]
     desktop["MCP client<br/>(e.g. Claude Desktop)"]
     subgraph container["One Node.js process (Docker container or npm start)"]
-        mcp["MCP server<br/>stdio, 26 tools<br/>src/server.ts, src/tools/"]
+        mcp["MCP server<br/>stdio, 29 tools<br/>src/server.ts, src/tools/"]
         web["Web dashboard<br/>Express on WEB_PORT (3000)<br/>src/web/"]
-        chat["Query chat<br/>src/web/chat.ts<br/>(12 read-only tools)"]
+        chat["Query chat<br/>src/web/chat.ts<br/>(13 read-only tools)"]
         runner["Job runner<br/>src/jobRunner.ts"]
         logic["Shared logic<br/>src/tools/*, src/cluster.ts,<br/>src/qbittorrent.ts, src/indexers.ts,<br/>src/backups.ts, src/jobs.ts"]
         db[("SQLite at /app/data<br/>settings, jobs,<br/>session secret, SSH host keys")]
@@ -48,23 +48,23 @@ flowchart TB
 
 | Component | Code | Responsibility |
 | --- | --- | --- |
-| **MCP server** | `src/index.ts`, `src/server.ts`, `src/tools/` | Speaks the Model Context Protocol over stdin/stdout using the official MCP SDK. Registers 26 tools: searching the library, diagnosing missing media, adding movies, download and indexer health, batch jobs, host monitoring and backups. Tool arguments are validated with zod schemas by the SDK before a handler runs. |
+| **MCP server** | `src/index.ts`, `src/server.ts`, `src/tools/` | Speaks the Model Context Protocol over stdin/stdout using the official MCP SDK. Registers 29 tools: searching the library, diagnosing missing media, adding movies and TV series, download and indexer health, batch jobs, host monitoring and backups. Tool arguments are validated with zod schemas by the SDK before a handler runs. |
 | **Web dashboard** | `src/web/app.ts`, `src/web/auth.ts`, `src/web/routes/` | An Express 5 server on `WEB_PORT` (default 3000). Serves the built React app from `web/dist` and a JSON API under `/api`. With `WEB_PASSWORD` set, every `/api` route except `/api/auth/*` needs a signed session cookie. The API is described in [api/openapi.json](api/openapi.json). |
 | **Frontend** | `web/` (React, TypeScript, Vite, Radix Themes) | A single-page app: Query (chat), Server Status, Node Utilization, Queues, Indexers, Jobs and Settings. It holds no secrets; everything comes from `/api`. Plex and Tautulli artwork is loaded through server-side proxies so the Plex token and Tautulli key never reach the browser. |
-| **Query chat** | `src/web/chat.ts`, `src/web/routes/chat.ts` | Sends the user's question, a bounded slice of chat history (12 turns, 4,000 characters each) and the 12 read-only tools in `movieTools` to the Anthropic API, runs the tools the model asks for (at most 4 rounds; each tool checks the model's arguments against its zod schema first), and returns the answer text, any images and the rows for the results table. The chat cannot add, delete or start anything. |
+| **Query chat** | `src/web/chat.ts`, `src/web/routes/chat.ts` | Sends the user's question, a bounded slice of chat history (12 turns, 4,000 characters each) and the 13 read-only tools in `movieTools` to the Anthropic API, runs the tools the model asks for (at most 4 rounds; each tool checks the model's arguments against its zod schema first), and returns the answer text, any images and the rows for the results table. The chat cannot add, delete or start anything. |
 | **Shared logic** | `src/tools/*.ts`, `src/cluster.ts`, `src/qbittorrent.ts`, `src/indexers.ts`, `src/backups.ts`, `src/jobs.ts` | Each capability is written once and used by both surfaces: `movieTools` in `src/tools/movies.ts` backs both the MCP tools and the chat; the SSH probe, qBittorrent session handling and Prowlarr health are shared by the MCP tools and the dashboard routes. |
-| **Service clients** | `src/clients.ts`, `src/settings.ts` | One axios client per service (10-second timeout), configured from the settings store and refreshed in place whenever the Settings page saves. |
+| **Service clients** | `src/clients.ts`, `src/settings.ts` | One axios client per service (10-second timeout; the Tautulli library list read by `find_series_by_size` may take 30 seconds, at most one per show library per call), configured from the settings store and refreshed in place whenever the Settings page saves. |
 | **Job runner** | `src/jobRunner.ts`, `src/jobs.ts` | Every `JOB_RUNNER_INTERVAL_SECONDS` (default 60, minimum 10, 0 turns it off) advances one item of one `RUNNING` job: one Radarr movie search. Steps are claimed in the database before the search is sent, so two processes sharing the database never search the same movie twice. Three failures in a row pause the job and send a Discord notification. |
 | **SSH monitoring** | `src/ssh.ts`, `src/cluster.ts`, `src/hostKeys.ts` | Connects to each host in `UBUNTU_HOSTS` with a private key file (`SSH_KEY_PATH`), runs one fixed, read-only telemetry script, and parses the output. Each host's key fingerprint is remembered on first contact; a different key is refused before any command is sent. |
-| **Settings and state** | `src/db.ts`, `src/settings.ts` | A SQLite database (`better-sqlite3`) at `data/plex_director.db`, `/app/data` in the container. Tables: `settings` (service URLs and credentials, and the session-signing secret), `system_jobs`, `interaction_context` (the last movie-choice grid) and `ssh_host_keys`. Environment variables only seed service settings on first boot; after that the database wins. |
+| **Settings and state** | `src/db.ts`, `src/settings.ts` | A SQLite database (`better-sqlite3`) at `data/plex_director.db`, `/app/data` in the container. Tables: `settings` (service URLs and credentials, and the session-signing secret), `system_jobs`, `interaction_context` (the last movie-choice grid), `series_selection_context` (the last series-choice grid, one row per number), `series_add_preview` (the one current preview of series to add, good for 15 minutes) and `ssh_host_keys`. Environment variables only seed service settings on first boot; after that the database wins. |
 
 ## Actors and what they can do
 
 | Actor | Reaches Plex Director through | Can do |
 | --- | --- | --- |
-| **Dashboard user** | A browser on the LAN, port 3000, signed in with `WEB_PASSWORD` (or anyone who can reach the port when it is unset) | Read status, queues, indexers, host health and jobs; ask the Query chat (read-only tools); view and change service settings (secrets are write-only); approve a changed SSH host key with **Trust new key** (only when `WEB_PASSWORD` is set). Cannot start, pause or cancel jobs, add movies or delete downloads. |
-| **MCP client** (e.g. Claude Desktop) | The process's stdin/stdout, launched by the client on the same machine | Call any of the 26 tools, including the ones that change things: add movies to Radarr and start searches (`confirm_selected_choices`), delete stalled torrents and their files (`manage_stalled_downloads` with `PURGE_STALLED`), plan, start, pause and cancel batch jobs, and trigger Servarr backups. The client asks the user before each tool call. |
-| **The LLM** | Indirectly: the Anthropic model in the Query chat, or whichever model drives the MCP client | Chooses which tools to call and with which arguments. In the Query chat it can only use the 12 read-only tools. Through an MCP client it can request any tool, subject to that client's approval prompts. |
+| **Dashboard user** | A browser on the LAN, port 3000, signed in with `WEB_PASSWORD` (or anyone who can reach the port when it is unset) | Read status, queues, indexers, host health and jobs; ask the Query chat (read-only tools); view and change service settings (secrets are write-only); approve a changed SSH host key with **Trust new key** (only when `WEB_PASSWORD` is set). Cannot start, pause or cancel jobs, add movies or series, or delete downloads. |
+| **MCP client** (e.g. Claude Desktop) | The process's stdin/stdout, launched by the client on the same machine | Call any of the 29 tools, including the ones that change things: add movies to Radarr and series to Sonarr and start searches (`confirm_selected_choices`, `confirm_selected_series`), delete stalled torrents and their files (`manage_stalled_downloads` with `PURGE_STALLED`), plan, start, pause and cancel batch jobs, and trigger Servarr backups. The client asks the user before each tool call. |
+| **The LLM** | Indirectly: the Anthropic model in the Query chat, or whichever model drives the MCP client | Chooses which tools to call and with which arguments. In the Query chat it can only use the 13 read-only tools. Through an MCP client it can request any tool, subject to that client's approval prompts. |
 | **External services** | Plex Director calls them; they never call in | Return data (titles, summaries, torrent names, indexer messages, host command output) that is shown to users and given to the LLM. A compromised or malicious service controls that data. |
 | **Maintainer and CI** | GitHub: pull requests to protected `main`, GitHub Actions | Change the code, publish signed images to Docker Hub and GHCR, cut releases. See [dependencies.md](dependencies.md). |
 
@@ -76,7 +76,7 @@ flowchart TB
    (`src/web/auth.ts`) checks the session cookie when `WEB_PASSWORD` is set.
 2. `parseHistory` (`src/web/routes/chat.ts`) keeps only well-formed `{role, text, media}` entries;
    `buildHistoryMessages` (`src/web/chat.ts`) caps them at 12 turns of 4,000 characters.
-3. The server calls the Anthropic API with a fixed system prompt and the 12 read-only tool definitions.
+3. The server calls the Anthropic API with a fixed system prompt and the 13 read-only tool definitions.
 4. For each tool the model asks for, the matching handler in `movieTools` runs and queries Plex, Radarr,
    Sonarr, SABnzbd or TMDb. Results go back to the model, for at most 4 rounds.
 5. The answer text, images and table rows are returned to the browser, which renders text as plain React

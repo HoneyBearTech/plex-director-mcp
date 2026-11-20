@@ -454,7 +454,7 @@
         "tags": ["settings"],
         "operationId": "updateServiceSettings",
         "summary": "Save one service's settings",
-        "description": "Only the fields listed for that service are read; others are ignored. A field that is omitted or not a string is left unchanged. Values are trimmed. A blank secret keeps the stored secret; a blank plain field clears it. Saved values override the environment from then on, and the service clients pick them up immediately.\n\nFields per service: sonarr, prowlarr, sabnzbd, tautulli: url, apiKey (secret). radarr: url, apiKey (secret), defaultQualityProfile. qbittorrent: url, username, password (secret). plex: url, token (secret), skipLibraries. tmdb: apiKey (secret). nodes: hosts, sshUser.",
+        "description": "Only the fields listed for that service are read; others are ignored. A field that is omitted or not a string is left unchanged. Values are trimmed. A blank secret keeps the stored secret; a blank plain field clears it. Saved values override the environment from then on, and the service clients pick them up immediately.\n\nFields per service: prowlarr, sabnzbd, tautulli: url, apiKey (secret). radarr: url, apiKey (secret), defaultQualityProfile. sonarr: url, apiKey (secret), defaultQualityProfile, defaultRootFolder, defaultSeriesType, defaultMonitor. qbittorrent: url, username, password (secret). plex: url, token (secret), skipLibraries. tmdb: apiKey (secret). nodes: hosts, sshUser.",
         "parameters": [
           {
             "name": "service",
@@ -486,7 +486,7 @@
         },
         "responses": {
           "400": {
-            "description": "The URL changed but a saved secret (API key, token or password) was not entered again. Nothing is saved.",
+            "description": "The URL changed but a saved secret (API key, token or password) was not entered again, or a sonarr defaultSeriesType or defaultMonitor is not one of the allowed values (the message lists them). Nothing is saved.",
             "content": {
               "application/json": { "schema": { "$ref": "#/components/schemas/Error" } }
             }
@@ -519,7 +519,7 @@
         "tags": ["chat"],
         "operationId": "askQueryChat",
         "summary": "Ask the Query chat a question",
-        "description": "Sends the question and recent history to the Anthropic API with the 12 read-only library tools, runs the tools the model asks for (at most 4 rounds), and returns the answer. History is untrusted input: only well-formed turns are kept, at most the last 12, each cut to 4,000 characters. Needs ANTHROPIC_API_KEY on the server.",
+        "description": "Sends the question and recent history to the Anthropic API with the 13 read-only library tools, runs the tools the model asks for (at most 4 rounds), and returns the answer. History is untrusted input: only well-formed turns are kept, at most the last 12, each cut to 4,000 characters. Needs ANTHROPIC_API_KEY on the server.",
         "requestBody": {
           "required": true,
           "content": {
@@ -947,7 +947,11 @@
             "type": "object",
             "properties": {
               "url": { "type": "string" },
-              "apiKey": { "$ref": "#/components/schemas/SecretStatus" }
+              "apiKey": { "$ref": "#/components/schemas/SecretStatus" },
+              "defaultQualityProfile": { "type": "string" },
+              "defaultRootFolder": { "type": "string" },
+              "defaultSeriesType": { "type": "string" },
+              "defaultMonitor": { "type": "string" }
             }
           },
           "radarr": {
@@ -1026,7 +1030,19 @@
             "format": "password",
             "description": "Secret. sonarr, radarr, prowlarr, sabnzbd, tautulli, tmdb. Blank keeps the stored value."
           },
-          "defaultQualityProfile": { "type": "string", "description": "radarr only." },
+          "defaultQualityProfile": { "type": "string", "description": "radarr and sonarr." },
+          "defaultRootFolder": {
+            "type": "string",
+            "description": "sonarr only. One of Sonarr's root folders."
+          },
+          "defaultSeriesType": {
+            "type": "string",
+            "description": "sonarr only. standard, daily or anime (any case); anything else is refused with 400. Blank clears it."
+          },
+          "defaultMonitor": {
+            "type": "string",
+            "description": "sonarr only. all, future, missing, existing, firstSeason, lastSeason, pilot or none (any case); anything else is refused with 400. Blank clears it."
+          },
           "username": { "type": "string", "description": "qbittorrent only." },
           "password": {
             "type": "string",

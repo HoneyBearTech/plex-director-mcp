@@ -2,10 +2,54 @@
 
 All notable changes to Plex Director are documented here. The format follows
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and versions follow
-[Semantic Versioning](https://semver.org/). Dependency updates from Dependabot are left out unless they fix
+[Semantic Versioning](https://semver.org/). Dependency updates from Renovate are left out unless they fix
 a security problem.
 
 ## [Unreleased]
+
+### Added
+
+- **`search_plex_library` filters shows by their status in Sonarr, and movies by director.** `showStatus`
+  (`continuing`, `ended` or `upcoming`) answers "which of my shows are still running?" or, with a watch
+  filter, "which ended shows have I not finished?". The status is read from Sonarr, so it needs Sonarr
+  set up; Plex shows are matched to Sonarr by TVDB id (by title and year when Plex has no TVDB id), and
+  shows that could not be matched to a Sonarr series are left out and counted in the reply. `director` finds the movies a person
+  directed. It covers movies only: Plex keeps a show's directors per episode, so the reply says that TV
+  shows were not searched.
+- **`find_series_by_size`: which shows take the most disk space, and which big shows nobody has watched in
+  years.** A new read-only tool, for MCP clients and the Query chat. It ranks
+  the shows that have files by the size Sonarr reports, with filters for status, monitoring, folder and a
+  minimum size. With `notWatchedInYears` it keeps only the shows last watched longer ago than that (a
+  never-watched show counts from the day it was added), from every Plex show library. Watch history is the
+  Plex account the app is connected with; with Tautulli set up, the plays in its history can take a show
+  off the list or correct its date, but never put one on it. The reply names each library whose Tautulli
+  answer could not be used, and why. It marks a listed show "Plex account only" when Tautulli gave no plays
+  for it, and "Tautulli history incomplete" when it kept a Tautulli date while another of its libraries'
+  answers could not be used. A Plex library that cannot be read completely is an error, never a partial
+  list. It reports only: nothing is deleted.
+- **Adding TV series to Sonarr: `search_and_select_series` and `confirm_selected_series`.** Two new tools for
+  MCP clients (29 tools; the Query chat keeps its 13 read-only ones and cannot add anything).
+  `search_and_select_series` shows up to five matches from Sonarr's lookup as a numbered grid, with shows
+  already in Sonarr marked. `confirm_selected_series` with the chosen numbers returns a **preview** and
+  changes nothing: which shows would be added, the quality profile, root folder, series type, which
+  episodes are monitored and whether a search starts. Called again with only that preview's id, it adds
+  the shows as monitored series and, unless turned off, starts a search for their episodes. A preview's id
+  works once, for 15 minutes, and only while it is the newest; if a setting, Sonarr's address, a show's
+  state, title, year or seasons changed after the preview, nothing is added and a new preview says what
+  differs. Only a fixed list of fields is posted to Sonarr. Each show's line says added, already there,
+  failed (Sonarr refused it, with its reason), not known (no answer, a server-side error, or an answer
+  that was not the added series) or not attempted (Sonarr's address changed or a newer search replaced
+  the grid). The preview holds the add to what was shown (the shows with their title, year and TVDB id,
+  their seasons and the settings); the MCP client's approval prompt is what puts a person in between, so
+  don't set "always allow" for `confirm_selected_series` or `confirm_selected_choices`. **This is a tool
+  that changes Sonarr.** Written for Sonarr v4.
+- **Four Sonarr settings for new series**, on the Sonarr tab of the Settings page and as environment
+  variables that seed them: `SONARR_DEFAULT_QUALITY_PROFILE`, `SONARR_DEFAULT_ROOT_FOLDER`,
+  `SONARR_DEFAULT_SERIES_TYPE` (`standard`, `daily` or `anime`) and `SONARR_DEFAULT_MONITOR` (`all`,
+  `future`, `missing`, `existing`, `firstSeason`, `lastSeason`, `pilot` or `none`). All optional: blank
+  means Sonarr's first profile and root folder, `standard` and `all`. A series type or monitor option
+  outside those values is refused when saved on the Settings page; one that came from the environment at
+  first start is reported at preview time instead, and nothing is added.
 
 ### Security
 
@@ -14,6 +58,13 @@ a security problem.
   updates (Node 24.14.0, libssl3 3.0.18, libc6 2.36), to `nodejs24-debian13` (Node 24.22.1). The build
   stage now uses the same Node line and Debian release (`node:24-trixie-slim`) instead of Node 26, so the
   native add-ons are built for the Node they run on.
+- **`body-parser` 2.4.0**, which Express uses to read every request body sent to the dashboard, fixes a denial
+  of service through trailing bytes after a compressed request body
+  ([GHSA-27r3-jxmh-p828](https://github.com/advisories/GHSA-27r3-jxmh-p828)), and **`follow-redirects` 1.16.3**,
+  which axios uses for every call to your services, fixes an advisory in which custom credential headers could
+  follow a redirect ([GHSA-mrwp-f3q8-3g9p](https://github.com/advisories/GHSA-mrwp-f3q8-3g9p)). The same
+  lockfile update clears the moderate advisories in `hono` (now 4.13.18), `@hono/node-server` (2.1.8), `qs`
+  (6.17.1) and `fast-uri` (3.1.9).
 
 ### Changed
 

@@ -1,6 +1,8 @@
 import { plexClient } from "../clients.js";
 import { getSetting, isConfigured } from "../settings.js";
 import { textReply, getErrorMessage } from "../util.js";
+import { fetchAllSeries } from "./series.js";
+import { indexSonarrSeries, matchShowToSonarr, type SonarrShowIndex } from "./showMatch.js";
 import type { PlexContainer, PlexDirectory, PlexMetadata } from "../types/plex.js";
 
 export type MediaKind = "movie" | "show";
@@ -41,11 +43,17 @@ export interface MediaRow {
 
 export type WatchFilter = "unwatched" | "inProgress" | "watched";
 export type SearchSort = "title" | "recentlyAdded" | "lastWatched" | "leastRecentlyWatched";
+export type ShowStatus = "continuing" | "ended" | "upcoming";
 
 export interface PlexSearchArgs {
   title?: string;
   genre?: string;
   actor?: string;
+  // Movies only: Plex keeps a show's directors on its episodes, not on the show.
+  director?: string;
+  // Shows only, and only with Sonarr configured: the show's status there.
+  // Plex itself doesn't know whether a show is still running.
+  showStatus?: ShowStatus;
   year?: number;
   // Search movie libraries, show libraries, or both (the default).
   mediaType?: "movie" | "show" | "any";
@@ -95,7 +103,7 @@ const MAX_LIMIT = 500;
 // well under this, so it is effectively "all".
 const FETCH_ALL = 5000;
 
-interface PlexSection {
+export interface PlexSection {
   key: string;
   title: string;
   kind: MediaKind;
@@ -151,17 +159,19 @@ async function resolveGenre(
   return { available: [...byName.values()].map((g) => g.title).sort() };
 }
 
-// The library's own actor list can't be filtered by name, but the hub search
-// returns matching people with the same tag ids the actor filter accepts.
-async function resolveActor(
+// The library's own actor and director lists can't be filtered by name, but
+// the hub search returns matching people, in one hub per role, with the same
+// tag ids the actor and director filters accept.
+async function resolvePerson(
   name: string,
+  role: "actor" | "director",
 ): Promise<{ id: string; name: string } | { candidates: string[] } | null> {
   const response = await plexClient.get<PlexContainer>("/hubs/search", {
     params: { query: name, limit: 10 },
   });
   const hubs = response.data?.MediaContainer?.Hub ?? [];
-  const actorHub = hubs.find((h) => h.type === "actor");
-  const entries = actorHub?.Directory ?? [];
+  const roleHub = hubs.find((h) => h.type === role);
+  const entries = roleHub?.Directory ?? [];
 
   // The same person shows up once per library that contains them.
   const unique = new Map<string, string>();
@@ -193,7 +203,7 @@ function tmdbIdOf(item: PlexMetadata): string | null {
 // The ids that identify one title, best first. TMDb and TVDB numbers overlap
 // each other and movies overlap shows, so each is namespaced. Shows fall back
 // to TVDB when Plex has no TMDb match for them.
-function identityKeys(item: PlexMetadata, kind: MediaKind): string[] {
+export function identityKeys(item: PlexMetadata, kind: MediaKind): string[] {
   const keys: string[] = [];
   const tmdb = tmdbIdOf(item);
   if (tmdb) keys.push(`${kind}:tmdb:${tmdb}`);
@@ -226,6 +236,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     title,
     genre,
     actor,
+    showStatus,
     year,
     library,
     watched,
@@ -237,6 +248,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     yearTo,
     addedWithinDays,
   } = args;
+  const director = args.director?.trim() || undefined;
   const mediaType = args.mediaType ?? "any";
   const sort = args.sort ?? "title";
   const extra =
@@ -250,6 +262,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     !title &&
     !genre &&
     !actor &&
+    !director &&
+    !showStatus &&
     year === undefined &&
     !library &&
     mediaType === "any" &&
@@ -259,7 +273,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     !extra
   ) {
     return textReply(
-      "Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort.",
+      "Provide at least one of: title, genre, actor, year, library, mediaType, watched, notWatchedInYears, network, contentRating, minRating, yearFrom, yearTo, addedWithinDays, sort, director, showStatus.",
       true,
     );
   }
@@ -272,16 +286,65 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     return textReply("minRating must be between 0 and 10.", true);
   if (yearFrom !== undefined && yearTo !== undefined && yearFrom > yearTo)
     return textReply("yearFrom is after yearTo.", true);
+  if (director && showStatus) {
+    return textReply(
+      "director and showStatus can't be combined: director finds movies, showStatus finds TV shows. Ask for one at a time.",
+      true,
+    );
+  }
+  if (showStatus && mediaType === "movie") {
+    return textReply(
+      "showStatus is for TV shows (it is the show's status in Sonarr), so it can't be used with mediaType 'movie'.",
+      true,
+    );
+  }
+  if (director && mediaType === "show") {
+    return textReply(
+      "Plex keeps TV directors per episode, not per show, so shows can't be searched by director. The director filter finds movies only.",
+      true,
+    );
+  }
+  if (showStatus && !isConfigured("SONARR")) {
+    return textReply(
+      "Show status (continuing, ended, upcoming) comes from Sonarr, and Sonarr isn't set up. Set the Sonarr URL and API key on the Settings page (or SONARR_URL / SONARR_API_KEY in .env).",
+      true,
+    );
+  }
   const limit = Math.min(Math.max(args.limit ?? DEFAULT_LIMIT, 1), MAX_LIMIT);
   const offset = Math.max(args.offset ?? 0, 0);
-  const kinds: MediaKind[] = mediaType === "any" ? ["movie", "show"] : [mediaType];
-  const noun = mediaType === "any" ? "movies or shows" : `${mediaType}s`;
+  // A show status only exists for shows and a director only for movies, so
+  // either one narrows "any" to the libraries it can be answered from.
+  const scope: "movie" | "show" | "any" = showStatus ? "show" : director ? "movie" : mediaType;
+  const kinds: MediaKind[] = scope === "any" ? ["movie", "show"] : [scope];
+  const noun = scope === "any" ? "movies or shows" : `${scope}s`;
+  const directorNote =
+    director && mediaType === "any"
+      ? " TV shows are not searched by director (Plex keeps TV directors per episode), so only movies were searched."
+      : "";
+
+  // Read before Plex is searched, and reported as its own failure: "Sonarr
+  // could not be read" must never look like "no shows match".
+  let sonarrShows: SonarrShowIndex | null = null;
+  if (showStatus) {
+    try {
+      const all: unknown = await fetchAllSeries();
+      // A proxy can answer 200 with a sign-in page: not a list of series.
+      if (!Array.isArray(all) || !all.every((item) => typeof item === "object" && item !== null))
+        throw new Error("Sonarr did not answer with a list of series");
+      sonarrShows = indexSonarrSeries(all);
+    } catch (error: unknown) {
+      return textReply(
+        `Sonarr could not be read, so show status can't be checked: ${getErrorMessage(error)}. This is a failure to reach or read Sonarr, not a result of "no shows".`,
+        true,
+      );
+    }
+  }
 
   try {
     const allSections = await getSections(kinds);
     if (allSections.length === 0) {
       return textReply(
-        `No ${mediaType === "any" ? "movie or show" : mediaType} libraries found in Plex.`,
+        `No ${scope === "any" ? "movie or show" : scope} libraries found in Plex.`,
         true,
       );
     }
@@ -296,7 +359,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       sections = allSections.filter((s) => s.title.toLowerCase().includes(wanted));
       if (sections.length === 0) {
         return textReply(
-          `No ${mediaType === "any" ? "movie or show" : mediaType} library matching "${library}" in Plex. Libraries: ${allSections.map((s) => s.title).join(", ")}.`,
+          `No ${scope === "any" ? "movie or show" : scope} library matching "${library}" in Plex. Libraries: ${allSections.map((s) => s.title).join(", ")}.`,
           true,
         );
       }
@@ -305,7 +368,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       sections = allSections.filter((s) => !skipped.has(s.title.toLowerCase()));
       if (sections.length === 0) {
         return textReply(
-          `Every ${mediaType === "any" ? "movie and show" : mediaType} library is skipped by default (Plex "Libraries to skip" setting). Name one with the library filter: ${allSections.map((s) => s.title).join(", ")}.`,
+          `Every ${scope === "any" ? "movie and show" : scope} library is skipped by default (Plex "Libraries to skip" setting). Name one with the library filter: ${allSections.map((s) => s.title).join(", ")}.`,
           true,
         );
       }
@@ -352,7 +415,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       described.push(`genre "${genre}"`);
     }
     if (actor) {
-      const resolved = await resolveActor(actor);
+      const resolved = await resolvePerson(actor, "actor");
       if (!resolved) {
         return textReply(`No actor matching "${actor}" found in the Plex library.`, true);
       }
@@ -365,6 +428,21 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       filters.actor = resolved.id;
       described.push(`actor ${resolved.name}`);
     }
+    if (director) {
+      const resolved = await resolvePerson(director, "director");
+      if (!resolved) {
+        return textReply(`No director matching "${director}" found in the Plex library.`, true);
+      }
+      if ("candidates" in resolved) {
+        return textReply(
+          `"${director}" matches several directors in Plex: ${resolved.candidates.join(", ")}. Ask again with the full name.`,
+          true,
+        );
+      }
+      filters.director = resolved.id;
+      described.push(`director ${resolved.name}`);
+    }
+    if (showStatus) described.push(`show status "${showStatus}" in Sonarr`);
 
     // Every match is fetched (not one page): a title held in several libraries
     // must be counted once and paged as one, which needs the whole set.
@@ -393,6 +471,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     interface Group {
       kind: MediaKind;
       item: PlexMetadata;
+      // Every library copy of the title; `item` is the first of them.
+      copies: PlexMetadata[];
       libraries: string[];
       watch: Watch;
     }
@@ -404,12 +484,14 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
         const existing = keys.map((k) => byKey.get(k)).find((g) => g !== undefined);
         if (existing) {
           existing.libraries.push(section.title);
+          existing.copies.push(item);
           existing.watch = mergeWatch(existing.watch, watchOf(item, section.kind));
           for (const k of keys) byKey.set(k, existing);
         } else {
           const group: Group = {
             kind: section.kind,
             item,
+            copies: [item],
             libraries: [section.title],
             watch: watchOf(item, section.kind),
           };
@@ -458,6 +540,27 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       return true;
     });
 
+    // Show status, from Sonarr. It runs last of the filters, so the count of
+    // shows that could not be matched to Sonarr is of shows that passed every other filter,
+    // and before sorting and paging, so the total and the pages are of the
+    // filtered set.
+    let notMatched = 0;
+    if (sonarrShows && showStatus) {
+      const index = sonarrShows;
+      candidates = candidates.filter((g) => {
+        const series = matchShowToSonarr(g.copies, index);
+        if (!series) {
+          notMatched++;
+          return false;
+        }
+        return series.status === showStatus;
+      });
+    }
+    const notMatchedNote =
+      notMatched > 0
+        ? ` ${notMatched} show${notMatched === 1 ? "" : "s"} that matched the other filters could not be matched to a Sonarr series, so ${notMatched === 1 ? "its status is" : "their status is"} unknown and ${notMatched === 1 ? "it was" : "they were"} left out.`
+        : "";
+
     const byTitle = (a: Group, b: Group) =>
       String(a.item.titleSort ?? a.item.title).localeCompare(
         String(b.item.titleSort ?? b.item.title),
@@ -503,8 +606,8 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
     if (rows.length === 0) {
       return textReply(
         total > 0
-          ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.`
-          : `No ${noun} in Plex match ${heading}.${undatedNote}`,
+          ? `Offset ${offset} is past the end: there are only ${total} matching ${noun} for ${heading}.${notMatchedNote}`
+          : `No ${noun} in Plex match ${heading}.${undatedNote}${notMatchedNote}${directorNote}`,
       );
     }
 
@@ -534,12 +637,15 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
       output += " Watch state is for the Plex account the app is connected with.";
     }
     output += undatedNote;
+    output += notMatchedNote;
+    output += directorNote;
     output += "\n\n";
     for (const { kind, item, libraries, watch } of rows) {
       const genres = (item.Genre ?? []).map((g) => g.tag).join(", ");
       const kindNote = kind === "show" ? `TV show, ${showSummary(item.childCount, watch)}, ` : "";
       const watchNote = withDates ? ` - ${watchNoteOf(kind, watch, sort === "recentlyAdded")}` : "";
-      output += `- ${item.title} (${item.year ?? "year unknown"}) - ${kindNote}${libraries.join(", ")}${genres ? ` - ${genres}` : ""}${watchNote}\n`;
+      const statusNote = showStatus ? ` - ${statusDetail(showStatus)}` : "";
+      output += `- ${item.title} (${item.year ?? "year unknown"}) - ${kindNote}${libraries.join(", ")}${genres ? ` - ${genres}` : ""}${watchNote}${statusNote}\n`;
     }
 
     const media: MediaRow[] = rows.map(({ kind, item, libraries, watch }) => {
@@ -552,7 +658,7 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
         libraries,
         genres: (item.Genre ?? []).map((g) => String(g.tag)),
         rating: rating !== undefined ? Number(rating) : null,
-        detail: null,
+        detail: showStatus ? statusDetail(showStatus) : null,
       };
       if (kind === "show") {
         row.show = {
@@ -576,6 +682,9 @@ export async function searchPlexLibrary(args: PlexSearchArgs, now: number = Date
   }
 }
 
+// Every show listed under a showStatus filter has exactly that status.
+const statusDetail = (status: ShowStatus) => `Sonarr status: ${status}`;
+
 export function numberOrNull(value: unknown): number | null {
   return typeof value === "number" && Number.isFinite(value) ? value : null;
 }
@@ -583,7 +692,7 @@ export function numberOrNull(value: unknown): number | null {
 // What Plex records about watching one title, merged across the libraries that
 // hold it. Watch state is per library item, so an HD and a 4K copy can differ:
 // the title counts as far as its furthest-watched copy got.
-interface Watch {
+export interface Watch {
   viewCount: number;
   viewOffset: number;
   duration: number | null;
@@ -602,7 +711,7 @@ const latest = (a: number | null, b: number | null) =>
 const earliest = (a: number | null, b: number | null) =>
   a === null ? b : b === null ? a : Math.min(a, b);
 
-function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
+export function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
   return {
     viewCount: count(item.viewCount),
     viewOffset: count(item.viewOffset),
@@ -615,7 +724,7 @@ function watchOf(item: PlexMetadata, kind: MediaKind): Watch {
   };
 }
 
-function mergeWatch(a: Watch, b: Watch): Watch {
+export function mergeWatch(a: Watch, b: Watch): Watch {
   const furthest = b.seen > a.seen || (b.seen === a.seen && (b.leaf ?? 0) > (a.leaf ?? 0)) ? b : a;
   return {
     viewCount: Math.max(a.viewCount, b.viewCount),
@@ -648,7 +757,7 @@ const everWatched = (kind: MediaKind, w: Watch) =>
 // When someone last did something with the title, in epoch seconds: the last
 // time it was watched, or for a never-watched title when it was added. Null
 // when Plex says it was watched but not when.
-function lastActivity(kind: MediaKind, w: Watch): number | null {
+export function lastActivity(kind: MediaKind, w: Watch): number | null {
   if (w.lastViewed !== null) return w.lastViewed;
   return everWatched(kind, w) ? null : w.addedFirst;
 }

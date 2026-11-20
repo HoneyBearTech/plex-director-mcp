@@ -25,15 +25,16 @@ export const RULES: string[] = [
 
 // Rules only for clients that can change things (the MCP tools; the chat is read-only).
 export const CHANGE_RULES: string[] = [
-  "Tools that change something (confirm_selected_choices, manage_stalled_downloads with PURGE_STALLED, plan_media_upgrade, update_job_status, execute_next_job_step, run_cluster_backup, trust_new_host_key) act on the user's real services. Say what will happen and get the user's go-ahead first. PURGE_STALLED deletes torrents and their files: run AUDIT, show the user the list, and pass only the hashes they agreed to.",
+  "Tools that change something (confirm_selected_choices, confirm_selected_series with a previewId, manage_stalled_downloads with PURGE_STALLED, plan_media_upgrade, update_job_status, execute_next_job_step, run_cluster_backup, trust_new_host_key) act on the user's real services. Say what will happen and get the user's go-ahead first. PURGE_STALLED deletes torrents and their files: run AUDIT, show the user the list, and pass only the hashes they agreed to.",
   "TV is never batch-upgraded: plan_media_upgrade only plans movie upgrades and refuses TV.",
   "Adding a movie is two steps: search_and_select_movies shows a numbered grid, then confirm_selected_choices adds the numbers the user picks.",
+  "Adding a show is search, preview, then confirm: search_and_select_series shows a numbered grid; confirm_selected_series with the numbers the user picks returns a preview that changes nothing, and a previewId. Show the user that preview, and call confirm_selected_series again with only that previewId after the user agrees.",
 ];
 
 export const ROUTES: Route[] = [
   {
     question:
-      "Do I have <title>? What do I own by genre, actor, year, library (e.g. 4K), network, rating, watch state or date added?",
+      "Do I have <title>? What do I own by genre, actor, director (movies), year, library (e.g. 4K), network, rating, watch state, date added or show status (continuing, ended)?",
     tools: ["search_plex_library"],
   },
   {
@@ -67,12 +68,20 @@ export const ROUTES: Route[] = [
     tools: ["find_series_by_quality"],
   },
   {
+    question: "Which shows take the most disk space? Which big shows has nobody watched in years?",
+    tools: ["find_series_by_size"],
+  },
+  {
     question: "What's on this week? When does <show> come back?",
     tools: ["get_upcoming_episodes"],
   },
   {
     question: "Add a movie to Radarr",
     tools: ["search_and_select_movies", "confirm_selected_choices"],
+  },
+  {
+    question: "Add a show to Sonarr",
+    tools: ["search_and_select_series", "confirm_selected_series"],
   },
   { question: "Are my indexers healthy?", tools: ["check_indexer_health"] },
   { question: "Which downloads are stalled? Clean them up", tools: ["manage_stalled_downloads"] },

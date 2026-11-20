@@ -13,7 +13,7 @@ walks through both. If you haven't installed it yet, start with the [quick start
 | | Claude Desktop | Web dashboard |
 | :--- | :--- | :--- |
 | How you use it | Ask Claude in a chat; it picks the tools. | Pages that refresh by themselves, plus the **Query** chat. |
-| What it can do | All 26 tools, including adding movies, cleaning up stalled torrents, batch jobs and backups. | Look at everything; change the service settings. The Query chat only uses the 12 read-only library, movie and TV tools. |
+| What it can do | All 29 tools, including adding movies and TV series, cleaning up stalled torrents, batch jobs and backups. | Look at everything; change the service settings. The Query chat only uses the 13 read-only library, movie and TV tools. |
 | What it needs | Claude Desktop, and Plex Director in its config ([installing.md](../installing.md#option-3-claude-desktop)). | A browser on your network. The Query chat also needs `ANTHROPIC_API_KEY`. |
 | Asks before acting | Claude Desktop asks your permission before each tool use. | The only action buttons are **Save** (Settings) and **Trust new key** (which asks first, and needs `WEB_PASSWORD`). |
 
@@ -28,7 +28,8 @@ Both run the same code for each tool, so a tool finds the same results whichever
 - [Your library](library.md): searching Plex for movies and shows, finding episodes, On Deck, and which of
   an actor's titles you own.
 - [Movies](movies.md): a movie's state in Radarr, working out why it is missing, and adding movies.
-- [TV shows](tv.md): missing episodes and why, shows with gaps, quality, a show's status, and what airs next.
+- [TV shows](tv.md): missing episodes and why, shows with gaps, quality, disk space, a show's status, what
+  airs next, and adding shows to Sonarr.
 - [Downloads and indexers](downloads-and-indexers.md): the SABnzbd and qBittorrent queues, stalled torrents,
   and Prowlarr indexer health.
 - [Batch jobs](jobs.md): planning a movie-upgrade batch, starting, pausing and cancelling it, and how the job

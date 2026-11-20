@@ -8,9 +8,23 @@ export interface SonarrImage {
   remoteUrl?: string;
 }
 
+export interface SonarrSeason {
+  // 0 is "Specials".
+  seasonNumber?: number;
+  monitored?: boolean;
+}
+
+export interface SonarrRootFolder {
+  path: string;
+}
+
 export interface SonarrSeries {
   id: number;
+  // The show's id at TheTVDB, which Plex also records for a matched show.
+  tvdbId?: number;
   title?: string;
+  // Sonarr's url-safe form of the title, on /series/lookup results too.
+  titleSlug?: string;
   year?: number;
   monitored?: boolean;
   // "continuing", "ended", "upcoming" or "deleted".
@@ -28,6 +42,10 @@ export interface SonarrSeries {
   genres?: string[];
   ratings?: { value?: number };
   images?: SonarrImage[];
+  // The poster's address at the metadata source, on /series/lookup results.
+  remotePoster?: string;
+  overview?: string;
+  seasons?: SonarrSeason[];
   alternateTitles?: { title?: string }[];
   statistics?: {
     episodeFileCount: number;

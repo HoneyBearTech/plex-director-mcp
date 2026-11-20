@@ -44,14 +44,39 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
 **Actions that change things**
 
 - The dashboard is read-only for anything that touches your services, apart from saving settings and
-  approving a changed SSH host key: it cannot add movies, delete downloads, or start, pause or cancel jobs.
-- The Query chat can only use the 12 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
-  tool that adds, deletes or starts anything.
+  approving a changed SSH host key: it cannot add movies or series, delete downloads, or start, pause or cancel jobs.
+- The Query chat can only use the 13 read-only tools in `movieTools` (`src/tools/movies.ts`); it has no
+  tool that adds, deletes or starts anything. Its `find_series_by_size` tool passes its whole reply to the
+  service that answers the chat, as the other read-only tools pass their results: each show's title, size,
+  number of episode files, Sonarr status and monitoring, Plex library names, added and watch dates, the names
+  of libraries whose Tautulli answer could not be used, and the error text of a request that failed, which can
+  name a service's address.
 - Batch jobs are created `PENDING` and never start on their own; the job runner sends at most one Radarr
   search per interval (60 seconds by default) and pauses a job after three failures in a row.
   `plan_media_upgrade` refuses TV outright.
 - Adding movies is a two-step pick-then-confirm flow (`search_and_select_movies`, then
   `confirm_selected_choices`), and a requested root folder must be one Radarr already has.
+- Adding TV series is search, preview, then confirm (`search_and_select_series`, then
+  `confirm_selected_series` twice). The preview only reads Sonarr and says exactly what would be added,
+  with which quality profile, root folder (one Sonarr already has), series type and monitor option. Adding
+  takes a second call with nothing but that preview's id, a random value that works once and for 15
+  minutes. It is refused when the id is not the current preview or has expired, and when a setting,
+  Sonarr's address, a show's state, title, year or seasons have changed since the preview; then nothing
+  is added and a new preview says what differs. Only a fixed list of fields is posted to Sonarr. If
+  Sonarr's address changes, or a newer search replaces the grid, during an add, the remaining shows are
+  not sent ("not attempted"). A show is reported "failed" only when Sonarr refused it (a 4xx answer),
+  and "added" only when Sonarr answered with the added series; no answer, a redirect (never followed, so
+  the add goes nowhere else), a server-side error or any other answer is "not known", since the show may
+  have been added. Replies never contain the Sonarr API key.
+- The series type and monitor option defaults are checked when saved on the Settings page; a value that
+  came from the environment at first start is not checked there, and a bad one is reported at preview
+  time, where nothing is added.
+- The preview makes sure that what is added is what was shown: the shows (title, year and TVDB id), their
+  seasons and the settings, and that an old or altered request adds nothing. It does not show that a
+  person saw it: its id goes back to the same model. What stops injected text (in a looked-up title or
+  overview, say) from adding something is the MCP client asking you before each tool call, so don't set
+  "always allow" for `confirm_selected_series` or `confirm_selected_choices`: with it set, such text could
+  steer a model to preview and confirm in a row, with nobody asked.
 
 **SSH host monitoring**
 
@@ -74,7 +99,10 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   or remote images.
 - User text passed to service APIs is URL-encoded or sent as request parameters; database access always
   uses prepared statements with bound parameters.
-- Every outgoing request has a 10-second timeout (`src/clients.ts`).
+- Every request to a media service or TMDb (the axios clients in `src/clients.ts`) has a 10-second timeout,
+  except the Tautulli library list read by `find_series_by_size`, which may take 30 seconds, at most one such
+  request per show library per call. That report reads each Plex show library in pages of 5,000, at most 20
+  pages a library.
 
 ## What Plex Director does not protect against
 
@@ -95,13 +123,16 @@ with `WEB_PASSWORD` set and the advice in the README's [Security](../README.md#s
   environment has the key too. Protect the directory and its backups either way.
 - **What the MCP client or its model decides to do.** Through Claude Desktop (or another MCP client) a
   model can call every tool, including `confirm_selected_choices` (adds movies and starts downloads),
+  `confirm_selected_series` (adds TV series to Sonarr and, by default, starts a search for their episodes),
   `manage_stalled_downloads` with `PURGE_STALLED` (deletes the torrents named by hash from an earlier `AUDIT`, with their files),
   `update_job_status` and `run_cluster_backup`. The MCP client's approval prompt is the control; review
-  what it proposes. Whoever can start the process (or `docker run` the image with your env file) has all
+  what it proposes, and don't set "always allow" for the tools that add. Whoever can start the process (or `docker run` the image with your env file) has all
   your service credentials.
 - **Prompt injection.** Titles, summaries, torrent names and indexer messages come from your services and,
   through them, from the internet. A crafted one could try to steer the model. The chat's read-only tools
-  limit what that can achieve there; in an MCP client, keep tool approval on.
+  limit what that can achieve there; in an MCP client, keep tool approval on, and don't set "always allow"
+  for `confirm_selected_series` or `confirm_selected_choices`: with it set, such text could steer a model to
+  preview and confirm in a row, with nobody asked.
 - **The first SSH connection.** Trust on first use protects against a host being impersonated *after* first
   contact. To be sure of the first one, compare the fingerprint with
   `ssh-keyscan -t ed25519 <host> | ssh-keygen -lf -`. Use a dedicated, unprivileged SSH user.
