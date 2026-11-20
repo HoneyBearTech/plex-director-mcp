@@ -84,6 +84,14 @@ What works today:
   (today it reports only).
 - **Planned:** an accessibility check of every dashboard page (automated and keyboard-only), see
   [accessibility.md](accessibility.md).
+- **Planned (found in the review of the combined merge, November 2026):** in the series-add tools,
+  treat a Sonarr answer that is not a list (lookup or library read) as an error, as the other tools already
+  do; remove the Sonarr key from lookup text before it is cut to length, and cut the series status like the
+  other lookup text; keep a late confirmation from replacing a newer preview of the same grid.
+- **Planned:** the Sonarr, Radarr and Prowlarr clients follow no redirect on read requests either (today
+  only a series add refuses one), so a redirect can never carry the API key to another host.
+- **Planned:** bring the remaining docs in line: the tool count in `docs/user-guide/README.md` and
+  `CONTRIBUTING.md` (29), and the places that still name Dependabot now that Renovate proposes updates.
 - Ongoing: keep OpenSSF Baseline Level 1 and 2 met, earn the OpenSSF Best Practices Passing and then
   Silver badges, and keep the Scorecard score up.
 

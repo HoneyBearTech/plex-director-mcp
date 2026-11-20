@@ -4,6 +4,40 @@ Why things in Plex Director are the way they are: each entry gives the decision,
 considered and not done, and review findings that were declined, with why. Newest first. What shipped when
 is in the [pass map](pass-map.md).
 
+## 2026-11-20: land the open pull requests through one combined pull request
+
+Job `land-open-prs`.
+
+**Decision.** The owner chose to land #118 to #126 through one branch that merges them in order (#118,
+#119, #120, #121, #124, #122, #125, #123, #126) with real merge commits, which he merges once with "Create a
+merge commit". #123, the roadmap's open question of whether to add TV series at all, is included on his
+word. Afterwards #124 to #126 are closed as included, and Dependabot's open pull requests are closed once
+Renovate is seen running.
+
+**Why.** Merging the fixes into their feature branches and then each feature into `main` would have
+clashed twice in the notes and once in the changelog, each needing an edit on GitHub, and the full CI
+workflow had never run on the fixes, which targeted the feature branches. One branch gives one place to
+resolve the clashes and one full run of every check.
+
+**Not done.** Merging the pull requests one by one (more clicks for the owner, three clashes to resolve
+by hand); squashing (GitHub would not mark #118 to #123 as merged, and the reviewed commits would be lost).
+
+**Review findings moved to the roadmap, not fixed here** (this pull request only combines what was
+already reviewed):
+- *Lookup text is cut before the Sonarr key is removed* (code audit, reported as must-fix). Taken as
+  minor: the text cut is a show's title and overview from Sonarr's lookup, which never holds the owner's
+  key; error text, which can, already has the key removed before it is cut.
+- *A Sonarr lookup or library answer that is not a list reads as "no series"* (code audit). Real, and the
+  other tools were fixed for the same thing in #124 and #125; Sonarr itself refuses to add a series it
+  already has, so a wrong "not in Sonarr" cannot add a duplicate.
+- *A late confirmation can replace a newer preview* (code audit). Real but narrow: it needs two previews
+  of one grid and a settings change between them, and it can only make a preview id stop working, which
+  adds nothing.
+- *The series status from Sonarr is not cut to length* (security review).
+- *Read requests to Sonarr still follow redirects* (security review, already known from #126).
+- *Stale tool counts in the user guide and contributing guide, and remaining mentions of Dependabot*
+  (QA). Already wrong on `main`, outside the nine pull requests.
+
 ## 2026-11-15: what a series preview holds an add to, and what it does not
 
 Job `fix-pr-123-findings`, following the review of #123.
