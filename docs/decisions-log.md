@@ -4,6 +4,29 @@ Why things in Plex Director are the way they are: each entry gives the decision,
 considered and not done, and review findings that were declined, with why. Newest first. What shipped when
 is in the [pass map](pass-map.md).
 
+## 2026-11-20: Biome 2.6, without Markdown formatting
+
+Job `biome-2-6`.
+
+**Decision.** Biome is updated to 2.6.7 and its new Markdown formatting is
+turned off (`markdown.formatter.enabled: false` in `biome.jsonc`). Everything
+else Biome checks is unchanged; 2.6 also formats the YAML files, which already
+pass.
+
+**Why.** Biome 2.6 wanted to rewrap 19 hand-wrapped Markdown files, so
+`biome ci` failed on the update, and Renovate groups Biome with the other
+library updates, so the whole group would have stayed open instead of merging.
+
+**Not done.** Reformatting the docs to Biome's Markdown style: a large change
+to every doc for no gain. Excluding `*.md` from Biome entirely: the setting
+above is narrower. The schema URL in `biome.jsonc` isn't kept in step by
+Renovate; a mismatch only gives an informational note (checked with 2.6.8), so
+it doesn't block a later update.
+
+**Review findings.** None. The lock file also gained a `hasInstallScript` line
+for better-sqlite3 (same version and hash); it is npm's metadata, and the image
+already built that package's add-on.
+
 ## 2026-11-20: Renovate merges its own pull requests
 
 Job `renovate-automerge` (#132).
