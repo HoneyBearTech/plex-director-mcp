@@ -32,8 +32,8 @@ reasoning, and may change course. Because the code is MIT-licensed, you can alwa
 | Security reporter | Anyone who reports a vulnerability | Report privately and allow time for a fix before disclosing, as described in [SECURITY.md](SECURITY.md). |
 
 Automated tools also take part: Renovate proposes npm, Docker base image and GitHub Actions updates
-(the maintainer merges them once CI passes; see [dependencies.md](docs/dependencies.md) for the one case
-that still merges without the maintainer), and CI, CodeQL and OpenSSF Scorecard check every change.
+(Renovate merges them itself once every required check passes, after a three-day wait; see
+[dependencies.md](docs/dependencies.md) for what stays with the maintainer), and CI, CodeQL and OpenSSF Scorecard check every change.
 
 ## Access to sensitive resources
 
@@ -47,7 +47,7 @@ Who can change the code, releases and project settings, as of the date of this f
 | Signing images | the CI workflow | cosign keyless signing with the workflow's GitHub OIDC identity (Sigstore); there is no long-lived signing key |
 | Creating GitHub Releases | the CI workflow, on a version tag | GitHub Actions, `GITHUB_TOKEN` |
 | Security advisories and private vulnerability reports | the maintainer | GitHub |
-| Automated changes | Renovate (pull requests only; it doesn't merge them). While the repository setting "Dependabot security updates" is on, also Dependabot, for a vulnerable package: its pull request merges automatically only once the required checks pass, and never for a major update or an update of a GitHub Action | the Renovate GitHub App; GitHub |
+| Automated changes | Renovate (opens pull requests and merges them once every required check passes). While the repository setting "Dependabot security updates" is on, also Dependabot, for a vulnerable package: its pull request merges automatically only once the required checks pass, and never for a major update or an update of a GitHub Action | the Renovate GitHub App; GitHub |
 
 There are no other collaborators. The only stored secrets are the two Docker Hub ones above, which only the
 publish job uses, and only on pushes (never on pull requests). Every other job uses the per-job

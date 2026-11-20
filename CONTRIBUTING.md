@@ -169,9 +169,10 @@ required checks; the review covers what tools can't.
 results, and leaves questions or change requests as review comments. The project has one maintainer (see
 [GOVERNANCE.md](GOVERNANCE.md)), so for now the maintainer's own changes are reviewed by the maintainer
 against the same list, with no second reviewer. Renovate's dependency update pull requests
-([dependencies.md](docs/dependencies.md)) are reviewed like any other change; none of them merges
-automatically. One exception is left: while the repository setting "Dependabot security updates" is on, a
-pull request Dependabot opens for a vulnerable package merges automatically once every required check
+([dependencies.md](docs/dependencies.md)) are the one exception: Renovate merges them itself once every
+required check passes, after a three-day wait for new versions (Node.js majors are never proposed, and
+`docker/scout-action` is held below 1.25). While the repository setting "Dependabot security updates" is on,
+a pull request Dependabot opens for a vulnerable package also merges automatically once every required check
 passes, unless it is a major update or an update of a GitHub Action.
 
 **What is checked:**
@@ -188,7 +189,8 @@ passes, unless it is a major update or an update of a GitHub Action.
 **What is required to merge:** every required check passes (typecheck, Biome lint and format with no
 warnings, tests with the coverage floor, dependency audits and review, CodeQL with no high or critical
 alerts, secret scan, DCO sign-off, image build and smoke test); every review comment is resolved; and,
-apart from that one exception for Dependabot's security updates, the maintainer approves.
+apart from the dependency updates that Renovate and Dependabot's security updates merge as described above,
+the maintainer approves.
 
 ## License
 

@@ -540,7 +540,7 @@ npm run build       # static assets the backend serves; the Dockerfile does this
 - **Build, smoke test, and publish** (`publish`) runs on every push to `main`, every `v*.*.*` tag push and every pull request, once `check` passes. Every run builds the image and boots it with dummy configuration to confirm it starts. Pushes then publish to both registries (branch pushes tag `latest` and the commit SHA; tag pushes also get the version, e.g. `1.2.3` and `1.2`), run a [Docker Scout](https://docs.docker.com/scout/) vulnerability scan (reported in the job summary, non-blocking for now), and sign both images with cosign.
 - **Create GitHub Release** (`release`) runs only on `v*.*.*` tag pushes, after `publish` succeeds, and creates a release with generated notes.
 
-Alongside it: [CodeQL](https://codeql.github.com/) analyses the TypeScript on every push and pull request and weekly, [OpenSSF Scorecard](https://scorecard.dev/) scores the repo's supply-chain practices weekly (see the badge above), and [Renovate](https://docs.renovatebot.com/) opens weekly PRs for npm, Docker base image and GitHub Actions updates, which the maintainer reviews and merges once CI passes ([dependencies.md](docs/dependencies.md)).
+Alongside it: [CodeQL](https://codeql.github.com/) analyses the TypeScript on every push and pull request and weekly, [OpenSSF Scorecard](https://scorecard.dev/) scores the repo's supply-chain practices weekly (see the badge above), and [Renovate](https://docs.renovatebot.com/) opens weekly PRs for npm, Docker base image and GitHub Actions updates, which Renovate merges itself once every required check passes, after a three-day wait for new versions ([dependencies.md](docs/dependencies.md)).
 
 ## License
 

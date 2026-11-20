@@ -51,6 +51,12 @@ a security problem.
   outside those values is refused when saved on the Settings page; one that came from the environment at
   first start is reported at preview time instead, and nothing is added.
 
+### Changed
+
+- **Renovate merges its dependency updates itself.** Once every required check passes, GitHub squash-merges
+  each update (majors included), after a three-day wait for new versions; Node.js majors are still never
+  proposed and `docker/scout-action` stays below 1.25.
+
 ### Security
 
 - **The image is rebuilt on current base images: 0 known vulnerabilities**, down from 3 critical and 27 high
